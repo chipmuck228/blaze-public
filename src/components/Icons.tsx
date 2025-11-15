@@ -28,7 +28,7 @@ export const LogoIcon = () => {
   export const BlazeLogoIcon = ({ className = "h-10 w-auto" }: { className?: string }) => {
     return (
       <Image
-        src="/blaze+New+logos+1.webp"
+        src="/Blaze+New+logos+1.webp"
         alt="Blaze Logo"
         width={200}
         height={50}
