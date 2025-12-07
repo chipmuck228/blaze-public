@@ -1,6 +1,7 @@
 'use client'
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 
 import {
     NavigationMenu,
@@ -19,10 +20,22 @@ import {
     SheetTrigger,
 } from "@/components/ui/sheet";
 
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { Button } from "./ui/button";
-import { Menu } from "lucide-react";
+import { Menu, LogOut, User, Settings } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
+import Link from "next/link";
 
 interface RouteProps {
     href: string;
@@ -59,7 +72,9 @@ interface RouteProps {
   export const Navbar = () => {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const pathname = usePathname();
+    const router = useRouter();
     const isHomePage = pathname === '/';
+    const { data: session, status } = useSession();
 
     // Helper function to get the correct href
     const getHref = (href: string) => {
@@ -71,6 +86,22 @@ interface RouteProps {
         return `/${href}`;
       }
       return href;
+    };
+
+    // Get user initials for avatar fallback
+    const getUserInitials = (name: string | null | undefined) => {
+      if (!name) return "U";
+      const parts = name.trim().split(" ");
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return name[0].toUpperCase();
+    };
+
+    const handleSignOut = async () => {
+      await signOut({ redirect: false });
+      router.push("/");
+      router.refresh();
     };
 
     return (
@@ -145,6 +176,51 @@ interface RouteProps {
                         Github
                       </a>
                     </Button>
+                    {status === "loading" ? (
+                      <div className="w-full mt-2 h-9 flex items-center justify-center">
+                        <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    ) : session ? (
+                      <div className="w-full mt-2 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-muted">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={session.user?.image || undefined} />
+                            <AvatarFallback>
+                              {getUserInitials(session.user?.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {session.user?.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {session.user?.email}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            handleSignOut();
+                            setIsOpen(false);
+                          }}
+                        >
+                          <LogOut className="mr-2 h-4 w-4" />
+                          Sign Out
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="default"
+                        className="w-full mt-2"
+                        asChild
+                      >
+                        <Link href="/login" onClick={() => setIsOpen(false)}>
+                          Sign In / Sign Up
+                        </Link>
+                      </Button>
+                    )}
                   </nav>
                 </SheetContent>
               </Sheet>
@@ -169,8 +245,70 @@ interface RouteProps {
               ))}
             </nav>
   
-            <div className="hidden md:flex gap-2">
-  
+            <div className="hidden md:flex gap-2 items-center">
+              {status === "loading" ? (
+                <div className="h-9 w-9 flex items-center justify-center">
+                  <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : session ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="relative h-9 w-9 rounded-full"
+                    >
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={session.user?.image || undefined} />
+                        <AvatarFallback>
+                          {getUserInitials(session.user?.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {session.user?.name}
+                        </p>
+                        <p className="text-xs leading-none text-muted-foreground">
+                          {session.user?.email}
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile" className="cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings" className="cursor-pointer">
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Settings</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Sign Out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="default"
+                  asChild
+                >
+                  <Link href="/login">
+                    Sign In / Sign Up
+                  </Link>
+                </Button>
+              )}
               <ModeToggle />
             </div>
           </NavigationMenuList>
