@@ -306,3 +306,63 @@ export async function deleteUser(userId: string) {
   return true
 }
 
+// 获取统计数据（管理员功能）
+export interface AdminStats {
+  totalUsers: number
+  verifiedUsers: number
+  admins: number
+  newToday: number
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  // 获取总用户数
+  const { count: totalUsers, error: totalError } = await supabaseAdmin
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+
+  if (totalError) {
+    throw new Error(`Failed to fetch total users: ${totalError.message}`)
+  }
+
+  // 获取已验证用户数
+  const { count: verifiedUsers, error: verifiedError } = await supabaseAdmin
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('email_verified', true)
+
+  if (verifiedError) {
+    throw new Error(`Failed to fetch verified users: ${verifiedError.message}`)
+  }
+
+  // 获取管理员数量
+  const { count: admins, error: adminsError } = await supabaseAdmin
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'admin')
+
+  if (adminsError) {
+    throw new Error(`Failed to fetch admins: ${adminsError.message}`)
+  }
+
+  // 获取今天新注册的用户数
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayISO = today.toISOString()
+
+  const { count: newToday, error: newTodayError } = await supabaseAdmin
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', todayISO)
+
+  if (newTodayError) {
+    throw new Error(`Failed to fetch new today users: ${newTodayError.message}`)
+  }
+
+  return {
+    totalUsers: totalUsers || 0,
+    verifiedUsers: verifiedUsers || 0,
+    admins: admins || 0,
+    newToday: newToday || 0,
+  }
+}
+
