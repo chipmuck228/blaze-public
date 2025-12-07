@@ -4,9 +4,10 @@ import { updateUser, deleteUser } from "@/lib/db"
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
 
     if (!session?.user) {
@@ -32,7 +33,7 @@ export async function PATCH(
     if (email_verified !== undefined) updates.email_verified = email_verified
     if (role !== undefined) updates.role = role
 
-    const user = await updateUser(params.id, updates)
+    const user = await updateUser(id, updates)
 
     return NextResponse.json(
       { message: "User updated successfully", user },
@@ -49,9 +50,10 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
 
     if (!session?.user) {
@@ -69,14 +71,14 @@ export async function DELETE(
     }
 
     // 防止删除自己
-    if (session.user.id === params.id) {
+    if (session.user.id === id) {
       return NextResponse.json(
         { error: "Cannot delete your own account" },
         { status: 400 }
       )
     }
 
-    await deleteUser(params.id)
+    await deleteUser(id)
 
     return NextResponse.json(
       { message: "User deleted successfully" },
