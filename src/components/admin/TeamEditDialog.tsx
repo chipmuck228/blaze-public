@@ -55,20 +55,20 @@ export function TeamEditDialog({
     if (open) {
       if (team) {
         // 编辑模式
-        setImageUrl(team.image_url)
-        setName(team.name)
-        setPosition(team.position)
-        setDescription(team.description)
-        setDisplayOrder(team.display_order)
+        setImageUrl(team.image_url || "")
+        setName(team.name || "")
+        setPosition(team.position || "")
+        setDescription(team.description || "")
+        setDisplayOrder(team.display_order || 0)
         setSocialNetworks(
           team.social_networks.map(sn => ({
-            name: sn.name,
-            url: sn.url,
-            display_order: sn.display_order,
+            name: sn.name || "",
+            url: sn.url || "",
+            display_order: sn.display_order || 0,
           }))
         )
       } else {
-        // 新建模式
+        // 新建模式 - 清空所有字段
         setImageUrl("")
         setName("")
         setPosition("")
@@ -77,6 +77,7 @@ export function TeamEditDialog({
         setSocialNetworks([])
       }
       setError("")
+      setIsLoading(false)
     }
   }, [open, team])
 
@@ -143,65 +144,97 @@ export function TeamEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{team ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
           <DialogDescription>
-            {team ? "Update team member information." : "Add a new team member to the team."}
+            {team 
+              ? "Update team member information. Changes will be saved immediately." 
+              : "Fill in the information below to add a new team member."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter team member name"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="position">
+                Position <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="position"
+                value={position}
+                onChange={(e) => setPosition(e.target.value)}
+                placeholder="e.g., Senior Coach, Chef Coach"
+                required
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label htmlFor="image_url">Image URL *</Label>
+            <Label htmlFor="image_url">
+              Image URL <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="image_url"
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="/team-member.png"
+              placeholder="/path/to/image.png"
+              required
             />
+            <p className="text-xs text-muted-foreground">
+              Path to the image file in the public directory (e.g., /team-member.png)
+            </p>
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Team member name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="position">Position *</Label>
-            <Input
-              id="position"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-              placeholder="Senior Coach"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description *</Label>
+            <Label htmlFor="description">
+              Description <span className="text-destructive">*</span>
+            </Label>
             <textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Team member description"
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Enter a brief description of the team member..."
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               rows={4}
+              required
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="display_order">Display Order</Label>
             <Input
               id="display_order"
               type="number"
+              min="0"
               value={displayOrder}
               onChange={(e) => setDisplayOrder(parseInt(e.target.value) || 0)}
               placeholder="0"
             />
+            <p className="text-xs text-muted-foreground">
+              Lower numbers appear first. Leave as 0 to add to the end.
+            </p>
           </div>
-          <div className="space-y-2">
+
+          <div className="space-y-3 border-t pt-4">
             <div className="flex items-center justify-between">
-              <Label>Social Networks</Label>
+              <div>
+                <Label>Social Networks</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Add social media links for this team member (optional)
+                </p>
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -209,42 +242,54 @@ export function TeamEditDialog({
                 onClick={addSocialNetwork}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add
+                Add Link
               </Button>
             </div>
-            <div className="space-y-2">
-              {socialNetworks.map((sn, index) => (
-                <div key={index} className="flex gap-2 items-end">
-                  <div className="flex-1">
-                    <Label>Name</Label>
-                    <Input
-                      value={sn.name}
-                      onChange={(e) => updateSocialNetwork(index, "name", e.target.value)}
-                      placeholder="Youtube, Facebook, Instagram, etc."
-                    />
+            {socialNetworks.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md">
+                No social networks added. Click "Add Link" to add one.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {socialNetworks.map((sn, index) => (
+                  <div key={index} className="flex gap-2 items-start p-3 border rounded-md bg-muted/30">
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <Label className="text-xs">Platform Name</Label>
+                        <Input
+                          value={sn.name}
+                          onChange={(e) => updateSocialNetwork(index, "name", e.target.value)}
+                          placeholder="Youtube, Facebook, Instagram, Xiaohongshu, etc."
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">URL</Label>
+                        <Input
+                          value={sn.url}
+                          onChange={(e) => updateSocialNetwork(index, "url", e.target.value)}
+                          placeholder="https://..."
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeSocialNetwork(index)}
+                      className="mt-6"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <div className="flex-1">
-                    <Label>URL</Label>
-                    <Input
-                      value={sn.url}
-                      onChange={(e) => updateSocialNetwork(index, "url", e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeSocialNetwork(index)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
+
           {error && (
-            <div className="text-sm text-destructive bg-destructive/10 p-2 rounded-md">
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/20">
               {error}
             </div>
           )}
@@ -258,7 +303,7 @@ export function TeamEditDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isLoading}>
-            {isLoading ? "Saving..." : team ? "Save Changes" : "Create"}
+            {isLoading ? "Saving..." : team ? "Save Changes" : "Create Member"}
           </Button>
         </DialogFooter>
       </DialogContent>

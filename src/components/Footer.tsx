@@ -8,7 +8,7 @@ export const Footer = () => {
     <footer id="footer">
       <hr className="w-11/12 mx-auto" />
 
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-20">
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
           {/* Logo */}
           <div className="shrink-0">
@@ -170,7 +170,7 @@ export const Footer = () => {
         </div>
       </section>
 
-      <section className="container mx-auto px-4 pb-14 text-center">
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl pb-14 text-center">
         <h3>
           &copy; 2025{" "}
           <a

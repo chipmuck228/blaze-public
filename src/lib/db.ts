@@ -631,3 +631,327 @@ export async function deleteTeamMember(teamId: string): Promise<boolean> {
   return true
 }
 
+// ==================== 课程相关类型定义 ====================
+
+export interface CourseCategory {
+  id: string
+  name: string
+  display_name: string
+  description?: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseSeries {
+  id: string
+  category_id: string
+  name: string
+  display_name: string
+  description?: string
+  start_date?: string
+  end_date?: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseSubcategory {
+  id: string
+  series_id: string
+  name: string
+  display_name: string
+  description?: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Course {
+  id: string
+  subcategory_id: string
+  name: string
+  slug?: string
+  description?: string
+  target_audience?: string
+  outcomes?: string
+  prerequisites?: string
+  cancellation_policy?: string
+  number_of_sessions?: number
+  target_age_min?: number
+  target_age_max?: number
+  target_grades?: string[]
+  base_price?: number
+  currency?: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseLocation {
+  id: string
+  name: string
+  address?: string
+  city?: string
+  state?: string
+  zip_code?: string
+  phone?: string
+  email?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseInstance {
+  id: string
+  course_id: string
+  location_id?: string
+  location_name?: string
+  start_date: string
+  end_date: string
+  start_time?: string
+  end_time?: string
+  day_of_week?: number[]
+  price?: number
+  max_students?: number
+  current_students: number
+  instructor_name?: string
+  instructor_id?: string
+  status: 'scheduled' | 'ongoing' | 'completed' | 'cancelled'
+  notes?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// 完整的课程信息（包含关联数据）
+export interface CourseWithDetails extends Course {
+  subcategory?: CourseSubcategory
+  series?: CourseSeries
+  category?: CourseCategory
+  instances?: CourseInstance[]
+}
+
+// ==================== 课程相关数据库操作函数 ====================
+
+// 获取所有课程大类
+export async function getAllCourseCategories(): Promise<CourseCategory[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_categories')
+    .select('*')
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch course categories: ${error.message}`)
+  }
+
+  return data as CourseCategory[]
+}
+
+// 获取指定大类的所有系列
+export async function getCourseSeriesByCategory(categoryId: string): Promise<CourseSeries[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_series')
+    .select('*')
+    .eq('category_id', categoryId)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch course series: ${error.message}`)
+  }
+
+  return data as CourseSeries[]
+}
+
+// 获取指定系列的所有子类
+export async function getCourseSubcategoriesBySeries(seriesId: string): Promise<CourseSubcategory[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_subcategories')
+    .select('*')
+    .eq('series_id', seriesId)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch course subcategories: ${error.message}`)
+  }
+
+  return data as CourseSubcategory[]
+}
+
+// 获取指定子类的所有课程
+export async function getCoursesBySubcategory(subcategoryId: string): Promise<Course[]> {
+  const { data, error } = await supabaseAdmin
+    .from('courses')
+    .select('*')
+    .eq('subcategory_id', subcategoryId)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch courses: ${error.message}`)
+  }
+
+  return data as Course[]
+}
+
+// 根据slug获取课程
+export async function getCourseBySlug(slug: string): Promise<Course | null> {
+  const { data, error } = await supabaseAdmin
+    .from('courses')
+    .select('*')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
+
+  if (error) {
+    return null
+  }
+
+  return data as Course
+}
+
+// 获取课程详细信息（包含关联数据）
+export async function getCourseWithDetails(courseId: string): Promise<CourseWithDetails | null> {
+  const { data: course, error: courseError } = await supabaseAdmin
+    .from('courses')
+    .select('*')
+    .eq('id', courseId)
+    .eq('is_active', true)
+    .single()
+
+  if (courseError || !course) {
+    return null
+  }
+
+  // 获取子类信息
+  const { data: subcategory } = await supabaseAdmin
+    .from('course_subcategories')
+    .select('*')
+    .eq('id', course.subcategory_id)
+    .single()
+
+  if (!subcategory) {
+    return { ...course } as CourseWithDetails
+  }
+
+  // 获取系列信息
+  const { data: series } = await supabaseAdmin
+    .from('course_series')
+    .select('*')
+    .eq('id', subcategory.series_id)
+    .single()
+
+  if (!series) {
+    return { ...course, subcategory } as CourseWithDetails
+  }
+
+  // 获取大类信息
+  const { data: category } = await supabaseAdmin
+    .from('course_categories')
+    .select('*')
+    .eq('id', series.category_id)
+    .single()
+
+  // 获取课程实例
+  const { data: instances } = await supabaseAdmin
+    .from('course_instances')
+    .select('*')
+    .eq('course_id', courseId)
+    .eq('is_active', true)
+    .order('start_date', { ascending: true })
+
+  return {
+    ...course,
+    subcategory,
+    series,
+    category: category || undefined,
+    instances: instances || [],
+  } as CourseWithDetails
+}
+
+// 获取指定课程的所有实例
+export async function getCourseInstances(courseId: string): Promise<CourseInstance[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_instances')
+    .select('*')
+    .eq('course_id', courseId)
+    .eq('is_active', true)
+    .order('start_date', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch course instances: ${error.message}`)
+  }
+
+  return data as CourseInstance[]
+}
+
+// 获取所有地点
+export async function getAllCourseLocations(): Promise<CourseLocation[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_locations')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch course locations: ${error.message}`)
+  }
+
+  return data as CourseLocation[]
+}
+
+// 创建课程实例
+export async function createCourseInstance(instance: Omit<CourseInstance, 'id' | 'created_at' | 'updated_at'>): Promise<CourseInstance> {
+  const { data, error } = await supabaseAdmin
+    .from('course_instances')
+    .insert(instance)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to create course instance: ${error.message}`)
+  }
+
+  return data as CourseInstance
+}
+
+// 更新课程实例
+export async function updateCourseInstance(
+  instanceId: string,
+  updates: Partial<Omit<CourseInstance, 'id' | 'created_at' | 'updated_at'>>
+): Promise<CourseInstance> {
+  const { data, error } = await supabaseAdmin
+    .from('course_instances')
+    .update(updates)
+    .eq('id', instanceId)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to update course instance: ${error.message}`)
+  }
+
+  return data as CourseInstance
+}
+
+// 删除课程实例
+export async function deleteCourseInstance(instanceId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('course_instances')
+    .delete()
+    .eq('id', instanceId)
+
+  if (error) {
+    throw new Error(`Failed to delete course instance: ${error.message}`)
+  }
+
+  return true
+}
+

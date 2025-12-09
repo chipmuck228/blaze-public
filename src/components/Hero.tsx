@@ -4,7 +4,7 @@ import { HeroCards } from "./HeroCards";
 
 export const Hero = () => {
   return (
-    <section className="container mx-auto px-4 grid lg:grid-cols-2 place-items-center py-20 md:py-32 gap-10">
+    <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl grid lg:grid-cols-2 place-items-center py-20 md:py-32 gap-10">
       <div className="text-center lg:text-start space-y-6">
         <main className="text-5xl md:text-6xl font-bold">
           <h1 className="inline">
@@ -26,7 +26,7 @@ export const Hero = () => {
         </p>
 
         <div className="space-y-4 md:space-y-0 md:space-x-4">
-          <Button variant={"destructive"}>Enroll Now</Button>
+          <Button variant="default" size="lg">Enroll Now</Button>
         </div>
       </div>
 

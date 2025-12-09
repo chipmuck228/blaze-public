@@ -79,7 +79,7 @@ const getTypeColor = (type: Course['type']) => {
 
 export const Courses = () => {
   return (
-    <section id="courses" className="container mx-auto px-4 py-24 sm:py-32">
+    <section id="courses" className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-24 sm:py-32">
       <div className="flex flex-col md:flex-row justify-between items-center mb-12">
         <div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">

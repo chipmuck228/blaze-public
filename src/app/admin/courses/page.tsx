@@ -1,0 +1,353 @@
+'use client'
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { CourseEditDialog } from "@/components/admin/CourseEditDialog"
+
+interface Course {
+  id: string
+  subcategory_id: string
+  name: string
+  slug?: string
+  description?: string
+  target_audience?: string
+  outcomes?: string
+  prerequisites?: string
+  cancellation_policy?: string
+  number_of_sessions?: number
+  target_age_min?: number
+  target_age_max?: number
+  target_grades?: string[]
+  base_price?: number
+  currency?: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface CourseCategory {
+  id: string
+  name: string
+  display_name: string
+  series?: CourseSeries[]
+}
+
+interface CourseSeries {
+  id: string
+  name: string
+  display_name: string
+  subcategories?: CourseSubcategory[]
+}
+
+interface CourseSubcategory {
+  id: string
+  name: string
+  display_name: string
+  courses?: Course[]
+}
+
+export default function CoursesManagementPage() {
+  const [courses, setCourses] = useState<Course[]>([])
+  const [filteredCourses, setFilteredCourses] = useState<Course[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [categories, setCategories] = useState<CourseCategory[]>([])
+
+  useEffect(() => {
+    fetchCourses()
+  }, [])
+
+  useEffect(() => {
+    if (searchQuery) {
+      const filtered = courses.filter(
+        (course) =>
+          course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          course.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          course.slug?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      setFilteredCourses(filtered)
+    } else {
+      setFilteredCourses(courses)
+    }
+  }, [searchQuery, courses])
+
+  const fetchCourses = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const response = await fetch("/api/admin/courses")
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch courses")
+      }
+
+      const data = await response.json()
+      setCategories(data)
+      
+      // 展平所有课程到一个数组中
+      const allCourses: Course[] = []
+      data.forEach((category: CourseCategory) => {
+        category.series?.forEach((series: CourseSeries) => {
+          series.subcategories?.forEach((subcategory: CourseSubcategory) => {
+            if (subcategory.courses) {
+              allCourses.push(...subcategory.courses)
+            }
+          })
+        })
+      })
+      
+      setCourses(allCourses)
+      setFilteredCourses(allCourses)
+    } catch (err: any) {
+      console.error("Error fetching courses:", err)
+      setError(err.message || "Failed to load courses")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDelete = async (courseId: string) => {
+    if (!confirm("Are you sure you want to delete this course?")) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/courses/${courseId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        fetchCourses() // Refresh the list
+      } else {
+        const data = await response.json()
+        alert(data.error || "Failed to delete course")
+      }
+    } catch (error) {
+      console.error("Error deleting course:", error)
+      alert("Failed to delete course")
+    }
+  }
+
+  const handleEdit = (course: Course) => {
+    setEditingCourse(course)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleAdd = () => {
+    setEditingCourse(null)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleCourseUpdated = () => {
+    fetchCourses()
+    setIsEditDialogOpen(false)
+    setEditingCourse(null)
+  }
+
+  const getCoursePath = (course: Course): string => {
+    for (const category of categories) {
+      if (category.series) {
+        for (const series of category.series) {
+          if (series.subcategories) {
+            for (const subcategory of series.subcategories) {
+              if (subcategory.id === course.subcategory_id) {
+                return `${category.display_name} > ${series.display_name} > ${subcategory.display_name}`
+              }
+            }
+          }
+        }
+      }
+    }
+    return "Unknown"
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  }
+
+  return (
+    <div className="p-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Courses Admin</h1>
+        <p className="text-muted-foreground mt-2">
+          Manage all courses in the system
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Courses</CardTitle>
+              <CardDescription>
+                A list of all courses in the system
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search courses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-64"
+                />
+              </div>
+              <Button onClick={handleAdd}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Course
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 space-y-4">
+              <p className="text-destructive text-lg">{error}</p>
+              <Button onClick={fetchCourses}>
+                <RefreshCcw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          ) : filteredCourses.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {searchQuery ? "No courses found matching your search." : "No courses found."}
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Course Name</TableHead>
+                    <TableHead>Category Path</TableHead>
+                    <TableHead>Slug</TableHead>
+                    <TableHead>Sessions</TableHead>
+                    <TableHead>Age Range</TableHead>
+                    <TableHead>Grades</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCourses.map((course) => (
+                    <TableRow key={course.id}>
+                      <TableCell className="font-medium">{course.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                        {getCoursePath(course)}
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                          {course.slug || "N/A"}
+                        </code>
+                      </TableCell>
+                      <TableCell>{course.number_of_sessions || "N/A"}</TableCell>
+                      <TableCell>
+                        {course.target_age_min && course.target_age_max
+                          ? `${course.target_age_min}-${course.target_age_max}`
+                          : course.target_age_min
+                          ? `${course.target_age_min}+`
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {course.target_grades && course.target_grades.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {course.target_grades.map((grade, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {grade}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          "N/A"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {course.base_price
+                          ? `${course.currency || "USD"} $${course.base_price.toFixed(2)}`
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={course.is_active ? "default" : "secondary"}>
+                          {course.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(course.created_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(course)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDelete(course.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <CourseEditDialog
+        course={editingCourse}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onCourseUpdated={handleCourseUpdated}
+      />
+    </div>
+  )
+}
+

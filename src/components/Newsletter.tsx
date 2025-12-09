@@ -12,7 +12,7 @@ export const Newsletter = () => {
     <section id="newsletter">
       <hr className="w-11/12 mx-auto" />
 
-      <div className="container mx-auto px-4 py-24 sm:py-32">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-24 sm:py-32">
         <h3 className="text-center text-4xl md:text-5xl font-bold">
           Join Our Daily{" "}
           <span className="bg-gradient-to-b from-primary/60 to-primary bg-clip-text">

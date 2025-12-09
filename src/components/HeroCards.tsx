@@ -138,7 +138,7 @@ export const HeroCards = () => {
         </CardHeader>
 
         <CardContent>
-          <Button variant={"destructive"} className="w-full">Enroll Now</Button>
+          <Button variant="default" className="w-full">Enroll Now</Button>
         </CardContent>
 
         <hr className="w-4/5 m-auto mb-4" />

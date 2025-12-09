@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Shield,
   UserCircle,
+  BookOpen,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +30,11 @@ const menuItems = [
     title: "Team Management",
     href: "/admin/teams",
     icon: UserCircle,
+  },
+  {
+    title: "Courses Admin",
+    href: "/admin/courses",
+    icon: BookOpen,
   },
   {
     title: "Settings",

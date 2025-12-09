@@ -113,7 +113,7 @@ interface RouteProps {
         }}
       >
         <NavigationMenu className="mx-auto">
-          <NavigationMenuList className="container mx-auto h-14 px-4 flex justify-between ">
+          <NavigationMenuList className="container mx-auto h-14 px-4 sm:px-6 lg:px-8 flex justify-between max-w-7xl">
             <NavigationMenuItem className="font-bold flex">
               <a
                 rel="noreferrer noopener"

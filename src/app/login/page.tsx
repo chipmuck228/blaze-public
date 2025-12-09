@@ -127,6 +127,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full"
+                variant={"destructive"}
                 disabled={isLoading}
               >
                 {isLoading ? "Signing in..." : "Sign In"}
