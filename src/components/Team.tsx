@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Facebook, Instagram, Linkedin } from "lucide-react";
+import { Facebook, Instagram, Linkedin, Loader2 } from "lucide-react";
 import { YoutubeIcon, XiaohongshuIcon, FacebookIcon, InstagramIcon } from "./Icons";
 
 interface TeamProps {
@@ -25,6 +26,20 @@ interface SociaNetworkslProps {
   url: string;
 }
 
+interface TeamMember {
+  id: string;
+  image_url: string;
+  name: string;
+  position: string;
+  description: string;
+  social_networks: Array<{
+    id: string;
+    name: string;
+    url: string;
+  }>;
+}
+
+// 默认团队数据（作为后备）
 const teamList: TeamProps[] = [
   {
     imageUrl: "/Dave-W-1.png",
@@ -142,26 +157,64 @@ const teamList: TeamProps[] = [
       },
     ],
   },
-  {
-    imageUrl: "/Spencer-Y.webp",
-    name: "Spencer Y.",
-    position: "Senior Coach",
-    description: "Coach Daisy holds both a Master’s and Bachelor’s degree in Information Management and Psychology from the University of Washington and is the holder of a national patent.",
-    socialNetworks: [
-      {
-        name: "Facebook",
-        url: "https://facebook.com/leopoldo-miranda/",
-      },
-
-      {
-        name: "Instagram",
-        url: "https://www.instagram.com/",
-      },
-    ],
-  },
 ];
 
 export const Team = () => {
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchTeamMembers();
+  }, []);
+
+  const fetchTeamMembers = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch("/api/teams");
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch team members");
+      }
+
+      const data = await response.json();
+      setTeamMembers(data);
+    } catch (err) {
+      console.error("Error fetching team members:", err);
+      setError("Failed to load team members");
+      // 如果加载失败，使用默认数据
+      setTeamMembers(teamList.map(team => ({
+        id: team.name,
+        image_url: team.imageUrl,
+        name: team.name,
+        position: team.position,
+        description: team.description,
+        social_networks: team.socialNetworks.map((sn, idx) => ({
+          id: `${team.name}-${idx}`,
+          name: sn.name,
+          url: sn.url,
+        })),
+      })));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 转换数据库格式到组件格式
+  const teamListToDisplay: TeamProps[] = teamMembers.map(member => ({
+    imageUrl: member.image_url,
+    name: member.name,
+    position: member.position,
+    description: member.description,
+    socialNetworks: member.social_networks.map(sn => ({
+      name: sn.name,
+      url: sn.url,
+    })),
+  }));
+
+  // 如果没有数据，使用默认数据
+  const displayList = teamListToDisplay.length > 0 ? teamListToDisplay : teamList;
   const socialIcon = (iconName: string) => {
     switch (iconName) {
       case "Linkedin":
@@ -197,8 +250,17 @@ export const Team = () => {
       
       </p>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 gap-y-10 justify-items-center max-w-5xl mx-auto">
-        {teamList.map(
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 text-muted-foreground">
+          {error}
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 gap-y-10 justify-items-center max-w-5xl mx-auto">
+          {displayList.map(
           ({ imageUrl, name, position, socialNetworks, description }: TeamProps) => (
             <Card
               key={name}
@@ -243,7 +305,8 @@ export const Team = () => {
             </Card>
           )
         )}
-      </div>
+        </div>
+      )}
     </section>
   );
 };

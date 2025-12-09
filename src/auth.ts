@@ -2,15 +2,54 @@ import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import type { NextAuthConfig } from "next-auth"
-import { getUserByEmail, verifyPassword } from "@/lib/db"
+import { getUserByEmail, verifyPassword, createOrUpdateGoogleUser } from "@/lib/db"
+
+// 开发环境调试
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔍 NextAuth 配置检查:')
+  console.log('  AUTH_SECRET:', process.env.AUTH_SECRET ? '✅ Set' : '❌ Missing')
+  console.log('  NEXTAUTH_URL:', process.env.NEXTAUTH_URL || '❌ Missing')
+  console.log('  GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? '✅ Set' : '❌ Missing')
+  console.log('  GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? '✅ Set' : '❌ Missing')
+}
 
 export const authConfig = {
   secret: process.env.AUTH_SECRET,
+  trustHost: true, // 允许 NextAuth 自动检测 host
   pages: {
     signIn: "/login",
     signOut: "/",
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // 处理 Google 登录
+      if (account?.provider === "google") {
+        try {
+          if (!user.email || !user.name) {
+            return false
+          }
+
+          // 创建或更新用户
+          const dbUser = await createOrUpdateGoogleUser(
+            user.email,
+            user.name,
+            user.image || null
+          )
+
+          // 更新 user 对象以包含数据库中的用户信息
+          user.id = dbUser.id
+          ;(user as any).role = dbUser.role || 'user'
+          
+          return true
+        } catch (error) {
+          console.error("Error creating/updating Google user:", error)
+          return false
+        }
+      }
+
+      // 其他 provider 允许登录
+      return true
+    },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
       const userRole = (auth?.user as any)?.role || 'user'
@@ -108,10 +147,14 @@ export const authConfig = {
         }
       },
     }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-    }),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          }),
+        ]
+      : []),
   ],
 } satisfies NextAuthConfig
 

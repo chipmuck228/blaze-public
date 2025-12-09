@@ -10,6 +10,7 @@ import {
   LogOut,
   LayoutDashboard,
   Shield,
+  UserCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -23,6 +24,11 @@ const menuItems = [
     title: "User Management",
     href: "/admin/users",
     icon: Users,
+  },
+  {
+    title: "Team Management",
+    href: "/admin/teams",
+    icon: UserCircle,
   },
   {
     title: "Settings",

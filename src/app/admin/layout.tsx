@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
 import { AdminSidebar } from "@/components/admin/AdminSidebar"
 
@@ -12,14 +12,26 @@ export default function AdminLayout({
 }) {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
+  const isLoginPage = pathname === "/admin/login"
 
   useEffect(() => {
+    // 如果是登录页面，不需要检查认证
+    if (isLoginPage) {
+      return
+    }
+
     if (status === "unauthenticated") {
       router.push("/admin/login")
     } else if (status === "authenticated" && session?.user?.role !== "admin") {
       router.push("/")
     }
-  }, [status, session, router])
+  }, [status, session, router, isLoginPage])
+
+  // 如果是登录页面，直接渲染子组件（不显示 sidebar）
+  if (isLoginPage) {
+    return <>{children}</>
+  }
 
   if (status === "loading") {
     return (
