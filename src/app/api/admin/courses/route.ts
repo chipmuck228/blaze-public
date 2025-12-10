@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import {
-  getAllCourseCategories,
-  getCourseSeriesByCategory,
-  getCourseSubcategoriesBySeries,
-  getCoursesBySubcategory,
+  getAllCourses,
   getCourseWithDetails,
+  createCourse,
+  updateCourse,
+  deleteCourse,
 } from "@/lib/db"
 
-// 获取所有课程（支持层级查询）
+// 获取所有课程（独立管理，不包含分类信息）
 export async function GET(request: Request) {
   try {
     const session = await auth()
@@ -17,12 +17,10 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    const categoryId = searchParams.get("categoryId")
-    const seriesId = searchParams.get("seriesId")
-    const subcategoryId = searchParams.get("subcategoryId")
     const courseId = searchParams.get("courseId")
+    const search = searchParams.get("search")
 
-    // 如果提供了courseId，返回单个课程的详细信息
+    // 如果提供了courseId，返回单个课程的详细信息（包含标签和分配）
     if (courseId) {
       const course = await getCourseWithDetails(courseId)
       if (!course) {
@@ -31,82 +29,21 @@ export async function GET(request: Request) {
       return NextResponse.json(course, { status: 200 })
     }
 
-    // 如果提供了subcategoryId，返回该子类下的所有课程
-    if (subcategoryId) {
-      const courses = await getCoursesBySubcategory(subcategoryId)
-      return NextResponse.json(courses, { status: 200 })
-    }
+    // 获取所有课程
+    let courses = await getAllCourses()
 
-    // 如果提供了seriesId，返回该系列下的所有子类和课程
-    if (seriesId) {
-      const subcategories = await getCourseSubcategoriesBySeries(seriesId)
-      const coursesData = await Promise.all(
-        subcategories.map(async (subcategory) => {
-          const courses = await getCoursesBySubcategory(subcategory.id)
-          return {
-            ...subcategory,
-            courses,
-          }
-        })
+    // 如果提供了搜索参数，进行过滤
+    if (search) {
+      const searchLower = search.toLowerCase()
+      courses = courses.filter(
+        (course) =>
+          course.name.toLowerCase().includes(searchLower) ||
+          course.description?.toLowerCase().includes(searchLower) ||
+          course.slug?.toLowerCase().includes(searchLower)
       )
-      return NextResponse.json(coursesData, { status: 200 })
     }
 
-    // 如果提供了categoryId，返回该大类下的所有系列、子类和课程
-    if (categoryId) {
-      const series = await getCourseSeriesByCategory(categoryId)
-      const fullData = await Promise.all(
-        series.map(async (s) => {
-          const subcategories = await getCourseSubcategoriesBySeries(s.id)
-          const subcategoriesWithCourses = await Promise.all(
-            subcategories.map(async (subcategory) => {
-              const courses = await getCoursesBySubcategory(subcategory.id)
-              return {
-                ...subcategory,
-                courses,
-              }
-            })
-          )
-          return {
-            ...s,
-            subcategories: subcategoriesWithCourses,
-          }
-        })
-      )
-      return NextResponse.json(fullData, { status: 200 })
-    }
-
-    // 默认返回所有大类及其完整层级结构
-    const categories = await getAllCourseCategories()
-    const fullData = await Promise.all(
-      categories.map(async (category) => {
-        const series = await getCourseSeriesByCategory(category.id)
-        const seriesWithData = await Promise.all(
-          series.map(async (s) => {
-            const subcategories = await getCourseSubcategoriesBySeries(s.id)
-            const subcategoriesWithCourses = await Promise.all(
-              subcategories.map(async (subcategory) => {
-                const courses = await getCoursesBySubcategory(subcategory.id)
-                return {
-                  ...subcategory,
-                  courses,
-                }
-              })
-            )
-            return {
-              ...s,
-              subcategories: subcategoriesWithCourses,
-            }
-          })
-        )
-        return {
-          ...category,
-          series: seriesWithData,
-        }
-      })
-    )
-
-    return NextResponse.json(fullData, { status: 200 })
+    return NextResponse.json(courses, { status: 200 })
   } catch (error: any) {
     console.error("Error fetching courses:", error)
     return NextResponse.json(
@@ -116,7 +53,7 @@ export async function GET(request: Request) {
   }
 }
 
-// 创建新课程
+// 创建新课程（只包含课程内容，不包含分类）
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -126,7 +63,6 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const {
-      subcategory_id,
       name,
       slug,
       description,
@@ -140,49 +76,44 @@ export async function POST(request: Request) {
       target_grades,
       base_price,
       currency,
-      display_order,
+      subcategory_ids, // 子类标签ID数组
     } = body
 
-    if (!subcategory_id || !name) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Missing required fields: subcategory_id, name" },
+        { error: "Missing required field: name" },
         { status: 400 }
       )
     }
 
-    const { supabaseAdmin } = await import("@/lib/supabase")
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .insert({
-        subcategory_id,
-        name,
-        slug,
-        description,
-        target_audience,
-        outcomes,
-        prerequisites,
-        cancellation_policy,
-        number_of_sessions,
-        target_age_min,
-        target_age_max,
-        target_grades,
-        base_price,
-        currency: currency || "USD",
-        display_order: display_order || 0,
-        is_active: true,
-      })
-      .select()
-      .single()
+    // 创建课程
+    const course = await createCourse({
+      name,
+      slug,
+      description,
+      target_audience,
+      outcomes,
+      prerequisites,
+      cancellation_policy,
+      number_of_sessions,
+      target_age_min,
+      target_age_max,
+      target_grades,
+      base_price,
+      currency: currency || "USD",
+      is_active: true,
+    })
 
-    if (error) {
-      console.error("Error creating course:", error)
-      return NextResponse.json(
-        { error: error.message || "Failed to create course" },
-        { status: 500 }
-      )
+    // 如果有子类标签，添加标签
+    if (subcategory_ids && Array.isArray(subcategory_ids) && subcategory_ids.length > 0) {
+      const { updateCourseSubcategoryTags } = await import("@/lib/db")
+      await updateCourseSubcategoryTags(course.id, subcategory_ids)
     }
 
-    return NextResponse.json(data, { status: 201 })
+    // 返回完整的课程信息（包含标签）
+    const courseWithDetails = await getCourseWithDetails(course.id)
+
+    return NextResponse.json(courseWithDetails, { status: 201 })
   } catch (error: any) {
     console.error("Error creating course:", error)
     return NextResponse.json(

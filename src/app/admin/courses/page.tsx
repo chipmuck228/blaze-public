@@ -30,7 +30,6 @@ import { CourseEditDialog } from "@/components/admin/CourseEditDialog"
 
 interface Course {
   id: string
-  subcategory_id: string
   name: string
   slug?: string
   description?: string
@@ -44,31 +43,10 @@ interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
-  display_order: number
   is_active: boolean
   created_at: string
   updated_at: string
-}
-
-interface CourseCategory {
-  id: string
-  name: string
-  display_name: string
-  series?: CourseSeries[]
-}
-
-interface CourseSeries {
-  id: string
-  name: string
-  display_name: string
-  subcategories?: CourseSubcategory[]
-}
-
-interface CourseSubcategory {
-  id: string
-  name: string
-  display_name: string
-  courses?: Course[]
+  tags?: Array<{ id: string; name: string; display_name: string }>
 }
 
 export default function CoursesManagementPage() {
@@ -79,7 +57,6 @@ export default function CoursesManagementPage() {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [categories, setCategories] = useState<CourseCategory[]>([])
 
   useEffect(() => {
     fetchCourses()
@@ -110,22 +87,8 @@ export default function CoursesManagementPage() {
       }
 
       const data = await response.json()
-      setCategories(data)
-      
-      // 展平所有课程到一个数组中
-      const allCourses: Course[] = []
-      data.forEach((category: CourseCategory) => {
-        category.series?.forEach((series: CourseSeries) => {
-          series.subcategories?.forEach((subcategory: CourseSubcategory) => {
-            if (subcategory.courses) {
-              allCourses.push(...subcategory.courses)
-            }
-          })
-        })
-      })
-      
-      setCourses(allCourses)
-      setFilteredCourses(allCourses)
+      setCourses(data)
+      setFilteredCourses(data)
     } catch (err: any) {
       console.error("Error fetching courses:", err)
       setError(err.message || "Failed to load courses")
@@ -172,21 +135,11 @@ export default function CoursesManagementPage() {
     setEditingCourse(null)
   }
 
-  const getCoursePath = (course: Course): string => {
-    for (const category of categories) {
-      if (category.series) {
-        for (const series of category.series) {
-          if (series.subcategories) {
-            for (const subcategory of series.subcategories) {
-              if (subcategory.id === course.subcategory_id) {
-                return `${category.display_name} > ${series.display_name} > ${subcategory.display_name}`
-              }
-            }
-          }
-        }
-      }
+  const getCourseTags = (course: Course): string => {
+    if (course.tags && course.tags.length > 0) {
+      return course.tags.map(t => t.display_name).join(", ")
     }
-    return "Unknown"
+    return "No tags"
   }
 
   const formatDate = (dateString: string) => {
@@ -255,7 +208,7 @@ export default function CoursesManagementPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Course Name</TableHead>
-                    <TableHead>Category Path</TableHead>
+                    <TableHead>Tags</TableHead>
                     <TableHead>Slug</TableHead>
                     <TableHead>Sessions</TableHead>
                     <TableHead>Age Range</TableHead>
@@ -270,8 +223,18 @@ export default function CoursesManagementPage() {
                   {filteredCourses.map((course) => (
                     <TableRow key={course.id}>
                       <TableCell className="font-medium">{course.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                        {getCoursePath(course)}
+                      <TableCell className="text-sm text-muted-foreground max-w-[200px]">
+                        <div className="flex flex-wrap gap-1">
+                          {course.tags && course.tags.length > 0 ? (
+                            course.tags.map((tag) => (
+                              <Badge key={tag.id} variant="outline" className="text-xs">
+                                {tag.display_name}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted-foreground">No tags</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <code className="text-xs bg-muted px-2 py-1 rounded">

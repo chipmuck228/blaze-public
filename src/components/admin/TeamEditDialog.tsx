@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { X, Plus } from "lucide-react"
+import { X, Plus, Upload, Loader2 } from "lucide-react"
 
 interface TeamMember {
   id: string
@@ -49,13 +49,16 @@ export function TeamEditDialog({
   const [displayOrder, setDisplayOrder] = useState(0)
   const [socialNetworks, setSocialNetworks] = useState<Array<{ name: string; url: string; display_order: number }>>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState("")
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
       if (team) {
         // 编辑模式
         setImageUrl(team.image_url || "")
+        setPreviewUrl(team.image_url || null)
         setName(team.name || "")
         setPosition(team.position || "")
         setDescription(team.description || "")
@@ -70,6 +73,7 @@ export function TeamEditDialog({
       } else {
         // 新建模式 - 清空所有字段
         setImageUrl("")
+        setPreviewUrl(null)
         setName("")
         setPosition("")
         setDescription("")
@@ -78,8 +82,18 @@ export function TeamEditDialog({
       }
       setError("")
       setIsLoading(false)
+      setIsUploading(false)
     }
   }, [open, team])
+
+  // 清理预览 URL
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl)
+      }
+    }
+  }, [previewUrl])
 
   const addSocialNetwork = () => {
     setSocialNetworks([
@@ -96,6 +110,59 @@ export function TeamEditDialog({
     const updated = [...socialNetworks]
     updated[index] = { ...updated[index], [field]: value }
     setSocialNetworks(updated)
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // 验证文件类型
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file")
+      return
+    }
+
+    // 验证文件大小 (最大 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      setError("File size must be less than 5MB")
+      return
+    }
+
+    setIsUploading(true)
+    setError("")
+
+    try {
+      // 创建预览 URL
+      const localPreviewUrl = URL.createObjectURL(file)
+      setPreviewUrl(localPreviewUrl)
+
+      // 上传到 Vercel Blob
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch("/api/admin/teams/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setPreviewUrl(null)
+        setError(data.error || "Failed to upload image")
+        setIsUploading(false)
+        return
+      }
+
+      // 设置上传后的 URL
+      setImageUrl(data.url)
+      setIsUploading(false)
+    } catch (error: any) {
+      setPreviewUrl(null)
+      setError("Failed to upload image. Please try again.")
+      setIsUploading(false)
+    }
   }
 
   const handleSave = async () => {
@@ -182,19 +249,41 @@ export function TeamEditDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="image_url">
-              Image URL <span className="text-destructive">*</span>
+            <Label htmlFor="avatar_upload">
+              Avatar Image <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="image_url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="/path/to/image.png"
-              required
-            />
+            <div className="flex flex-col gap-4">
+              {previewUrl && (
+                <div className="relative w-32 h-32 rounded-full overflow-hidden border-2 border-border">
+                  <img
+                    src={previewUrl}
+                    alt="Avatar preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Input
+                  id="avatar_upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="cursor-pointer"
+                />
+                {isUploading && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Path to the image file in the public directory (e.g., /team-member.png)
+              Upload an image file (JPG, PNG, etc.). Maximum file size: 5MB. Image will be stored in Vercel Blob.
             </p>
+            {imageUrl && !isUploading && (
+              <p className="text-xs text-muted-foreground">
+                Uploaded: <span className="text-primary break-all">{imageUrl}</span>
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

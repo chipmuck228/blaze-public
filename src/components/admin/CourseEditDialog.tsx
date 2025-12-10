@@ -22,10 +22,11 @@ import {
 } from "@/components/ui/select"
 import { Loader2, Plus, X } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface Course {
   id?: string
-  subcategory_id: string
   name: string
   slug?: string
   description?: string
@@ -39,21 +40,7 @@ interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
-  display_order?: number
-}
-
-interface CourseCategory {
-  id: string
-  name: string
-  display_name: string
-  series?: CourseSeries[]
-}
-
-interface CourseSeries {
-  id: string
-  name: string
-  display_name: string
-  subcategories?: CourseSubcategory[]
+  tags?: Array<{ id: string; name: string; display_name: string }>
 }
 
 interface CourseSubcategory {
@@ -76,14 +63,11 @@ export function CourseEditDialog({
   onCourseUpdated,
 }: CourseEditDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [categories, setCategories] = useState<CourseCategory[]>([])
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("")
-  const [selectedSeriesId, setSelectedSeriesId] = useState<string>("")
-  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>("")
+  const [subcategories, setSubcategories] = useState<CourseSubcategory[]>([])
+  const [selectedSubcategoryIds, setSelectedSubcategoryIds] = useState<string[]>([])
   const [targetGrades, setTargetGrades] = useState<string[]>([])
 
-  const [formData, setFormData] = useState<Course>({
-    subcategory_id: "",
+  const [formData, setFormData] = useState<Omit<Course, 'tags'>>({
     name: "",
     slug: "",
     description: "",
@@ -97,58 +81,50 @@ export function CourseEditDialog({
     target_grades: [],
     base_price: undefined,
     currency: "USD",
-    display_order: 0,
   })
 
   useEffect(() => {
     if (open) {
-      fetchCategories()
+      fetchSubcategories()
       if (course) {
-        setFormData(course)
-        setSelectedSubcategoryId(course.subcategory_id)
+        setFormData({
+          id: course.id,
+          name: course.name,
+          slug: course.slug || "",
+          description: course.description || "",
+          target_audience: course.target_audience || "",
+          outcomes: course.outcomes || "",
+          prerequisites: course.prerequisites || "",
+          cancellation_policy: course.cancellation_policy || "",
+          number_of_sessions: course.number_of_sessions,
+          target_age_min: course.target_age_min,
+          target_age_max: course.target_age_max,
+          target_grades: course.target_grades || [],
+          base_price: course.base_price,
+          currency: course.currency || "USD",
+        })
+        setSelectedSubcategoryIds(course.tags?.map(t => t.id) || [])
         setTargetGrades(course.target_grades || [])
-        // 需要找到对应的category和series
-        findCategoryAndSeries(course.subcategory_id)
       } else {
         resetForm()
       }
     }
   }, [open, course])
 
-  const fetchCategories = async () => {
+  const fetchSubcategories = async () => {
     try {
-      const response = await fetch("/api/admin/courses")
+      const response = await fetch("/api/admin/subcategories")
       if (response.ok) {
         const data = await response.json()
-        setCategories(data)
+        setSubcategories(data)
       }
     } catch (error) {
-      console.error("Error fetching categories:", error)
-    }
-  }
-
-  const findCategoryAndSeries = async (subcategoryId: string) => {
-    // 遍历categories找到对应的subcategory
-    for (const category of categories) {
-      if (category.series) {
-        for (const series of category.series) {
-          if (series.subcategories) {
-            for (const subcategory of series.subcategories) {
-              if (subcategory.id === subcategoryId) {
-                setSelectedCategoryId(category.id)
-                setSelectedSeriesId(series.id)
-                return
-              }
-            }
-          }
-        }
-      }
+      console.error("Error fetching subcategories:", error)
     }
   }
 
   const resetForm = () => {
     setFormData({
-      subcategory_id: "",
       name: "",
       slug: "",
       description: "",
@@ -162,30 +138,17 @@ export function CourseEditDialog({
       target_grades: [],
       base_price: undefined,
       currency: "USD",
-      display_order: 0,
     })
-    setSelectedCategoryId("")
-    setSelectedSeriesId("")
-    setSelectedSubcategoryId("")
+    setSelectedSubcategoryIds([])
     setTargetGrades([])
   }
 
-  const handleCategoryChange = (categoryId: string) => {
-    setSelectedCategoryId(categoryId)
-    setSelectedSeriesId("")
-    setSelectedSubcategoryId("")
-    setFormData({ ...formData, subcategory_id: "" })
-  }
-
-  const handleSeriesChange = (seriesId: string) => {
-    setSelectedSeriesId(seriesId)
-    setSelectedSubcategoryId("")
-    setFormData({ ...formData, subcategory_id: "" })
-  }
-
-  const handleSubcategoryChange = (subcategoryId: string) => {
-    setSelectedSubcategoryId(subcategoryId)
-    setFormData({ ...formData, subcategory_id: subcategoryId })
+  const toggleSubcategory = (subcategoryId: string) => {
+    setSelectedSubcategoryIds((prev) =>
+      prev.includes(subcategoryId)
+        ? prev.filter((id) => id !== subcategoryId)
+        : [...prev, subcategoryId]
+    )
   }
 
   const addTargetGrade = () => {
@@ -211,7 +174,7 @@ export function CourseEditDialog({
       const submitData = {
         ...formData,
         target_grades: targetGrades.filter((g) => g.trim() !== ""),
-        subcategory_id: selectedSubcategoryId,
+        subcategory_ids: selectedSubcategoryIds,
       }
 
       const url = course?.id ? `/api/admin/courses/${course.id}` : "/api/admin/courses"
@@ -241,76 +204,17 @@ export function CourseEditDialog({
     }
   }
 
-  const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
-  const selectedSeries = selectedCategory?.series?.find((s) => s.id === selectedSeriesId)
-  const availableSubcategories = selectedSeries?.subcategories || []
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{course ? "Edit Course" : "Add New Course"}</DialogTitle>
           <DialogDescription>
-            {course ? "Update course information" : "Create a new course"}
+            {course ? "Update course information" : "Create a new course (assignments will be created separately)"}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Category Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="category">Category *</Label>
-            <Select value={selectedCategoryId} onValueChange={handleCategoryChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.display_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Series Selection */}
-          {selectedCategoryId && (
-            <div className="space-y-2">
-              <Label htmlFor="series">Series *</Label>
-              <Select value={selectedSeriesId} onValueChange={handleSeriesChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a series" />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectedCategory?.series?.map((series) => (
-                    <SelectItem key={series.id} value={series.id}>
-                      {series.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Subcategory Selection */}
-          {selectedSeriesId && (
-            <div className="space-y-2">
-              <Label htmlFor="subcategory">Subcategory *</Label>
-              <Select value={selectedSubcategoryId} onValueChange={handleSubcategoryChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a subcategory" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableSubcategories.map((subcategory) => (
-                    <SelectItem key={subcategory.id} value={subcategory.id}>
-                      {subcategory.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           {/* Course Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Course Name *</Label>
@@ -332,6 +236,48 @@ export function CourseEditDialog({
               onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
               placeholder="e.g., intro-robotics-vex-go"
             />
+          </div>
+
+          {/* Subcategory Tags (Multi-select) */}
+          <div className="space-y-2">
+            <Label>Subcategory Tags (Optional)</Label>
+            <div className="border rounded-md p-3 min-h-[100px] max-h-[200px] overflow-y-auto">
+              {subcategories.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No subcategories available. Create subcategories first.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {subcategories.map((subcategory) => (
+                    <div key={subcategory.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`subcategory-${subcategory.id}`}
+                        checked={selectedSubcategoryIds.includes(subcategory.id)}
+                        onCheckedChange={() => toggleSubcategory(subcategory.id)}
+                      />
+                      <Label
+                        htmlFor={`subcategory-${subcategory.id}`}
+                        className="text-sm font-normal cursor-pointer flex-1"
+                      >
+                        {subcategory.display_name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {selectedSubcategoryIds.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {selectedSubcategoryIds.map((id) => {
+                  const subcategory = subcategories.find((s) => s.id === id)
+                  return subcategory ? (
+                    <Badge key={id} variant="secondary">
+                      {subcategory.display_name}
+                    </Badge>
+                  ) : null
+                })}
+              </div>
+            )}
           </div>
 
           {/* Description */}
@@ -523,28 +469,11 @@ export function CourseEditDialog({
             />
           </div>
 
-          {/* Display Order */}
-          <div className="space-y-2">
-            <Label htmlFor="order">Display Order</Label>
-            <Input
-              id="order"
-              type="number"
-              value={formData.display_order || 0}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  display_order: parseInt(e.target.value) || 0,
-                })
-              }
-              placeholder="0"
-            />
-          </div>
-
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !selectedSubcategoryId}>
+            <Button type="submit" disabled={isLoading || !formData.name}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -562,4 +491,3 @@ export function CourseEditDialog({
     </Dialog>
   )
 }
-

@@ -14,6 +14,7 @@ import { Facebook, Instagram, Linkedin, Loader2 } from "lucide-react";
 import { YoutubeIcon, XiaohongshuIcon, FacebookIcon, InstagramIcon } from "./Icons";
 
 interface TeamProps {
+  id: string;
   imageUrl: string;
   name: string;
   position: string;
@@ -42,6 +43,7 @@ interface TeamMember {
 // 默认团队数据（作为后备）
 const teamList: TeamProps[] = [
   {
+    id: "default-dave-w-1",
     imageUrl: "/Dave-W-1.png",
     name: "Dave W. 1",
     position: "Chef Coach",
@@ -62,6 +64,7 @@ const teamList: TeamProps[] = [
     ],
   },
   {
+    id: "default-max-k",
     imageUrl: "/Max-K.png",
     name: "Max K.",
     position: "Senior Coach",
@@ -86,6 +89,7 @@ const teamList: TeamProps[] = [
     ],
   },
   {
+    id: "default-daisy-d",
     imageUrl: "/Daisy-D.png",
     name: "Daisy D.",
     position: "Senior Coach",
@@ -103,6 +107,7 @@ const teamList: TeamProps[] = [
     ],
   },
   {
+    id: "default-randall-c",
     imageUrl: "/Randall-C.webp",
     name: "Randall C.",
     position: "Senior Coach",
@@ -124,6 +129,7 @@ const teamList: TeamProps[] = [
     ],
   },
   {
+    id: "default-bowen-t",
     imageUrl: "/Bowen-T.webp",
     name: "Bowen T.",
     position: "Senior Coach",
@@ -141,6 +147,7 @@ const teamList: TeamProps[] = [
     ],
   },
   {
+    id: "default-chris-p",
     imageUrl: "/Chris-P.webp",
     name: "Chris P.",
     position: "Senior Coach",
@@ -185,13 +192,13 @@ export const Team = () => {
       setError("Failed to load team members");
       // 如果加载失败，使用默认数据
       setTeamMembers(teamList.map(team => ({
-        id: team.name,
+        id: team.id,
         image_url: team.imageUrl,
         name: team.name,
         position: team.position,
         description: team.description,
         social_networks: team.socialNetworks.map((sn, idx) => ({
-          id: `${team.name}-${idx}`,
+          id: `${team.id}-${idx}`,
           name: sn.name,
           url: sn.url,
         })),
@@ -203,6 +210,7 @@ export const Team = () => {
 
   // 转换数据库格式到组件格式
   const teamListToDisplay: TeamProps[] = teamMembers.map(member => ({
+    id: member.id,
     imageUrl: member.image_url,
     name: member.name,
     position: member.position,
@@ -259,14 +267,14 @@ export const Team = () => {
           {error}
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 gap-y-10 justify-items-center max-w-5xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 gap-y-10 max-w-5xl mx-auto">
           {displayList.map(
-          ({ imageUrl, name, position, socialNetworks, description }: TeamProps) => (
+          ({ id, imageUrl, name, position, socialNetworks, description }: TeamProps) => (
             <Card
-              key={name}
-              className="bg-muted/50 relative mt-8 flex flex-col justify-center items-center"
+              key={id}
+              className="bg-muted/50 relative mt-8 flex flex-col h-full w-full"
             >
-              <CardHeader className="mt-8 flex justify-center items-center pb-2">
+              <CardHeader className="mt-8 flex flex-col justify-center items-center pb-2 flex-shrink-0">
                 <Image
                   src={imageUrl}
                   alt={`${name} ${position}`}
@@ -280,14 +288,14 @@ export const Team = () => {
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="text-center pb-2 text-sm">
-                <p>{description}</p>
+              <CardContent className="text-center pb-2 text-sm flex-1 flex flex-col justify-center min-h-[100px] px-4">
+                <p className="line-clamp-4 leading-relaxed">{description}</p>
               </CardContent>
 
-              <CardFooter className="flex justify-center gap-2">
-                {socialNetworks.map(({ name, url }: SociaNetworkslProps) => (
+              <CardFooter className="flex justify-center gap-2 flex-shrink-0 pt-4 pb-4">
+                {socialNetworks.map(({ name, url }: SociaNetworkslProps, index) => (
                   <Button
-                    key={name}
+                    key={`${id}-${name}-${index}`}
                     variant="ghost"
                     size="sm"
                     asChild

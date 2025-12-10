@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { supabaseAdmin } from "@/lib/supabase"
+import { getCourseWithDetails, updateCourse, deleteCourse, updateCourseSubcategoryTags } from "@/lib/db"
 
-// 获取单个课程
+// 获取单个课程（包含标签和分配信息）
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -14,17 +14,12 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .select("*")
-      .eq("id", id)
-      .single()
-
-    if (error) {
+    const course = await getCourseWithDetails(id)
+    if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 })
     }
 
-    return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(course, { status: 200 })
   } catch (error: any) {
     console.error("Error fetching course:", error)
     return NextResponse.json(
@@ -34,7 +29,7 @@ export async function GET(
   }
 }
 
-// 更新课程
+// 更新课程（只更新课程内容，标签单独处理）
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -48,7 +43,6 @@ export async function PUT(
 
     const body = await request.json()
     const {
-      subcategory_id,
       name,
       slug,
       description,
@@ -62,44 +56,37 @@ export async function PUT(
       target_grades,
       base_price,
       currency,
-      display_order,
       is_active,
+      subcategory_ids, // 子类标签ID数组
     } = body
 
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .update({
-        subcategory_id,
-        name,
-        slug,
-        description,
-        target_audience,
-        outcomes,
-        prerequisites,
-        cancellation_policy,
-        number_of_sessions,
-        target_age_min,
-        target_age_max,
-        target_grades,
-        base_price,
-        currency,
-        display_order,
-        is_active: is_active !== undefined ? is_active : true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single()
+    // 更新课程基本信息
+    const course = await updateCourse(id, {
+      name,
+      slug,
+      description,
+      target_audience,
+      outcomes,
+      prerequisites,
+      cancellation_policy,
+      number_of_sessions,
+      target_age_min,
+      target_age_max,
+      target_grades,
+      base_price,
+      currency,
+      is_active,
+    })
 
-    if (error) {
-      console.error("Error updating course:", error)
-      return NextResponse.json(
-        { error: error.message || "Failed to update course" },
-        { status: 500 }
-      )
+    // 更新子类标签（如果提供了）
+    if (subcategory_ids !== undefined) {
+      await updateCourseSubcategoryTags(id, Array.isArray(subcategory_ids) ? subcategory_ids : [])
     }
 
-    return NextResponse.json(data, { status: 200 })
+    // 返回完整的课程信息
+    const courseWithDetails = await getCourseWithDetails(id)
+
+    return NextResponse.json(courseWithDetails, { status: 200 })
   } catch (error: any) {
     console.error("Error updating course:", error)
     return NextResponse.json(
@@ -109,7 +96,7 @@ export async function PUT(
   }
 }
 
-// 删除课程
+// 删除课程（会级联删除所有 Assignment 和 Instance）
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -121,15 +108,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { error } = await supabaseAdmin.from("courses").delete().eq("id", id)
-
-    if (error) {
-      console.error("Error deleting course:", error)
-      return NextResponse.json(
-        { error: error.message || "Failed to delete course" },
-        { status: 500 }
-      )
-    }
+    await deleteCourse(id)
 
     return NextResponse.json({ message: "Course deleted successfully" }, { status: 200 })
   } catch (error: any) {
