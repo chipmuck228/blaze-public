@@ -22,10 +22,25 @@ export async function GET(request: Request) {
       return NextResponse.json(instances, { status: 200 })
     }
 
-    // 获取所有实例
+    // 获取所有实例（包含 location 和 assignment 信息）
     const { data, error } = await supabaseAdmin
       .from("course_instances")
-      .select("*")
+      .select(`
+        *,
+        location:course_locations(
+          id,
+          name,
+          address,
+          city,
+          state
+        ),
+        assignment:course_assignments(
+          id,
+          course:courses(name),
+          category:course_categories(display_name),
+          series:course_series(display_name)
+        )
+      `)
       .eq("is_active", true)
       .order("start_date", { ascending: true })
       .order("start_time", { ascending: true })
@@ -117,7 +132,7 @@ export async function POST(request: Request) {
 
     const instance = await createCourseInstance({
       assignment_id,
-      location_id,
+      location_id: location_id && location_id.trim() !== "" ? location_id : undefined,
       start_date,
       end_date,
       start_time,

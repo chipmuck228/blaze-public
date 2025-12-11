@@ -1038,9 +1038,15 @@ export async function updateCourseInstance(
     }
   }
 
+  // 确保 location_id 如果是 undefined，则设置为 null（允许清除 location）
+  const updateData: any = { ...updates }
+  if (updateData.location_id === undefined && 'location_id' in updates) {
+    updateData.location_id = null
+  }
+
   const { data, error } = await supabaseAdmin
     .from('course_instances')
-    .update(updates)
+    .update(updateData)
     .eq('id', instanceId)
     .select()
     .single()
@@ -1401,5 +1407,219 @@ export async function hasSeriesAssignments(seriesId: string): Promise<boolean> {
   }
 
   return (count || 0) > 0
+}
+
+// ==================== Coach Portal 相关函数 ====================
+
+// 获取教练的所有课程实例（通过 course_instance_coaches 表）
+export async function getCoachInstances(coachUserId: string): Promise<CourseInstanceWithDetails[]> {
+  // 1. 通过 course_instance_coaches 表获取 instance_id 列表
+  const { data: coachInstances, error: coachError } = await supabaseAdmin
+    .from('course_instance_coaches')
+    .select('instance_id')
+    .eq('coach_id', coachUserId)
+
+  if (coachError) {
+    throw new Error(`Failed to fetch coach instances: ${coachError.message}`)
+  }
+
+  const instanceIds = coachInstances?.map(ci => ci.instance_id) || []
+
+  // 2. 同时查询旧的 instructor_id（向后兼容）
+  const { data: oldInstances, error: oldError } = await supabaseAdmin
+    .from('course_instances')
+    .select('id')
+    .eq('instructor_id', coachUserId)
+    .eq('is_active', true)
+
+  if (oldError) {
+    throw new Error(`Failed to fetch old instances: ${oldError.message}`)
+  }
+
+  const oldInstanceIds = oldInstances?.map(i => i.id) || []
+
+  // 3. 合并并去重
+  const allInstanceIds = [...new Set([...instanceIds, ...oldInstanceIds])]
+
+  if (allInstanceIds.length === 0) {
+    return []
+  }
+
+  // 4. 获取完整的课程实例数据
+  const { data: instances, error: instancesError } = await supabaseAdmin
+    .from('course_instances')
+    .select(`
+      *,
+      assignment:course_assignments(
+        id,
+        course_id,
+        category_id,
+        series_id,
+        location_id,
+        display_order,
+        is_active,
+        course:courses(
+          id,
+          name,
+          description,
+          target_audience,
+          learning_outcomes,
+          cancellation_policy,
+          prerequisites,
+          base_price,
+          duration_hours,
+          session_count,
+          age_min,
+          age_max,
+          grade_level
+        ),
+        category:course_categories(
+          id,
+          name,
+          display_order
+        ),
+        series:course_series(
+          id,
+          name,
+          category_id,
+          start_date,
+          end_date,
+          display_order
+        )
+      ),
+      location:course_locations(
+        id,
+        name,
+        address,
+        city,
+        state,
+        zip_code
+      )
+    `)
+    .in('id', allInstanceIds)
+    .eq('is_active', true)
+    .order('start_date', { ascending: true })
+
+  if (instancesError) {
+    throw new Error(`Failed to fetch instances: ${instancesError.message}`)
+  }
+
+  return instances as CourseInstanceWithDetails[]
+}
+
+// 获取教练的单个课程实例（验证权限）
+export async function getCoachInstanceById(
+  coachUserId: string,
+  instanceId: string
+): Promise<CourseInstanceWithDetails | null> {
+  // 验证教练是否有权限访问该实例
+  const { data: coachInstance, error: coachError } = await supabaseAdmin
+    .from('course_instance_coaches')
+    .select('instance_id')
+    .eq('coach_id', coachUserId)
+    .eq('instance_id', instanceId)
+    .single()
+
+  // 同时检查旧的 instructor_id（向后兼容）
+  const { data: oldInstance, error: oldError } = await supabaseAdmin
+    .from('course_instances')
+    .select('id')
+    .eq('id', instanceId)
+    .eq('instructor_id', coachUserId)
+    .eq('is_active', true)
+    .single()
+
+  // 如果两个查询都没有结果，说明没有权限
+  if (coachError && oldError) {
+    return null
+  }
+
+  // 获取完整的课程实例数据
+  const { data: instance, error: instanceError } = await supabaseAdmin
+    .from('course_instances')
+    .select(`
+      *,
+      assignment:course_assignments(
+        id,
+        course_id,
+        category_id,
+        series_id,
+        location_id,
+        display_order,
+        is_active,
+        course:courses(
+          id,
+          name,
+          description,
+          target_audience,
+          learning_outcomes,
+          cancellation_policy,
+          prerequisites,
+          base_price,
+          duration_hours,
+          session_count,
+          age_min,
+          age_max,
+          grade_level
+        ),
+        category:course_categories(
+          id,
+          name,
+          display_order
+        ),
+        series:course_series(
+          id,
+          name,
+          category_id,
+          start_date,
+          end_date,
+          display_order
+        )
+      ),
+      location:course_locations(
+        id,
+        name,
+        address,
+        city,
+        state,
+        zip_code
+      )
+    `)
+    .eq('id', instanceId)
+    .eq('is_active', true)
+    .single()
+
+  if (instanceError) {
+    return null
+  }
+
+  return instance as CourseInstanceWithDetails
+}
+
+// 获取教练的统计数据
+export async function getCoachStats(coachUserId: string): Promise<{
+  totalClasses: number
+  upcomingClasses: number
+  ongoingClasses: number
+  completedClasses: number
+}> {
+  const instances = await getCoachInstances(coachUserId)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+  const totalClasses = instances.length
+  const upcomingClasses = instances.filter(inst => {
+    const startDate = new Date(inst.start_date)
+    return startDate >= today && inst.status === 'scheduled'
+  }).length
+  const ongoingClasses = instances.filter(inst => inst.status === 'ongoing').length
+  const completedClasses = instances.filter(inst => inst.status === 'completed').length
+
+  return {
+    totalClasses,
+    upcomingClasses,
+    ongoingClasses,
+    completedClasses,
+  }
 }
 

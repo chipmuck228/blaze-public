@@ -43,7 +43,42 @@ export async function GET(request: Request) {
       )
     }
 
-    return NextResponse.json(courses, { status: 200 })
+    // 为每个课程加载 tags (subcategories)
+    const { supabaseAdmin } = await import("@/lib/supabase")
+    const coursesWithTags = await Promise.all(
+      courses.map(async (course) => {
+        // 获取子类标签
+        const { data: subcategoryTags } = await supabaseAdmin
+          .from('course_subcategory_tags')
+          .select('subcategory_id')
+          .eq('course_id', course.id)
+
+        let tags: Array<{ id: string; name: string; display_name: string }> = []
+        if (subcategoryTags && subcategoryTags.length > 0) {
+          const subcategoryIds = subcategoryTags.map(t => t.subcategory_id)
+          const { data: subcategoriesData } = await supabaseAdmin
+            .from('course_subcategories')
+            .select('id, name, display_name')
+            .in('id', subcategoryIds)
+            .eq('is_active', true)
+          
+          if (subcategoriesData) {
+            tags = subcategoriesData.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              display_name: s.display_name,
+            }))
+          }
+        }
+
+        return {
+          ...course,
+          tags,
+        }
+      })
+    )
+
+    return NextResponse.json(coursesWithTags, { status: 200 })
   } catch (error: any) {
     console.error("Error fetching courses:", error)
     return NextResponse.json(
@@ -112,8 +147,18 @@ export async function POST(request: Request) {
 
     // 返回完整的课程信息（包含标签）
     const courseWithDetails = await getCourseWithDetails(course.id)
+    
+    // 将 subcategories 映射为 tags 以匹配前端期望
+    const courseWithTags = courseWithDetails ? {
+      ...courseWithDetails,
+      tags: courseWithDetails.subcategories?.map(s => ({
+        id: s.id,
+        name: s.name,
+        display_name: s.display_name,
+      })) || [],
+    } : null
 
-    return NextResponse.json(courseWithDetails, { status: 201 })
+    return NextResponse.json(courseWithTags, { status: 201 })
   } catch (error: any) {
     console.error("Error creating course:", error)
     return NextResponse.json(

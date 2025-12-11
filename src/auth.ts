@@ -59,12 +59,26 @@ export const authConfig = {
       const isOnLogin = nextUrl.pathname.startsWith("/login")
       const isOnRegister = nextUrl.pathname.startsWith("/register")
 
+      const isOnCoach = nextUrl.pathname.startsWith("/coach")
+      const isOnCoachLogin = nextUrl.pathname.startsWith("/coach/login")
+
       // 管理员页面保护
       if (isOnAdmin && !isOnAdminLogin) {
         if (!isLoggedIn) {
           return Response.redirect(new URL("/admin/login", nextUrl))
         }
         if (userRole !== "admin") {
+          return Response.redirect(new URL("/", nextUrl))
+        }
+        return true
+      }
+
+      // Coach 页面保护
+      if (isOnCoach && !isOnCoachLogin) {
+        if (!isLoggedIn) {
+          return Response.redirect(new URL("/coach/login", nextUrl))
+        }
+        if (userRole !== "coach") {
           return Response.redirect(new URL("/", nextUrl))
         }
         return true
@@ -123,9 +137,10 @@ export const authConfig = {
           return null
         }
 
-        // 检查邮箱是否已验证（管理员可以跳过此检查）
+        // 检查邮箱是否已验证（管理员和教练可以跳过此检查）
         const isAdmin = user.role === 'admin'
-        if (!user.email_verified && !isAdmin) {
+        const isCoach = user.role === 'coach'
+        if (!user.email_verified && !isAdmin && !isCoach) {
           throw new Error("Please verify your email first")
         }
 

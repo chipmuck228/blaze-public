@@ -108,7 +108,7 @@ export async function PUT(
     }
 
     const instance = await updateCourseInstance(id, {
-      location_id,
+      location_id: location_id && location_id.trim() !== "" ? location_id : undefined,
       start_date,
       end_date,
       start_time,

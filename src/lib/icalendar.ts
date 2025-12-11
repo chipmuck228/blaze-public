@@ -184,24 +184,63 @@ export function getActualClassDates(instance: CourseInstance): Date[] {
   const dates: Date[] = []
   const timezone = instance.timezone || 'America/Los_Angeles'
 
+  // 辅助函数：创建本地日期（避免时区问题）
+  const createLocalDate = (dateStr: string): Date => {
+    // 如果 dateStr 是 YYYY-MM-DD 格式
+    if (dateStr.includes('-')) {
+      const [year, month, day] = dateStr.split('-').map(Number)
+      return new Date(year, month - 1, day)
+    }
+    // 如果 dateStr 是 YYYYMMDD 格式
+    if (dateStr.length === 8) {
+      const year = parseInt(dateStr.substring(0, 4))
+      const month = parseInt(dateStr.substring(4, 6)) - 1
+      const day = parseInt(dateStr.substring(6, 8))
+      return new Date(year, month, day)
+    }
+    // 默认使用 Date 构造函数
+    return new Date(dateStr)
+  }
+
+  // 辅助函数：比较日期（只比较年月日，忽略时间）
+  const isSameDate = (date1: Date, date2: Date): boolean => {
+    return date1.getFullYear() === date2.getFullYear() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate()
+  }
+
   // 1. 从 RRULE 生成基础日期
   if (instance.icalendar_rrule) {
     try {
       const rule = rrulestr(instance.icalendar_rrule)
-      const baseDates = rule.between(
-        new Date(instance.start_date),
-        new Date(instance.end_date),
-        true
-      )
-      dates.push(...baseDates)
+      
+      // 创建本地日期范围，避免时区问题
+      const startDate = createLocalDate(instance.start_date)
+      const endDate = createLocalDate(instance.end_date)
+      
+      // 设置时间为中午，避免时区边界问题
+      startDate.setHours(12, 0, 0, 0)
+      endDate.setHours(12, 0, 0, 0)
+      
+      const baseDates = rule.between(startDate, endDate, true)
+      
+      // 将日期标准化为本地日期（只保留年月日，时间设为中午）
+      dates.push(...baseDates.map(date => {
+        const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+        return localDate
+      }))
     } catch (error) {
       console.error('Error parsing RRULE:', error)
       // 如果解析失败，使用 start_date
-      dates.push(new Date(instance.start_date))
+      const startDate = createLocalDate(instance.start_date)
+      startDate.setHours(12, 0, 0, 0)
+      dates.push(startDate)
     }
   } else {
     // 如果没有 RRULE，使用 start_date
-    dates.push(new Date(instance.start_date))
+    const startDate = createLocalDate(instance.start_date)
+    startDate.setHours(12, 0, 0, 0)
+    dates.push(startDate)
   }
 
   // 2. 移除排除日期
@@ -211,12 +250,11 @@ export function getActualClassDates(instance: CourseInstance): Date[] {
       const year = parseInt(d.substring(0, 4))
       const month = parseInt(d.substring(4, 6)) - 1
       const day = parseInt(d.substring(6, 8))
-      return new Date(year, month, day)
+      return new Date(year, month, day, 12, 0, 0)
     })
 
     const filteredDates = dates.filter(date => {
-      const dateStr = formatICalDate(date)
-      return !exdates.some(ex => formatICalDate(ex) === dateStr)
+      return !exdates.some(ex => isSameDate(date, ex))
     })
     dates.length = 0
     dates.push(...filteredDates)
@@ -229,21 +267,26 @@ export function getActualClassDates(instance: CourseInstance): Date[] {
       const year = parseInt(d.substring(0, 4))
       const month = parseInt(d.substring(4, 6)) - 1
       const day = parseInt(d.substring(6, 8))
-      const hours = d.length > 8 ? parseInt(d.substring(9, 11)) : 0
+      const hours = d.length > 8 ? parseInt(d.substring(9, 11)) : 12
       const minutes = d.length > 10 ? parseInt(d.substring(11, 13)) : 0
       return new Date(year, month, day, hours, minutes)
     })
     dates.push(...rdates)
   }
 
-  // 排序并去重
-  const uniqueDates = dates
-    .sort((a, b) => a.getTime() - b.getTime())
-    .filter((date, index, self) => 
-      index === self.findIndex(d => formatICalDate(d) === formatICalDate(date))
-    )
+  // 排序并去重（使用日期比较）
+  const uniqueDates: Date[] = []
+  const seenDates = new Set<string>()
+  
+  dates.forEach(date => {
+    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+    if (!seenDates.has(dateKey)) {
+      seenDates.add(dateKey)
+      uniqueDates.push(date)
+    }
+  })
 
-  return uniqueDates
+  return uniqueDates.sort((a, b) => a.getTime() - b.getTime())
 }
 
 /**

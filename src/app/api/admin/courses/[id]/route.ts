@@ -19,7 +19,17 @@ export async function GET(
       return NextResponse.json({ error: "Course not found" }, { status: 404 })
     }
 
-    return NextResponse.json(course, { status: 200 })
+    // 将 subcategories 映射为 tags 以匹配前端期望
+    const courseWithTags = {
+      ...course,
+      tags: course.subcategories?.map(s => ({
+        id: s.id,
+        name: s.name,
+        display_name: s.display_name,
+      })) || [],
+    }
+
+    return NextResponse.json(courseWithTags, { status: 200 })
   } catch (error: any) {
     console.error("Error fetching course:", error)
     return NextResponse.json(
@@ -85,8 +95,18 @@ export async function PUT(
 
     // 返回完整的课程信息
     const courseWithDetails = await getCourseWithDetails(id)
+    
+    // 将 subcategories 映射为 tags 以匹配前端期望
+    const courseWithTags = courseWithDetails ? {
+      ...courseWithDetails,
+      tags: courseWithDetails.subcategories?.map(s => ({
+        id: s.id,
+        name: s.name,
+        display_name: s.display_name,
+      })) || [],
+    } : null
 
-    return NextResponse.json(courseWithDetails, { status: 200 })
+    return NextResponse.json(courseWithTags, { status: 200 })
   } catch (error: any) {
     console.error("Error updating course:", error)
     return NextResponse.json(
