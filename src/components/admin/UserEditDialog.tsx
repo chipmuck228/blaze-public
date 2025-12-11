@@ -129,6 +129,14 @@ export function UserEditDialog({
               </Button>
               <Button
                 type="button"
+                variant={role === "coach" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setRole("coach")}
+              >
+                Coach
+              </Button>
+              <Button
+                type="button"
                 variant={role === "admin" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setRole("admin")}

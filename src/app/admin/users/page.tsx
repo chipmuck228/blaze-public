@@ -200,8 +200,20 @@ export default function UsersManagementPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={user.role === "admin" ? "default" : "outline"}>
-                          {user.role === "admin" ? "Admin" : "User"}
+                        <Badge 
+                          variant={
+                            user.role === "admin" 
+                              ? "default" 
+                              : user.role === "coach"
+                              ? "secondary"
+                              : "outline"
+                          }
+                        >
+                          {user.role === "admin" 
+                            ? "Admin" 
+                            : user.role === "coach"
+                            ? "Coach"
+                            : "User"}
                         </Badge>
                       </TableCell>
                       <TableCell>{formatDate(user.created_at)}</TableCell>

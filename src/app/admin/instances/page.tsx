@@ -497,110 +497,120 @@ export default function InstancesManagementPage() {
               {searchQuery ? "No instances found matching your search." : "No instances found."}
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {filteredInstances.map((instance) => (
-                <Card key={instance.id} className="flex flex-col">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg mb-1 truncate">
-                          {getAssignmentLabel(instance.assignment_id)}
-                        </CardTitle>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant={getStatusColor(instance.status)} className="text-xs">
-                            {instance.status}
-                          </Badge>
+                <Card key={instance.id} className="hover:shadow-md transition-shadow flex flex-col">
+                  <CardContent className="p-6 flex-1 flex flex-col">
+                    <div className="flex flex-col gap-4 flex-1">
+                      {/* Header */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-semibold mb-2 truncate">
+                            {getAssignmentLabel(instance.assignment_id)}
+                          </h3>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <Badge variant={getStatusColor(instance.status)} className="text-xs">
+                              {instance.status}
+                            </Badge>
+                            {instance.location?.name && (
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <MapPin className="h-3.5 w-3.5" />
+                                <span className="truncate">{instance.location.name}</span>
+                              </div>
+                            )}
+                            {instance.start_time && instance.end_time && (
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>
+                                  {formatTime(instance.start_time)} - {formatTime(instance.end_time)}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                              <Users className="h-3.5 w-3.5" />
+                              <span>
+                                {instance.current_students}
+                                {instance.max_students ? ` / ${instance.max_students}` : ""}
+                              </span>
+                            </div>
+                          </div>
                         </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(instance)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                window.open(`/api/admin/instances/${instance.id}/export`, '_blank')
+                              }}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              Export to Calendar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDelete(instance.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(instance)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              window.open(`/api/admin/instances/${instance.id}/export`, '_blank')
-                            }}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            Export to Calendar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => handleDelete(instance.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 space-y-4">
-                    {/* Basic Info */}
-                    <div className="space-y-2 text-sm">
-                      {instance.location?.name && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Location:</span>
-                          <span className="font-medium">{instance.location.name}</span>
-                        </div>
-                      )}
-                      {instance.start_time && instance.end_time && (
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Time:</span>
-                          <span className="font-medium">
-                            {formatTime(instance.start_time)} - {formatTime(instance.end_time)}
-                          </span>
-                        </div>
-                      )}
-                      {instance.days_of_week && instance.days_of_week.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Days:</span>
-                          <span className="font-medium">
-                            {instance.days_of_week
-                              .map((d) => DAYS_OF_WEEK.find((day) => day.value === d)?.label.substring(0, 3))
-                              .join(", ")}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">Students:</span>
-                        <span className="font-medium">
-                          {instance.current_students}
-                          {instance.max_students ? ` / ${instance.max_students}` : ""}
-                        </span>
-                      </div>
-                      {instance.instructor_name && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">Instructor:</span>
-                          <span className="font-medium">{instance.instructor_name}</span>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Date Range */}
-                    <div className="pt-2 border-t">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Date Range: </span>
-                        <span className="font-medium">
-                          {formatDate(instance.start_date)} - {formatDate(instance.end_date)}
-                        </span>
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-xs mb-1">Date Range</p>
+                          <p className="font-medium text-xs">
+                            {formatDate(instance.start_date)} - {formatDate(instance.end_date)}
+                          </p>
+                        </div>
+                        {instance.days_of_week && instance.days_of_week.length > 0 && (
+                          <div>
+                            <p className="text-muted-foreground text-xs mb-1">Days</p>
+                            <p className="font-medium text-xs">
+                              {instance.days_of_week
+                                .map((d) => DAYS_OF_WEEK.find((day) => day.value === d)?.label.substring(0, 3))
+                                .join(", ")}
+                            </p>
+                          </div>
+                        )}
+                        {instance.instructor_name && (
+                          <div>
+                            <p className="text-muted-foreground text-xs mb-1">Instructor</p>
+                            <p className="font-medium text-xs truncate">{instance.instructor_name}</p>
+                          </div>
+                        )}
+                        {instance.price_override && (
+                          <div>
+                            <p className="text-muted-foreground text-xs mb-1">Price</p>
+                            <p className="font-medium text-xs">${instance.price_override.toFixed(2)}</p>
+                          </div>
+                        )}
                       </div>
-                    </div>
 
-                    {/* iCalendar Component */}
-                    <div className="pt-2 border-t">
-                      <InstanceCalendar instance={instance} />
+                      {/* Notes */}
+                      {instance.notes && (
+                        <div className="pt-2 border-t">
+                          <p className="text-muted-foreground text-xs mb-1">Notes</p>
+                          <p className="text-sm line-clamp-2">{instance.notes}</p>
+                        </div>
+                      )}
+
+                      {/* Calendar */}
+                      <div className="pt-2 border-t flex-1 min-h-0">
+                        <div className="border rounded-lg p-3 bg-muted/30">
+                          <InstanceCalendar instance={instance} />
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
