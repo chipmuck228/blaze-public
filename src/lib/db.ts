@@ -675,7 +675,8 @@ export interface Course {
   slug?: string
   description?: string
   target_audience?: string
-  outcomes?: string
+  outcomes?: string  // 保留向后兼容
+  learning_outcomes?: string  // 数据库实际字段名
   prerequisites?: string
   cancellation_policy?: string
   number_of_sessions?: number
@@ -684,6 +685,11 @@ export interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
+  duration_hours?: number  // 数据库字段
+  session_count?: number  // 数据库字段
+  age_min?: number  // 数据库字段
+  age_max?: number  // 数据库字段
+  grade_level?: string  // 数据库字段
   is_active: boolean
   created_at: string
   updated_at: string
