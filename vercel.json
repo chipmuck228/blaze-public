@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-expired-enrollments",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
+

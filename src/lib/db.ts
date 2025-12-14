@@ -926,6 +926,113 @@ export async function getCourseWithDetails(courseId: string): Promise<CourseWith
   } as CourseWithDetails
 }
 
+// 根据slug获取课程详细信息（包含关联数据）
+export async function getCourseWithDetailsBySlug(slug: string): Promise<CourseWithDetails | null> {
+  // 先尝试精确匹配
+  let { data: course, error: courseError } = await supabaseAdmin
+    .from('courses')
+    .select('*')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
+
+  // 如果精确匹配失败，尝试 URL 解码后的匹配（处理 URL 编码问题）
+  if (courseError || !course) {
+    try {
+      const decodedSlug = decodeURIComponent(slug)
+      if (decodedSlug !== slug) {
+        const { data: decodedCourse, error: decodedError } = await supabaseAdmin
+          .from('courses')
+          .select('*')
+          .eq('slug', decodedSlug)
+          .eq('is_active', true)
+          .single()
+        
+        if (!decodedError && decodedCourse) {
+          course = decodedCourse
+          courseError = null
+        }
+      }
+    } catch (e) {
+      // decodeURIComponent 可能失败，忽略错误
+    }
+  }
+
+  // 如果还是找不到，尝试模糊匹配（处理空格等字符差异）
+  if (courseError || !course) {
+    // 将 slug 标准化（去除多余空格）
+    const normalizedSlug = slug.trim().replace(/\s+/g, ' ')
+    const { data: normalizedCourse, error: normalizedError } = await supabaseAdmin
+      .from('courses')
+      .select('*')
+      .ilike('slug', `%${normalizedSlug}%`)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    
+    if (!normalizedError && normalizedCourse) {
+      course = normalizedCourse
+      courseError = null
+    }
+  }
+
+  if (courseError || !course) {
+    return null
+  }
+
+  // 获取子类标签
+  const { data: subcategoryTags } = await supabaseAdmin
+    .from('course_subcategory_tags')
+    .select('subcategory_id')
+    .eq('course_id', course.id)
+
+  let subcategories: CourseSubcategory[] = []
+  if (subcategoryTags && subcategoryTags.length > 0) {
+    const subcategoryIds = subcategoryTags.map((t: { subcategory_id: string }) => t.subcategory_id)
+    const { data: subcategoriesData } = await supabaseAdmin
+      .from('course_subcategories')
+      .select('*')
+      .in('id', subcategoryIds)
+      .eq('is_active', true)
+    
+    subcategories = (subcategoriesData || []) as CourseSubcategory[]
+  }
+
+  // 获取所有分配（带详细信息）
+  const { data: assignmentsData } = await supabaseAdmin
+    .from('course_assignments')
+    .select('*')
+    .eq('course_id', course.id)
+    .eq('is_active', true)
+
+  const assignmentsWithDetails: CourseAssignmentWithDetails[] = []
+  if (assignmentsData && assignmentsData.length > 0) {
+    for (const assignment of assignmentsData) {
+      const [category, series, location] = await Promise.all([
+        supabaseAdmin.from('course_categories').select('*').eq('id', assignment.category_id).single(),
+        supabaseAdmin.from('course_series').select('*').eq('id', assignment.series_id).single(),
+        assignment.location_id 
+          ? supabaseAdmin.from('course_locations').select('*').eq('id', assignment.location_id).single()
+          : Promise.resolve({ data: null })
+      ])
+
+      assignmentsWithDetails.push({
+        ...assignment,
+        category: category.data as CourseCategory | undefined,
+        series: series.data as CourseSeries | undefined,
+        location: location.data as CourseLocation | undefined,
+        subcategories,
+      })
+    }
+  }
+
+  return {
+    ...course,
+    subcategories,
+    assignments: assignmentsWithDetails,
+  } as CourseWithDetails
+}
+
 // 获取指定 Assignment 的所有实例
 export async function getCourseInstancesByAssignment(assignmentId: string): Promise<CourseInstance[]> {
   const { data, error } = await supabaseAdmin
@@ -1511,6 +1618,676 @@ export async function getCoachInstances(coachUserId: string): Promise<CourseInst
   }
 
   return instances as CourseInstanceWithDetails[]
+}
+
+// ==================== 课程注册相关类型定义 ====================
+
+export interface CourseEnrollment {
+  id: string
+  user_id: string
+  instance_id: string
+  status: 'cart' | 'reserved' | 'enrolled' | 'waitlisted' | 'cancelled' | 'expired' | 'completed'
+  added_to_cart_at?: string
+  cart_expires_at?: string
+  reserved_at?: string
+  reserved_expires_at?: string
+  enrolled_at?: string
+  waitlisted_at?: string
+  waitlist_position?: number
+  waitlist_notified_at?: string
+  waitlist_expires_at?: string
+  cancelled_at?: string
+  cancelled_reason?: string
+  payment_status: 'unpaid' | 'pending' | 'paid' | 'refunded' | 'failed'
+  payment_method_id?: string
+  amount_paid?: number
+  currency: string
+  payment_transaction_id?: string
+  notes?: string
+  metadata?: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseEnrollmentWithDetails extends CourseEnrollment {
+  instance?: CourseInstanceWithDetails
+  user?: User
+}
+
+export interface EnrollmentConfig {
+  id: string
+  config_key: string
+  config_value: string
+  description?: string
+  updated_at: string
+}
+
+// ==================== 课程注册相关数据库操作函数 ====================
+
+// 获取注册配置
+export async function getEnrollmentConfig(key: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('enrollment_config')
+    .select('config_value')
+    .eq('config_key', key)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data.config_value
+}
+
+// 获取实例可用容量
+export async function getInstanceAvailableCapacity(instanceId: string): Promise<number> {
+  const { data, error } = await supabaseAdmin
+    .rpc('get_instance_available_capacity', { instance_id_param: instanceId })
+
+  if (error || data === null) {
+    // 如果函数不存在或出错，手动计算
+    const instance = await supabaseAdmin
+      .from('course_instances')
+      .select('max_students, current_students')
+      .eq('id', instanceId)
+      .single()
+
+    if (instance.error || !instance.data) {
+      return 0
+    }
+
+    const maxStudents = instance.data.max_students || 0
+    
+    // 统计各种状态的注册数量
+    const [enrolled, reserved, cart] = await Promise.all([
+      supabaseAdmin
+        .from('course_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'enrolled'),
+      supabaseAdmin
+        .from('course_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'reserved')
+        .gt('reserved_expires_at', new Date().toISOString()),
+      supabaseAdmin
+        .from('course_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'cart')
+        .gt('cart_expires_at', new Date().toISOString()),
+    ])
+
+    const enrolledCount = enrolled.count || 0
+    const reservedCount = reserved.count || 0
+    const cartCount = cart.count || 0
+
+    return Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
+  }
+
+  return data as number
+}
+
+// 将课程实例加入注册清单
+export async function addToCart(userId: string, instanceId: string, notes?: string): Promise<CourseEnrollment> {
+  // 检查是否已存在活跃的注册
+  const { data: existing } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('instance_id', instanceId)
+    .in('status', ['cart', 'reserved', 'enrolled', 'waitlisted'])
+    .maybeSingle()
+
+  if (existing) {
+    throw new Error(`Already have an active enrollment with status: ${existing.status}`)
+  }
+
+  // 检查可用容量
+  const availableCapacity = await getInstanceAvailableCapacity(instanceId)
+  
+  if (availableCapacity <= 0) {
+    throw new Error('Course instance is full. Please join the waitlist.')
+  }
+
+  // 获取配置
+  const cartExpiryMinutes = parseInt(await getEnrollmentConfig('cart_expiry_minutes') || '15')
+  const cartExpiresAt = new Date(Date.now() + cartExpiryMinutes * 60 * 1000)
+
+  // 创建 cart 状态记录
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .insert({
+      user_id: userId,
+      instance_id: instanceId,
+      status: 'cart',
+      added_to_cart_at: new Date().toISOString(),
+      cart_expires_at: cartExpiresAt.toISOString(),
+      notes,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to add to cart: ${error.message}`)
+  }
+
+  return data as CourseEnrollment
+}
+
+// 加入等待列表
+export async function addToWaitlist(userId: string, instanceId: string, notes?: string): Promise<CourseEnrollment> {
+  // 检查是否已存在活跃的注册
+  const { data: existing } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('instance_id', instanceId)
+    .in('status', ['cart', 'reserved', 'enrolled', 'waitlisted'])
+    .maybeSingle()
+
+  if (existing) {
+    throw new Error(`Already have an active enrollment with status: ${existing.status}`)
+  }
+
+  // 获取当前等待列表长度
+  const { count } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('instance_id', instanceId)
+    .eq('status', 'waitlisted')
+
+  const waitlistPosition = (count || 0) + 1
+
+  // 创建 waitlisted 状态记录
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .insert({
+      user_id: userId,
+      instance_id: instanceId,
+      status: 'waitlisted',
+      waitlisted_at: new Date().toISOString(),
+      waitlist_position: waitlistPosition,
+      notes,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to add to waitlist: ${error.message}`)
+  }
+
+  return data as CourseEnrollment
+}
+
+// 获取用户的注册清单
+export async function getUserCart(userId: string): Promise<CourseEnrollmentWithDetails[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('status', 'cart')
+    .gt('cart_expires_at', new Date().toISOString())
+    .order('added_to_cart_at', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch cart: ${error.message}`)
+  }
+
+  return (data || []) as CourseEnrollmentWithDetails[]
+}
+
+// 获取用户的等待列表
+export async function getUserWaitlist(userId: string): Promise<CourseEnrollmentWithDetails[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('status', 'waitlisted')
+    .order('waitlist_position', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch waitlist: ${error.message}`)
+  }
+
+  return (data || []) as CourseEnrollmentWithDetails[]
+}
+
+// 获取用户的所有注册
+export async function getUserEnrollments(
+  userId: string,
+  status?: CourseEnrollment['status']
+): Promise<CourseEnrollmentWithDetails[]> {
+  let query = supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      )
+    `)
+    .eq('user_id', userId)
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+  }
+
+  return (data || []) as CourseEnrollmentWithDetails[]
+}
+
+// 获取所有注册（管理员功能）
+export async function getAllEnrollments(
+  filters?: {
+    status?: CourseEnrollment['status']
+    payment_status?: CourseEnrollment['payment_status']
+    user_id?: string
+    instance_id?: string
+  }
+): Promise<CourseEnrollmentWithDetails[]> {
+  let query = supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      user:users(id, name, email),
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      )
+    `)
+
+  if (filters?.status) {
+    query = query.eq('status', filters.status)
+  }
+  if (filters?.payment_status) {
+    query = query.eq('payment_status', filters.payment_status)
+  }
+  if (filters?.user_id) {
+    query = query.eq('user_id', filters.user_id)
+  }
+  if (filters?.instance_id) {
+    query = query.eq('instance_id', filters.instance_id)
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+  }
+
+  return (data || []) as CourseEnrollmentWithDetails[]
+}
+
+// 获取单个注册详情
+export async function getEnrollmentById(enrollmentId: string): Promise<CourseEnrollmentWithDetails | null> {
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      ),
+      user:users(id, name, email)
+    `)
+    .eq('id', enrollmentId)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data as CourseEnrollmentWithDetails
+}
+
+// 从注册清单移除
+export async function removeFromCart(enrollmentId: string, userId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_reason: 'Removed from cart by user',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', enrollmentId)
+    .eq('user_id', userId)
+    .eq('status', 'cart')
+
+  if (error) {
+    throw new Error(`Failed to remove from cart: ${error.message}`)
+  }
+
+  return true
+}
+
+// 从等待列表移除
+export async function removeFromWaitlist(enrollmentId: string, userId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_reason: 'Removed from waitlist by user',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', enrollmentId)
+    .eq('user_id', userId)
+    .eq('status', 'waitlisted')
+
+  if (error) {
+    throw new Error(`Failed to remove from waitlist: ${error.message}`)
+  }
+
+  // 更新等待列表位置
+  const enrollment = await getEnrollmentById(enrollmentId)
+  if (enrollment?.instance_id) {
+    await supabaseAdmin.rpc('update_waitlist_positions', {
+      instance_id_param: enrollment.instance_id,
+    })
+  }
+
+  return true
+}
+
+// 延长注册清单过期时间
+export async function extendCartExpiry(enrollmentId: string, userId: string, additionalMinutes: number = 15): Promise<CourseEnrollment> {
+  const enrollment = await getEnrollmentById(enrollmentId)
+  
+  if (!enrollment || enrollment.user_id !== userId || enrollment.status !== 'cart') {
+    throw new Error('Invalid enrollment or not in cart status')
+  }
+
+  const newExpiry = new Date(Date.now() + additionalMinutes * 60 * 1000)
+
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      cart_expires_at: newExpiry.toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', enrollmentId)
+    .eq('user_id', userId)
+    .eq('status', 'cart')
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to extend cart expiry: ${error.message}`)
+  }
+
+  return data as CourseEnrollment
+}
+
+// 结账（从 cart 转为 reserved）
+export async function checkoutCart(enrollmentIds: string[], userId: string, paymentMethodId?: string): Promise<CourseEnrollment[]> {
+  // 验证所有注册都属于该用户且状态为 cart
+  const { data: enrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('*')
+    .in('id', enrollmentIds)
+    .eq('user_id', userId)
+    .eq('status', 'cart')
+
+  if (!enrollments || enrollments.length !== enrollmentIds.length) {
+    throw new Error('Some enrollments are invalid or not in cart')
+  }
+
+  // 检查是否还有可用容量
+  for (const enrollment of enrollments) {
+    const available = await getInstanceAvailableCapacity(enrollment.instance_id)
+    if (available <= 0) {
+      throw new Error(`Course instance ${enrollment.instance_id} is now full`)
+    }
+  }
+
+  // 获取配置
+  const reservedExpiryMinutes = parseInt(await getEnrollmentConfig('reserved_expiry_minutes') || '10')
+  const reservedExpiresAt = new Date(Date.now() + reservedExpiryMinutes * 60 * 1000)
+
+  // 更新状态为 reserved
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      status: 'reserved',
+      reserved_at: new Date().toISOString(),
+      reserved_expires_at: reservedExpiresAt.toISOString(),
+      payment_status: 'pending',
+      payment_method_id: paymentMethodId,
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', enrollmentIds)
+    .eq('user_id', userId)
+    .eq('status', 'cart')
+    .select()
+
+  if (error) {
+    throw new Error(`Failed to checkout: ${error.message}`)
+  }
+
+  return (data || []) as CourseEnrollment[]
+}
+
+// 确认注册（支付成功后）
+export async function confirmEnrollment(
+  enrollmentId: string,
+  userId: string,
+  paymentTransactionId: string,
+  amountPaid: number
+): Promise<CourseEnrollment> {
+  const enrollment = await getEnrollmentById(enrollmentId)
+  
+  if (!enrollment || enrollment.user_id !== userId) {
+    throw new Error('Invalid enrollment')
+  }
+
+  if (enrollment.status !== 'reserved') {
+    throw new Error(`Enrollment is not in reserved status. Current status: ${enrollment.status}`)
+  }
+
+  // 检查是否过期
+  if (enrollment.reserved_expires_at && new Date(enrollment.reserved_expires_at) < new Date()) {
+    throw new Error('Reservation has expired')
+  }
+
+  // 更新为 enrolled
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      status: 'enrolled',
+      enrolled_at: new Date().toISOString(),
+      payment_status: 'paid',
+      payment_transaction_id: paymentTransactionId,
+      amount_paid: amountPaid,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', enrollmentId)
+    .eq('user_id', userId)
+    .eq('status', 'reserved')
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to confirm enrollment: ${error.message}`)
+  }
+
+  return data as CourseEnrollment
+}
+
+// 取消注册
+export async function cancelEnrollment(
+  enrollmentId: string,
+  userId: string,
+  reason?: string
+): Promise<boolean> {
+  const enrollment = await getEnrollmentById(enrollmentId)
+  
+  if (!enrollment || enrollment.user_id !== userId) {
+    throw new Error('Invalid enrollment')
+  }
+
+  if (!['cart', 'reserved', 'enrolled', 'waitlisted'].includes(enrollment.status)) {
+    throw new Error(`Cannot cancel enrollment with status: ${enrollment.status}`)
+  }
+
+  const { error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_reason: reason || 'Cancelled by user',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', enrollmentId)
+    .eq('user_id', userId)
+
+  if (error) {
+    throw new Error(`Failed to cancel enrollment: ${error.message}`)
+  }
+
+  // 如果是等待列表，更新位置
+  if (enrollment.status === 'waitlisted' && enrollment.instance_id) {
+    await supabaseAdmin.rpc('update_waitlist_positions', {
+      instance_id_param: enrollment.instance_id,
+    })
+  }
+
+  return true
+}
+
+// 处理过期的注册（后台任务）
+export async function processExpiredEnrollments(): Promise<{ processed: number; freedSpots: number }> {
+  const { data, error } = await supabaseAdmin.rpc('process_expired_enrollments')
+
+  if (error) {
+    throw new Error(`Failed to process expired enrollments: ${error.message}`)
+  }
+
+  if (data && data.length > 0) {
+    return {
+      processed: data[0].processed_count || 0,
+      freedSpots: data[0].freed_spots || 0,
+    }
+  }
+
+  return { processed: 0, freedSpots: 0 }
+}
+
+// 检查等待列表并通知（后台任务）
+export async function checkWaitlistAndNotify(): Promise<number> {
+  // 查找所有有等待列表的实例
+  const { data: instances } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('instance_id')
+    .eq('status', 'waitlisted')
+    .is('waitlist_notified_at', null)
+
+  if (!instances || instances.length === 0) {
+    return 0
+  }
+
+  const uniqueInstanceIds = [...new Set(instances.map(i => i.instance_id))]
+  let notifiedCount = 0
+
+  for (const instanceId of uniqueInstanceIds) {
+    const available = await getInstanceAvailableCapacity(instanceId)
+    
+    if (available > 0) {
+      // 找到第一个等待列表用户
+      const { data: firstWaitlist } = await supabaseAdmin
+        .from('course_enrollments')
+        .select('*')
+        .eq('instance_id', instanceId)
+        .eq('status', 'waitlisted')
+        .is('waitlist_notified_at', null)
+        .order('waitlist_position', { ascending: true })
+        .limit(1)
+        .single()
+
+      if (firstWaitlist) {
+        // 获取配置
+        const notificationHours = parseInt(await getEnrollmentConfig('waitlist_notification_hours') || '24')
+        const waitlistExpiresAt = new Date(Date.now() + notificationHours * 60 * 60 * 1000)
+
+        // 更新为已通知
+        await supabaseAdmin
+          .from('course_enrollments')
+          .update({
+            waitlist_notified_at: new Date().toISOString(),
+            waitlist_expires_at: waitlistExpiresAt.toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', firstWaitlist.id)
+
+        // 创建通知记录
+        await supabaseAdmin
+          .from('waitlist_notifications')
+          .insert({
+            enrollment_id: firstWaitlist.id,
+            notification_type: 'spot_available',
+            notification_method: 'email',
+          })
+
+        notifiedCount++
+      }
+    }
+  }
+
+  return notifiedCount
 }
 
 // 获取教练的单个课程实例（验证权限）

@@ -27,6 +27,7 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
+  ShoppingCart,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -40,6 +41,11 @@ const menuItems = [
     title: "User Management",
     href: "/admin/users",
     icon: Users,
+  },
+  {
+    title: "Enrollments",
+    href: "/admin/enrollments",
+    icon: ShoppingCart,
   },
   {
     title: "Team Management",

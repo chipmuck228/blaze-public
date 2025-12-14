@@ -1,5 +1,5 @@
 'use client'
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
@@ -33,7 +33,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { Button } from "./ui/button";
-import { Menu, LogOut, User, Settings } from "lucide-react";
+import { Badge } from "./ui/badge";
+import { Menu, LogOut, User, Settings, ShoppingCart } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
 import Link from "next/link";
 
@@ -71,6 +72,7 @@ interface RouteProps {
   
   export const Navbar = () => {
     const [isOpen, setIsOpen] = useState<boolean>(false);
+    const [cartCount, setCartCount] = useState<number>(0);
     const pathname = usePathname();
     const router = useRouter();
     const isHomePage = pathname === '/';
@@ -102,7 +104,32 @@ interface RouteProps {
       await signOut({ redirect: false });
       router.push("/");
       router.refresh();
+      setCartCount(0);
     };
+
+    // Fetch cart count when user is logged in
+    useEffect(() => {
+      if (status === 'authenticated' && session?.user) {
+        const fetchCartCount = async () => {
+          try {
+            const response = await fetch('/api/enrollments/cart');
+            if (response.ok) {
+              const data = await response.json();
+              setCartCount(data.total || 0);
+            }
+          } catch (error) {
+            console.error('Error fetching cart count:', error);
+          }
+        };
+
+        fetchCartCount();
+        // Refresh cart count every 30 seconds
+        const interval = setInterval(fetchCartCount, 30000);
+        return () => clearInterval(interval);
+      } else {
+        setCartCount(0);
+      }
+    }, [status, session]);
 
     return (
       <header 
@@ -201,6 +228,21 @@ interface RouteProps {
                         <Button
                           variant="outline"
                           className="w-full"
+                          asChild
+                        >
+                          <Link href="/enrollments/cart" onClick={() => setIsOpen(false)}>
+                            <ShoppingCart className="mr-2 h-4 w-4" />
+                            Shopping Cart
+                            {cartCount > 0 && (
+                              <Badge variant="destructive" className="ml-2">
+                                {cartCount}
+                              </Badge>
+                            )}
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
                           onClick={() => {
                             handleSignOut();
                             setIsOpen(false);
@@ -251,7 +293,27 @@ interface RouteProps {
                   <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : session ? (
-                <DropdownMenu>
+                <>
+                  {/* Shopping Cart Icon */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative h-9 w-9"
+                    asChild
+                  >
+                    <Link href="/enrollments/cart">
+                      <ShoppingCart className="h-5 w-5" />
+                      {cartCount > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                        >
+                          {cartCount > 9 ? '9+' : cartCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </Button>
+                  <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
@@ -299,6 +361,7 @@ interface RouteProps {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                </>
               ) : (
                 <Button
                   variant="default"
