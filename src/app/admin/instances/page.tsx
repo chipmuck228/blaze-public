@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -34,7 +34,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar as CalendarIcon, MapPin, Users, Clock } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar as CalendarIcon, MapPin, Users, Clock, Copy } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import { BatchCreateInstanceDialog } from "@/components/admin/BatchCreateInstanceDialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { InstanceCalendar } from "@/components/admin/InstanceCalendar"
 
@@ -84,9 +86,11 @@ interface CourseAssignment {
   course_id: string
   category_id: string
   series_id: string
+  location_id?: string
   course?: { name: string }
   category?: { display_name: string }
   series?: { display_name: string }
+  location?: { name: string }
 }
 
 interface CourseLocation {
@@ -104,7 +108,8 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Saturday' },
 ]
 
-export default function InstancesManagementPage() {
+function InstancesManagementPageContent() {
+  const searchParams = useSearchParams()
   const [instances, setInstances] = useState<CourseInstance[]>([])
   const [filteredInstances, setFilteredInstances] = useState<CourseInstance[]>([])
   const [assignments, setAssignments] = useState<CourseAssignment[]>([])
@@ -116,6 +121,10 @@ export default function InstancesManagementPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [exceptions, setExceptions] = useState<ExceptionDate[]>([])
+  const [franchiseFilter, setFranchiseFilter] = useState<string>("all")
+  const [prefilledAssignmentId, setPrefilledAssignmentId] = useState<string | null>(null)
+  const [isBatchCreateDialogOpen, setIsBatchCreateDialogOpen] = useState(false)
+  const [selectedAssignmentForBatch, setSelectedAssignmentForBatch] = useState<CourseAssignment | null>(null)
 
   const [formData, setFormData] = useState<Omit<CourseInstance, 'id' | 'created_at' | 'updated_at'>>({
     assignment_id: "",
@@ -140,7 +149,18 @@ export default function InstancesManagementPage() {
     fetchInstances()
     fetchAssignments()
     fetchLocations()
-  }, [])
+    
+    // 检查 URL 参数，如果是从 Assignment 页面跳转过来的，预填充 Assignment
+    const assignmentId = searchParams.get("assignmentId")
+    const action = searchParams.get("action")
+    if (assignmentId && action === "create") {
+      setPrefilledAssignmentId(assignmentId)
+      // 等待 assignments 加载完成后再打开对话框
+      setTimeout(() => {
+        handleAddFromAssignment(assignmentId)
+      }, 500)
+    }
+  }, [franchiseFilter, searchParams])
 
   useEffect(() => {
     if (searchQuery) {
@@ -160,7 +180,12 @@ export default function InstancesManagementPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch("/api/admin/instances")
+      const params = new URLSearchParams()
+      if (franchiseFilter !== "all") {
+        params.set("franchise", franchiseFilter)
+      }
+      const query = params.toString()
+      const response = await fetch(`/api/admin/instances${query ? `?${query}` : ""}`)
       
       if (!response.ok) {
         throw new Error("Failed to fetch instances")
@@ -292,9 +317,41 @@ export default function InstancesManagementPage() {
 
   const handleAdd = () => {
     setEditingInstance(null)
+    setPrefilledAssignmentId(null)
     setFormData({
       assignment_id: "",
       location_id: "",
+      start_date: "",
+      end_date: "",
+      start_time: "",
+      end_time: "",
+      days_of_week: [],
+      timezone: "America/Los_Angeles",
+      price_override: undefined,
+      max_students: undefined,
+      current_students: 0,
+      instructor_name: "",
+      instructor_id: "",
+      status: 'scheduled',
+      notes: "",
+      is_active: true,
+    })
+    setExceptions([])
+    setIsEditDialogOpen(true)
+  }
+
+  const handleAddFromAssignment = (assignmentId: string) => {
+    const assignment = assignments.find(a => a.id === assignmentId)
+    if (!assignment) {
+      console.error("Assignment not found:", assignmentId)
+      return
+    }
+
+    setEditingInstance(null)
+    setPrefilledAssignmentId(assignmentId)
+    setFormData({
+      assignment_id: assignmentId,
+      location_id: assignment.location_id || "", // 预填充 Assignment 的默认 location
       start_date: "",
       end_date: "",
       start_time: "",
@@ -449,33 +506,56 @@ export default function InstancesManagementPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Instances Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage course instances (specific dates, times, and locations for course assignments)
+          Manage course instances (specific dates, times, and campuses for course assignments)
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle>Instances</CardTitle>
               <CardDescription>
                 A list of all course instances in the system
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search instances..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search instances..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 w-64"
+                  />
+                </div>
+                <Select
+                  value={franchiseFilter}
+                  onValueChange={(value) => setFranchiseFilter(value)}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All franchises" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All franchises</SelectItem>
+                    <SelectItem value="bellevue">Bellevue</SelectItem>
+                    <SelectItem value="belred">Bel-Red</SelectItem>
+                    <SelectItem value="issaquah">Issaquah</SelectItem>
+                    <SelectItem value="cherrycrest">Cherry Crest</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Button onClick={handleAdd}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Instance
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={handleAdd} variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Instance
+                </Button>
+                <Button onClick={() => setIsBatchCreateDialogOpen(true)}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Batch Create
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -625,7 +705,7 @@ export default function InstancesManagementPage() {
           <DialogHeader>
             <DialogTitle>{editingInstance ? "Edit Instance" : "Add New Instance"}</DialogTitle>
             <DialogDescription>
-              {editingInstance ? "Update instance information" : "Create a new course instance (specific dates, times, and location)"}
+              {editingInstance ? "Update instance information" : "Create a new course instance (specific dates, times, and campus)"}
             </DialogDescription>
           </DialogHeader>
 
@@ -634,30 +714,60 @@ export default function InstancesManagementPage() {
               <Label htmlFor="assignment_id">Assignment *</Label>
               <Select
                 value={formData.assignment_id}
-                onValueChange={(value) => setFormData({ ...formData, assignment_id: value })}
+                onValueChange={(value) => {
+                  const selectedAssignment = assignments.find(a => a.id === value)
+                  setFormData({ 
+                    ...formData, 
+                    assignment_id: value,
+                    // 如果选择了新的 assignment，更新 location_id（如果 assignment 有默认 location）
+                    location_id: selectedAssignment?.location_id || formData.location_id || ""
+                  })
+                }}
                 required
+                disabled={!!prefilledAssignmentId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select an assignment" />
                 </SelectTrigger>
-                <SelectContent>
-                  {assignments.map((assignment) => (
-                    <SelectItem key={assignment.id} value={assignment.id}>
-                      {getAssignmentLabel(assignment.id)}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[400px]">
+                  {assignments.map((assignment) => {
+                    const courseName = assignment.course?.name || "Unknown Course"
+                    const categoryName = assignment.category?.display_name || "Unknown Category"
+                    const seriesName = assignment.series?.display_name || "Unknown Series"
+                    const displayText = `${courseName} (${categoryName} > ${seriesName})`
+                    
+                    return (
+                      <SelectItem 
+                        key={assignment.id} 
+                        value={assignment.id}
+                        textValue={displayText}
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-sm leading-tight">{courseName}</span>
+                          <span className="text-xs text-muted-foreground leading-tight">
+                            {categoryName} {'>'} {seriesName}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
+              {prefilledAssignmentId && (
+                <p className="text-xs text-muted-foreground">
+                  Assignment is pre-filled from the previous page. You can change it if needed.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="location_id">Location (Optional)</Label>
+              <Label htmlFor="location_id">Campus (Optional)</Label>
               <Select
                 value={formData.location_id || "__none__"}
                 onValueChange={(value) => setFormData({ ...formData, location_id: value === "__none__" ? "" : value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a location (optional)" />
+                  <SelectValue placeholder="Select a campus (optional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
@@ -965,7 +1075,31 @@ export default function InstancesManagementPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <BatchCreateInstanceDialog
+        open={isBatchCreateDialogOpen}
+        onOpenChange={setIsBatchCreateDialogOpen}
+        assignment={selectedAssignmentForBatch || undefined}
+        assignments={assignments}
+        locations={locations}
+        onSuccess={() => {
+          fetchInstances()
+          setIsBatchCreateDialogOpen(false)
+        }}
+      />
     </div>
+  )
+}
+
+export default function InstancesManagementPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <InstancesManagementPageContent />
+    </Suspense>
   )
 }
 

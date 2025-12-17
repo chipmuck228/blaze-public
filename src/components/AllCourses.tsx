@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -15,39 +16,27 @@ interface Course {
   featured?: boolean;
 }
 
-const allCourses: Course[] = [
-  // Grade K-2
-  { id: '1', title: "Mars Math with VEX GO", type: "RoboQuest", gradeLevel: "1-3", slug: "rq-go-mars", featured: true },
-  { id: '2', title: "Introduction to Robotics with VEX GO", type: "RoboQuest", gradeLevel: "K-2", slug: "rq-go-intro" },
-  
-  // Grade 3-5
-  { id: '3', title: "Introduction to Python via VEX IQ", type: "RoboChamps", gradeLevel: "4-6", featured: true },
-  { id: '4', title: "Mastery Robotics Programming", type: "RoboChamps", gradeLevel: "3-5" },
-  { id: '5', title: "Mastery Lifts & Arms with VEX IQ", type: "RoboChamps", gradeLevel: "3-5, 6-8" },
-  { id: '6', title: "Mastery Drivetrains with VEX IQ", type: "RoboChamps", gradeLevel: "3-5, 6-8" },
-  { id: '7', title: "Introduction to Programming via VEX IQ", type: "LaunchPad", gradeLevel: "3-5" },
-  { id: '8', title: "Introduction to Robotics with VEX IQ", type: "LaunchPad", gradeLevel: "3-4, 5-7" },
-  { id: '9', title: "Mars Math with VEX GO", type: "RoboQuest", gradeLevel: "1-3" },
-  
-  // Grade 6-7
-  { id: '10', title: "VEX IQ to VEX V5 Transition Readiness", type: "RoboChamps", gradeLevel: "6-8", featured: true },
-  { id: '11', title: "Introduction to C++ via VEX V5", type: "RoboChamps", gradeLevel: "6-8" },
-  { id: '12', title: "Introduction to Python via VEX IQ", type: "RoboChamps", gradeLevel: "4-6" },
-  { id: '13', title: "Mastery Lifts & Arms with VEX V5", type: "RoboChamps", gradeLevel: "6-8" },
-  { id: '14', title: "Mastery Lifts & Arms with VEX IQ", type: "RoboChamps", gradeLevel: "3-5, 6-8" },
-  { id: '15', title: "Mastery Drivetrains with VEX IQ", type: "RoboChamps", gradeLevel: "3-5, 6-8" },
-  { id: '16', title: "Mastery Drivetrains with VEX V5", type: "RoboChamps", gradeLevel: "6-8" },
-  { id: '17', title: "Introduction to Robotics with VEX V5", type: "LaunchPad", gradeLevel: "6-8, 9-11" },
-  { id: '18', title: "Introduction to Robotics with VEX IQ", type: "LaunchPad", gradeLevel: "3-4, 5-7" },
-  
-  // Grade 8-10
-  { id: '19', title: "Introduction to C++ via VEX V5", type: "RoboChamps", gradeLevel: "6-8", featured: true },
-  { id: '20', title: "Mastery Lifts & Arms with VEX V5", type: "RoboChamps", gradeLevel: "6-8" },
-  { id: '21', title: "Mastery Lifts & Arms with VEX IQ", type: "RoboChamps", gradeLevel: "3-5, 6-8" },
-  { id: '22', title: "Mastery Drivetrains with VEX IQ", type: "RoboChamps", gradeLevel: "3-5, 6-8" },
-  { id: '23', title: "Mastery Drivetrains with VEX V5", type: "RoboChamps", gradeLevel: "6-8" },
-  { id: '24', title: "Introduction to Robotics with VEX V5", type: "LaunchPad", gradeLevel: "6-8, 9-11" },
-];
+interface ProgramCourse {
+  id: string;
+  title: string;
+  gradeLevel: string;
+  slug?: string;
+}
+
+interface Program {
+  id: string;
+  name: string;
+  display_name: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  category?: {
+    id: string;
+    name: string;
+    display_name: string;
+  } | null;
+  courses: ProgramCourse[];
+}
 
 const gradeGroups = [
   { label: "K-2", grades: ["K-2", "1-3"] },
@@ -71,16 +60,60 @@ const getTypeColor = (type: Course['type']) => {
 
 export const AllCourses = () => {
   const [mounted, setMounted] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const franchise = searchParams.get("franchise");
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        if (franchise) {
+          // Franchise 模式：按 Program/Series 维度加载
+          const params = new URLSearchParams();
+          params.set("franchise", franchise);
+          const query = params.toString();
+          const res = await fetch(`/api/programs${query ? `?${query}` : ""}`);
+          if (!res.ok) {
+            throw new Error("Failed to load programs");
+          }
+          const data = await res.json();
+          setPrograms(data || []);
+          setCourses([]);
+        } else {
+          // 全局模式：加载所有课程
+          const res = await fetch(`/api/courses`);
+          if (!res.ok) {
+            throw new Error("Failed to load courses");
+          }
+          const data = await res.json();
+          setCourses(data || []);
+          setPrograms([]);
+        }
+      } catch (err: any) {
+        console.error("Error fetching courses:", err);
+        setError(err.message || "Failed to load courses");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, [franchise]);
+
   const filteredCourses = useMemo(() => {
-    return allCourses.filter((course) => {
+    return courses.filter((course) => {
       const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = !selectedType || course.type === selectedType;
       const matchesGrade = !selectedGrade || 
@@ -107,26 +140,191 @@ export const AllCourses = () => {
 
   const hasActiveFilters = searchQuery || selectedType || selectedGrade;
 
+  const franchiseLabel = useMemo(() => {
+    if (!franchise) return null;
+    const code = franchise.toLowerCase();
+    switch (code) {
+      case "bellevue":
+        return "Bellevue";
+      case "belred":
+        return "Bel-Red";
+      case "issaquah":
+        return "Issaquah";
+      case "cherrycrest":
+        return "Cherry Crest";
+      default:
+        return code.charAt(0).toUpperCase() + code.slice(1);
+    }
+  }, [franchise]);
+
   if (!mounted) {
     return (
       <div className="min-h-screen">
         <section className="container mx-auto px-4 py-12 md:py-20">
           <div className="max-w-4xl mx-auto text-center mb-12">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Winter 2026
+              {franchiseLabel ? `Programs at ${franchiseLabel}` : "Course Catalog"}
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground mb-2">
-              Robotics | Programming | 3D Design & Printing
+              Robotics | Programming | STEM
             </p>
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto mt-6">
-              Welcome to our Winter 2026 Robotics & Programming Programs! Designed for students in grades K-12, 
-              our courses focus on skill-building and practical learning in robotics, providing a structured 
-              learning path from exploration to competition readiness.
+              {franchiseLabel
+                ? `Browse robotics and programming programs currently offered at our ${franchiseLabel} campus.`
+                : "Browse all available robotics and programming courses across our campuses."}
             </p>
           </div>
         </section>
       </div>
     );
+  }
+
+  // Franchise 模式：按 Program/Series → Courses 视图展示
+  if (franchise) {
+    return (
+      <div className="min-h-screen">
+        <section className="container mx-auto px-4 py-12 md:py-20">
+          <div className="max-w-4xl mx-auto text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              Programs at {franchiseLabel}
+            </h1>
+            <p className="text-xl md:text-2xl text-muted-foreground mb-2">
+              Robotics | Programming | STEM
+            </p>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto mt-6">
+              Browse programs (series) and courses currently offered at our {franchiseLabel} campus.
+            </p>
+          </div>
+
+          <div className="max-w-6xl mx-auto mb-8">
+            <div className="bg-muted/50 rounded-lg p-6 space-y-4">
+              {isLoading ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading programs...
+                </div>
+              ) : error ? (
+                <div className="text-sm text-destructive">
+                  {error}
+                </div>
+              ) : null}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search programs or courses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-12 text-base"
+                />
+              </div>
+            </div>
+          </div>
+
+          {programs.length === 0 && !isLoading && !error ? (
+            <div className="max-w-6xl mx-auto text-center text-muted-foreground py-16">
+              No programs found for this campus yet.
+            </div>
+          ) : (
+            <div className="max-w-6xl mx-auto space-y-10">
+              {programs.map((program) => {
+                // 简单搜索过滤：匹配 program 名称或课程标题
+                const q = searchQuery.toLowerCase()
+                const visibleCourses = q
+                  ? program.courses.filter(
+                      (c) =>
+                        c.title.toLowerCase().includes(q) ||
+                        program.display_name.toLowerCase().includes(q) ||
+                        program.name.toLowerCase().includes(q)
+                    )
+                  : program.courses
+
+                if (visibleCourses.length === 0) return null
+
+                return (
+                  <div key={program.id} className="space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div>
+                        <h2 className="text-2xl md:text-3xl font-bold">
+                          {program.display_name}
+                        </h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {program.category?.display_name
+                            ? `${program.category.display_name} Program`
+                            : "Program"}
+                        </p>
+                        {program.start_date && program.end_date && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(program.start_date).toLocaleDateString()} –{" "}
+                            {new Date(program.end_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="self-start md:self-auto">
+                        {visibleCourses.length}{" "}
+                        {visibleCourses.length === 1 ? "course" : "courses"}
+                      </Badge>
+                    </div>
+
+                    {program.description && (
+                      <p className="text-sm text-muted-foreground">
+                        {program.description}
+                      </p>
+                    )}
+
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {visibleCourses.map((course) => (
+                        <Card
+                          key={course.id}
+                          className="flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                        >
+                          <CardHeader>
+                            <CardTitle className="text-lg leading-tight min-h-[3rem]">
+                              {course.title}
+                            </CardTitle>
+                            {course.gradeLevel && (
+                              <CardDescription className="mt-1">
+                                Grade level: {course.gradeLevel}
+                              </CardDescription>
+                            )}
+                          </CardHeader>
+                          <CardContent className="flex-1 flex flex-col justify-between">
+                            <div className="mt-2 flex justify-between items-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs px-2"
+                                asChild
+                              >
+                                <a
+                                  href={
+                                    course.slug
+                                      ? `/course-catalog/${encodeURIComponent(
+                                          course.slug
+                                        )}`
+                                      : `/course-catalog?id=${encodeURIComponent(
+                                          course.id
+                                        )}`
+                                  }
+                                >
+                                  <span className="flex items-center gap-1">
+                                    <span>View Details</span>
+                                    <ArrowRight className="h-3 w-3" />
+                                  </span>
+                                </a>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    )
   }
 
   return (
@@ -135,21 +333,30 @@ export const AllCourses = () => {
       <section className="container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-4xl mx-auto text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Winter 2026
+            {franchiseLabel ? `Programs at ${franchiseLabel}` : "Course Catalog"}
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground mb-2">
-            Robotics | Programming | 3D Design & Printing
+            Robotics | Programming | STEM
           </p>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto mt-6">
-            Welcome to our Winter 2026 Robotics & Programming Programs! Designed for students in grades K-12, 
-            our courses focus on skill-building and practical learning in robotics, providing a structured 
-            learning path from exploration to competition readiness.
+            {franchiseLabel
+              ? `Browse robotics and programming programs currently offered at our ${franchiseLabel} campus.`
+              : "Browse all available robotics and programming courses across our campuses."}
           </p>
         </div>
 
         {/* Search and Filter Section */}
         <div className="max-w-6xl mx-auto mb-12">
           <div className="bg-muted/50 rounded-lg p-6 space-y-4">
+            {isLoading ? (
+              <div className="text-sm text-muted-foreground">
+                Loading courses...
+              </div>
+            ) : error ? (
+              <div className="text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -213,7 +420,7 @@ export const AllCourses = () => {
 
             {/* Results Count */}
             <div className="text-sm text-muted-foreground">
-              Showing {filteredCourses.length} of {allCourses.length} courses
+              Showing {filteredCourses.length} of {courses.length} courses
             </div>
           </div>
         </div>

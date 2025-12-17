@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, address, city, state, zip_code, phone, email } = body
+    const { name, address, city, state, zip_code, phone, email, franchise_id } = body
 
     if (!name) {
       return NextResponse.json(
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
         zip_code,
         phone,
         email,
+        franchise_id: franchise_id || null,
         is_active: true,
       })
       .select()

@@ -66,9 +66,23 @@ export async function PUT(
       target_grades,
       base_price,
       currency,
-      is_active,
+      status,  // 使用 status 替代 is_active
       subcategory_ids, // 子类标签ID数组
     } = body
+
+    // 如果状态变更，检查影响（双重保护）
+    if (status) {
+      const currentCourse = await getCourseWithDetails(id)
+      if (currentCourse) {
+        const currentStatus = currentCourse.status
+        
+        // 如果是从 published 改为 suspended 或 archived，检查影响
+        if (currentStatus === 'published' && (status === 'suspended' || status === 'archived')) {
+          // 这里可以添加额外的验证逻辑，但前端已经检查过了
+          // 如果需要，可以在这里再次检查并返回警告
+        }
+      }
+    }
 
     // 更新课程基本信息
     const course = await updateCourse(id, {
@@ -85,7 +99,7 @@ export async function PUT(
       target_grades,
       base_price,
       currency,
-      is_active,
+      status,  // 使用 status 替代 is_active
     })
 
     // 更新子类标签（如果提供了）
@@ -117,6 +131,7 @@ export async function PUT(
 }
 
 // 删除课程（会级联删除所有 Assignment 和 Instance）
+// 注意：只有 draft 状态的课程可以删除
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -126,6 +141,21 @@ export async function DELETE(
     const session = await auth()
     if (!session?.user || session.user.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // 检查课程状态：只有 draft 状态的课程可以删除
+    const course = await getCourseWithDetails(id)
+    if (!course) {
+      return NextResponse.json({ error: "Course not found" }, { status: 404 })
+    }
+
+    if (course.status !== 'draft') {
+      return NextResponse.json(
+        { 
+          error: `Cannot delete course with status '${course.status}'. Only draft courses can be deleted. Please archive the course instead.` 
+        },
+        { status: 400 }
+      )
     }
 
     await deleteCourse(id)

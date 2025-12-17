@@ -53,6 +53,11 @@ const menuItems = [
     icon: UserCircle,
   },
   {
+    title: "Franchises",
+    href: "/admin/franchises",
+    icon: MapPin,
+  },
+  {
     title: "Settings",
     href: "/admin/settings",
     icon: Settings,
@@ -86,7 +91,7 @@ const courseMenuItems = [
     icon: LinkIcon,
   },
   {
-    title: "Locations",
+    title: "Campuses",
     href: "/admin/locations",
     icon: MapPin,
   },

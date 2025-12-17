@@ -78,10 +78,19 @@ export async function DELETE(
       )
     }
 
-    await deleteUser(id)
+    const result = await deleteUser(id)
+
+    let message = "User deleted successfully"
+    if (result.deletedTeamsCount > 0) {
+      message += `. ${result.deletedTeamsCount} associated team profile(s) were also deleted due to CASCADE constraint.`
+    }
 
     return NextResponse.json(
-      { message: "User deleted successfully" },
+      { 
+        message,
+        deletedTeamsCount: result.deletedTeamsCount,
+        deletedTeams: result.deletedTeams,
+      },
       { status: 200 }
     )
   } catch (error: any) {

@@ -25,8 +25,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, XCircle } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, XCircle, UserPlus, Plus } from "lucide-react"
 import { UserEditDialog } from "@/components/admin/UserEditDialog"
+import { CreateUserDialog } from "@/components/admin/CreateUserDialog"
+import Link from "next/link"
 
 interface User {
   id: string
@@ -36,6 +38,13 @@ interface User {
   role?: string
   created_at: string
   updated_at: string
+  has_team_profile?: boolean  // 是否有 Teams 记录
+  team_id?: string  // Teams 记录的 ID（如果有）
+  is_test_user?: boolean
+  invitation_token?: string | null
+  invitation_expires_at?: string | null
+  password_set_at?: string | null
+  must_change_password?: boolean
 }
 
 export default function UsersManagementPage() {
@@ -45,6 +54,7 @@ export default function UsersManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -69,8 +79,27 @@ export default function UsersManagementPage() {
       const response = await fetch("/api/admin/users")
       if (response.ok) {
         const data = await response.json()
-        setUsers(data)
-        setFilteredUsers(data)
+        // 同时获取 Teams 信息，检查哪些 coach 有 Teams 记录
+        const teamsResponse = await fetch("/api/admin/teams")
+        if (teamsResponse.ok) {
+          const teams = await teamsResponse.json()
+          const usersWithTeams = data.map((user: User) => {
+            if (user.role === 'coach') {
+              const team = teams.find((t: any) => t.user_id === user.id)
+              return {
+                ...user,
+                has_team_profile: !!team,
+                team_id: team?.id,
+              }
+            }
+            return user
+          })
+          setUsers(usersWithTeams)
+          setFilteredUsers(usersWithTeams)
+        } else {
+          setUsers(data)
+          setFilteredUsers(data)
+        }
       } else {
         console.error("Failed to fetch users")
       }
@@ -81,26 +110,45 @@ export default function UsersManagementPage() {
     }
   }
 
-  const handleDelete = async (userId: string) => {
-    if (!confirm("Are you sure you want to delete this user?")) {
+  const handleDelete = async (user: User) => {
+    // 检查是否有关联的 Teams 记录
+    const hasTeamProfile = user.has_team_profile || false
+    
+    let confirmMessage = "Are you sure you want to delete this user?"
+    if (hasTeamProfile) {
+      confirmMessage += "\n\n⚠️ WARNING: This will also delete the associated team profile due to CASCADE constraint. This action cannot be undone."
+    }
+
+    if (!confirm(confirmMessage)) {
       return
     }
 
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
         method: "DELETE",
       })
 
+      const data = await response.json()
+      
       if (response.ok) {
-        setUsers(users.filter((user) => user.id !== userId))
-        setFilteredUsers(filteredUsers.filter((user) => user.id !== userId))
+        setUsers(users.filter((u) => u.id !== user.id))
+        setFilteredUsers(filteredUsers.filter((u) => u.id !== user.id))
+        
+        // 显示删除结果
+        if (data.deletedTeamsCount > 0) {
+          alert(`User deleted successfully.\n\n${data.deletedTeamsCount} team profile(s) were also deleted.`)
+        } else {
+          alert("User deleted successfully.")
+        }
       } else {
-        const data = await response.json()
-        alert(data.error || "Failed to delete user")
+        // 显示详细的错误信息
+        const errorMessage = data.error || "Failed to delete user"
+        console.error("Delete user error:", errorMessage)
+        alert(`Failed to delete user: ${errorMessage}\n\nPlease check:\n1. RLS policies allow DELETE operation\n2. User is not referenced by other tables\n3. You have admin permissions`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting user:", error)
-      alert("Failed to delete user")
+      alert(`Failed to delete user: ${error.message || "Unknown error"}\n\nPlease check the browser console for details.`)
     }
   }
 
@@ -123,13 +171,41 @@ export default function UsersManagementPage() {
     })
   }
 
+  const getUserStatus = (user: User): string => {
+    if (user.is_test_user) return "Test User"
+    if (user.invitation_token && !user.password_set_at) return "Pending Invitation"
+    if (!user.email_verified) return "Unverified"
+    return "Active"
+  }
+
+  const getUserStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" | "destructive" => {
+    switch (status) {
+      case "Active":
+        return "default"
+      case "Pending Invitation":
+        return "secondary"
+      case "Unverified":
+        return "outline"
+      case "Test User":
+        return "outline"
+      default:
+        return "outline"
+    }
+  }
+
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage all users in the system
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage all users in the system
+          </p>
+        </div>
+        <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Create User
+        </Button>
       </div>
 
       <Card>
@@ -171,6 +247,7 @@ export default function UsersManagementPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>User Status</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -200,21 +277,33 @@ export default function UsersManagementPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge 
-                          variant={
-                            user.role === "admin" 
-                              ? "default" 
-                              : user.role === "coach"
-                              ? "secondary"
-                              : "outline"
-                          }
-                        >
-                          {user.role === "admin" 
-                            ? "Admin" 
-                            : user.role === "coach"
-                            ? "Coach"
-                            : "User"}
+                        <Badge variant={getUserStatusBadgeVariant(getUserStatus(user))}>
+                          {getUserStatus(user)}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={
+                              user.role === "admin" 
+                                ? "default" 
+                                : user.role === "coach"
+                                ? "secondary"
+                                : "outline"
+                            }
+                          >
+                            {user.role === "admin" 
+                              ? "Admin" 
+                              : user.role === "coach"
+                              ? "Coach"
+                              : "User"}
+                          </Badge>
+                          {user.role === "coach" && (
+                            <Badge variant={user.has_team_profile ? "default" : "outline"}>
+                              {user.has_team_profile ? "Has Team Profile" : "No Team Profile"}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{formatDate(user.created_at)}</TableCell>
                       <TableCell className="text-right">
@@ -229,9 +318,51 @@ export default function UsersManagementPage() {
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
+                            {user.role === "coach" && (
+                              <>
+                                {user.has_team_profile ? (
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/admin/teams?edit=${user.team_id}`}>
+                                      <UserPlus className="mr-2 h-4 w-4" />
+                                      View Team Profile
+                                    </Link>
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/admin/teams?create&user_id=${user.id}`}>
+                                      <UserPlus className="mr-2 h-4 w-4" />
+                                      Create Team Profile
+                                    </Link>
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            )}
+                            {user.invitation_token && !user.password_set_at && (
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(`/api/admin/users/${user.id}/resend-invitation`, {
+                                      method: "POST",
+                                    })
+                                    if (response.ok) {
+                                      alert("Invitation resent successfully!")
+                                      fetchUsers()
+                                    } else {
+                                      const data = await response.json()
+                                      alert(data.error || "Failed to resend invitation")
+                                    }
+                                  } catch (error) {
+                                    alert("Failed to resend invitation")
+                                  }
+                                }}
+                              >
+                                <Mail className="mr-2 h-4 w-4" />
+                                Resend Invitation
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => handleDelete(user.id)}
+                              onClick={() => handleDelete(user)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
@@ -256,6 +387,12 @@ export default function UsersManagementPage() {
           onUserUpdated={handleUserUpdated}
         />
       )}
+
+      <CreateUserDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onUserCreated={handleUserUpdated}
+      />
     </div>
   )
 }

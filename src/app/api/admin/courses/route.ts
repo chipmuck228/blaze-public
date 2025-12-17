@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // 创建课程
+    // 创建课程（默认状态为 draft）
     const course = await createCourse({
       name,
       slug,
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
       target_grades,
       base_price,
       currency: currency || "USD",
-      is_active: true,
+      status: 'draft',  // 新创建的课程默认为 draft 状态
     })
 
     // 如果有子类标签，添加标签

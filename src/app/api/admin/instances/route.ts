@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import {
   getCourseInstancesByAssignment,
   createCourseInstance,
+  getFranchiseByCode,
 } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -16,14 +17,28 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const assignmentId = searchParams.get("assignmentId")
+    const franchiseCode = searchParams.get("franchise")
 
     if (assignmentId) {
       const instances = await getCourseInstancesByAssignment(assignmentId)
       return NextResponse.json(instances, { status: 200 })
     }
 
+    // 如果指定了 franchise，则先解析为 franchise_id
+    let franchiseId: string | null = null
+    if (franchiseCode) {
+      const franchise = await getFranchiseByCode(franchiseCode)
+      if (!franchise) {
+        return NextResponse.json(
+          { error: "Invalid franchise code" },
+          { status: 400 }
+        )
+      }
+      franchiseId = franchise.id
+    }
+
     // 获取所有实例（包含 location 和 assignment 信息）
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("course_instances")
       .select(`
         *,
@@ -44,6 +59,12 @@ export async function GET(request: Request) {
       .eq("is_active", true)
       .order("start_date", { ascending: true })
       .order("start_time", { ascending: true })
+
+    if (franchiseId) {
+      query = query.eq("franchise_id", franchiseId)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       throw new Error(error.message)

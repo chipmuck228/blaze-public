@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import type { CourseEnrollment } from "@/lib/db"
+import { getFranchiseByCode } from "@/lib/db"
 
 // GET: 获取所有注册（支持筛选、分页、排序）
 export async function GET(request: Request) {
@@ -21,10 +22,24 @@ export async function GET(request: Request) {
     const startDate = searchParams.get("start_date")
     const endDate = searchParams.get("end_date")
     const search = searchParams.get("search")
+    const franchiseCode = searchParams.get("franchise")
     const page = parseInt(searchParams.get("page") || "1")
     const limit = parseInt(searchParams.get("limit") || "50")
     const sortBy = searchParams.get("sort_by") || "created_at"
     const sortOrder = searchParams.get("sort_order") || "desc"
+
+    // 如果指定了 franchise，则解析为 franchise_id
+    let franchiseId: string | null = null
+    if (franchiseCode) {
+      const franchise = await getFranchiseByCode(franchiseCode)
+      if (!franchise) {
+        return NextResponse.json(
+          { error: "Invalid franchise code" },
+          { status: 400 }
+        )
+      }
+      franchiseId = franchise.id
+    }
 
     // 构建查询
     let query = supabaseAdmin
@@ -67,6 +82,9 @@ export async function GET(request: Request) {
     }
     if (endDate) {
       query = query.lte("created_at", endDate)
+    }
+    if (franchiseId) {
+      query = query.eq("franchise_id", franchiseId)
     }
 
     // 排序

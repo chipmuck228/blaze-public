@@ -43,7 +43,7 @@ interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
-  is_active: boolean
+  status: 'draft' | 'published' | 'suspended' | 'archived'
   created_at: string
   updated_at: string
   tags?: Array<{ id: string; name: string; display_name: string }>
@@ -98,7 +98,14 @@ export default function CoursesManagementPage() {
   }
 
   const handleDelete = async (courseId: string) => {
-    if (!confirm("Are you sure you want to delete this course?")) {
+    // 检查课程状态：只有 draft 状态的课程可以删除
+    const course = courses.find(c => c.id === courseId)
+    if (course && course.status !== 'draft') {
+      alert(`Cannot delete course with status '${course.status}'. Only draft courses can be deleted. Please archive the course instead.`)
+      return
+    }
+
+    if (!confirm("Are you sure you want to delete this course? This action cannot be undone.")) {
       return
     }
 
@@ -148,6 +155,21 @@ export default function CoursesManagementPage() {
       month: "short",
       day: "numeric",
     })
+  }
+
+  const getStatusBackgroundColor = (status: Course['status']): string => {
+    switch (status) {
+      case 'draft':
+        return 'bg-gray-100 dark:bg-gray-800' // 灰色
+      case 'published':
+        return 'bg-green-50 dark:bg-green-900/20' // 浅绿色
+      case 'suspended':
+        return 'bg-orange-50 dark:bg-orange-900/20' // 橘色
+      case 'archived':
+        return 'bg-purple-50 dark:bg-purple-900/20' // 紫色
+      default:
+        return 'bg-gray-50 dark:bg-gray-900'
+    }
   }
 
   return (
@@ -209,7 +231,6 @@ export default function CoursesManagementPage() {
                   <TableRow>
                     <TableHead>Course Name</TableHead>
                     <TableHead>Tags</TableHead>
-                    <TableHead>Slug</TableHead>
                     <TableHead>Sessions</TableHead>
                     <TableHead>Age Range</TableHead>
                     <TableHead>Grades</TableHead>
@@ -220,27 +241,43 @@ export default function CoursesManagementPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCourses.map((course) => (
-                    <TableRow key={course.id}>
-                      <TableCell className="font-medium">{course.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                        <div className="flex flex-wrap gap-1">
-                          {course.tags && course.tags.length > 0 ? (
-                            course.tags.map((tag) => (
-                              <Badge key={tag.id} variant="outline" className="text-xs">
-                                {tag.display_name}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-muted-foreground">No tags</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-xs bg-muted px-2 py-1 rounded">
-                          {course.slug || "N/A"}
-                        </code>
-                      </TableCell>
+                  {filteredCourses.map((course) => {
+                    const gradesText = course.target_grades && course.target_grades.length > 0
+                      ? `Grades: ${course.target_grades.join(', ')}`
+                      : ''
+                    const slugText = course.slug ? `Slug: ${course.slug}` : ''
+                    const statusText = course.status && course.status !== 'published'
+                      ? `[${course.status}]`
+                      : ''
+                    
+                    return (
+                      <TableRow 
+                        key={course.id}
+                        className={getStatusBackgroundColor(course.status)}
+                      >
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium">{course.name}</span>
+                            {(gradesText || slugText || statusText) && (
+                              <span className="text-xs text-muted-foreground">
+                                {[gradesText, slugText, statusText].filter(Boolean).join(' • ')}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px]">
+                          <div className="flex flex-wrap gap-1">
+                            {course.tags && course.tags.length > 0 ? (
+                              course.tags.map((tag) => (
+                                <Badge key={tag.id} variant="outline" className="text-xs">
+                                  {tag.display_name}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground">No tags</span>
+                            )}
+                          </div>
+                        </TableCell>
                       <TableCell>{course.number_of_sessions || "N/A"}</TableCell>
                       <TableCell>
                         {course.target_age_min && course.target_age_max
@@ -268,8 +305,18 @@ export default function CoursesManagementPage() {
                           : "N/A"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={course.is_active ? "default" : "secondary"}>
-                          {course.is_active ? "Active" : "Inactive"}
+                        <Badge
+                          variant={
+                            course.status === 'published' ? 'default' :
+                            course.status === 'draft' ? 'secondary' :
+                            course.status === 'suspended' ? 'destructive' :
+                            'outline'
+                          }
+                        >
+                          {course.status === 'published' ? 'Published' :
+                           course.status === 'draft' ? 'Draft' :
+                           course.status === 'suspended' ? 'Suspended' :
+                           'Archived'}
                         </Badge>
                       </TableCell>
                       <TableCell>{formatDate(course.created_at)}</TableCell>
@@ -288,15 +335,17 @@ export default function CoursesManagementPage() {
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => handleDelete(course.id)}
+                              disabled={course.status !== 'draft'}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
+                              Delete {course.status !== 'draft' && '(Draft only)'}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

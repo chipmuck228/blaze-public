@@ -47,7 +47,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, address, city, state, zip_code, phone, email, is_active } = body
+    const { name, address, city, state, zip_code, phone, email, is_active, franchise_id } = body
 
     const { data, error } = await supabaseAdmin
       .from("course_locations")
@@ -59,6 +59,7 @@ export async function PUT(
         zip_code,
         phone,
         email,
+        franchise_id: franchise_id || null,
         is_active: is_active !== undefined ? is_active : true,
         updated_at: new Date().toISOString(),
       })

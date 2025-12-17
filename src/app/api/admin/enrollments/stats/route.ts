@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { getFranchiseByCode } from "@/lib/db"
 
 // GET: 获取注册统计数据
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth()
 
@@ -11,63 +12,78 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const franchiseCode = searchParams.get("franchise")
+
+    // 如果指定了 franchise，则解析为 franchise_id
+    let baseQuery = supabaseAdmin.from("course_enrollments")
+    if (franchiseCode) {
+      const franchise = await getFranchiseByCode(franchiseCode)
+      if (!franchise) {
+        return NextResponse.json(
+          { error: "Invalid franchise code" },
+          { status: 400 }
+        )
+      }
+      baseQuery = baseQuery.eq("franchise_id", franchise.id)
+    }
+
     // 获取总数
-    const { count: total } = await supabaseAdmin
-      .from("course_enrollments")
+    const { count: total } = await baseQuery
       .select("id", { count: "exact", head: true })
 
     // 按状态统计
     const statusCounts = await Promise.all([
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "enrolled"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "reserved"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "cart"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "waitlisted"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "cancelled"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "expired"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("status", "completed"),
     ])
 
     // 按支付状态统计
     const paymentStatusCounts = await Promise.all([
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("payment_status", "paid"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("payment_status", "pending"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("payment_status", "unpaid"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("payment_status", "refunded"),
-      supabaseAdmin
-        .from("course_enrollments")
+      baseQuery
+        .clone()
         .select("id", { count: "exact", head: true })
         .eq("payment_status", "failed"),
     ])

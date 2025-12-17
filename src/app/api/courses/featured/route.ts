@@ -1,14 +1,82 @@
 import { NextResponse } from "next/server"
-import { getAllCourses } from "@/lib/db"
+import { getAllCourses, getFranchiseByCode } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // 获取所有活跃的课程
-    const courses = await getAllCourses()
-    
-    // 只返回前 6 个课程
-    const featuredCourses = courses.slice(0, 6)
+    const { searchParams } = new URL(request.url)
+    const franchiseCode = searchParams.get("franchise")
+    let featuredCourses
+
+    if (franchiseCode) {
+      // 如果指定了 franchise，则基于该 franchise 的实例来挑选课程
+      const franchise = await getFranchiseByCode(franchiseCode)
+      if (!franchise) {
+        return NextResponse.json(
+          { error: "Invalid franchise code" },
+          { status: 400 }
+        )
+      }
+
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      // 先获取该 franchise 下的所有实例
+      const { data: instances, error: instancesError } = await supabaseAdmin
+        .from("course_instances")
+        .select(`
+          id,
+          franchise_id,
+          start_date,
+          assignment_id
+        `)
+        .eq("franchise_id", franchise.id)
+        .gte("start_date", today.toISOString().slice(0, 10))
+
+      if (instancesError) {
+        throw new Error(instancesError.message)
+      }
+
+      if (!instances || instances.length === 0) {
+        featuredCourses = []
+      } else {
+        // 获取所有相关的 assignments
+        const assignmentIds = instances.map((i: any) => i.assignment_id).filter(Boolean)
+        const { data: assignments, error: assignmentsError } = await supabaseAdmin
+          .from("course_assignments")
+          .select(`
+            id,
+            course_id
+          `)
+          .in("id", assignmentIds)
+
+        if (assignmentsError) {
+          throw new Error(assignmentsError.message)
+        }
+
+        // 获取所有相关的已发布课程
+        const courseIds = [...new Set(assignments?.map((a: any) => a.course_id) || [])]
+        const { data: courses, error: coursesError } = await supabaseAdmin
+          .from("courses")
+          .select("*")
+          .in("id", courseIds)
+          .eq("status", "published")
+
+        if (coursesError) {
+          throw new Error(coursesError.message)
+        }
+
+        featuredCourses = courses || []
+      }
+      
+      // 限制为前 6 个
+      featuredCourses = featuredCourses.slice(0, 6)
+    } else {
+      // 未指定 franchise 时，使用已发布的课程
+      const { getPublishedCourses } = await import("@/lib/db")
+      const courses = await getPublishedCourses()
+      featuredCourses = courses.slice(0, 6)
+    }
     
     // 为每个课程加载 subcategories (tags)
     const coursesWithTags = await Promise.all(
@@ -26,7 +94,7 @@ export async function GET() {
             .from('course_subcategories')
             .select('id, name, display_name')
             .in('id', subcategoryIds)
-            .eq('is_active', true)
+            .eq('is_active', true)  // subcategories 仍然使用 is_active
           
           if (subcategoriesData) {
             subcategories = subcategoriesData.map((s: any) => ({

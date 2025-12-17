@@ -10,6 +10,7 @@ Blaze Robotics Academy 是一个基于 Next.js 的在线教育平台，专注于
 - **用户系统**：注册、登录、邮箱验证、密码重置、个人资料管理
 - **课程管理**：灵活的课程架构、多层级分类、课程实例管理、iCalendar 支持
 - **课程注册系统**：注册清单、等待列表、容量管理、过期处理、后台任务
+- **多地点 Franchise 支持**：按地点（Location / Franchise）划分子站（Sub-site），统一代码、多租户数据隔离
 - **管理员门户**：用户管理、课程管理、团队管理、数据统计
 - **教练门户**：课程查看、日历管理、课程导出
 
@@ -67,7 +68,31 @@ Blaze Robotics Academy 是一个基于 Next.js 的在线教育平台，专注于
 └──────────────┘   └──────────────┘   └──────────────┘
 ```
 
-### 2.2 目录结构
+### 2.2 多租户 / Franchise 架构
+
+平台采用 **单应用多租户（multi-tenant）** 模式来支持多个 Franchise / Location：
+
+- **单一代码库与部署**：所有分站（Bellevue、Issaquah 等）共享同一套 Next.js 应用和 API
+- **Franchise 上下文**：
+  - 通过 **域名或路径** 解析当前 `franchise.code`（如 `bellevue`）
+  - 在服务器端构造 `currentFranchise` 上下文（id, code, name, timezone, branding_config）
+  - 所有课程、实例、注册等查询均基于 `franchise_id` 过滤
+- **路径模式（Phase 1，当前实现）**：
+  - 总站首页：`/`（品牌入口 + 城市 / franchise 选择）
+  - 子站路径：`/locations/{franchiseCode}/...`，例如 `/locations/bellevue`
+  - 子站首页示例：`/locations/bellevue` 展示 Bellevue Campus 的本地内容和课程
+- **子域名模式（Phase 2，可选）**：
+  - `bellevue.blazeroboticsacademy.org`
+  - `issaquah.blazeroboticsacademy.org`
+  - 通过 `host` 解析 `franchise.code`，复用同一套 API 和 `franchise_id` 过滤逻辑
+
+多租户数据通过以下字段实现逻辑隔离：
+- `franchises`：Franchise 主表（code、name、primary_domain、branding_config 等）
+- `course_locations.franchise_id`：地点所属的 franchise
+- `course_instances.franchise_id`：课程实例所属的 franchise（冗余自 location）
+- `course_enrollments.franchise_id`：注册记录所属的 franchise（冗余自 instance）
+
+### 2.3 目录结构
 
 ```
 blaze/
@@ -135,14 +160,14 @@ blaze/
 ### 3.1 公开网站模块
 
 #### 3.1.1 首页 (`/`)
-- **Hero Section**: 主视觉区域
-- **Advantages**: 优势展示
-- **Courses**: 特色课程展示（从数据库获取前6个）
-- **Camps**: 夏令营展示
-- **Testimonials**: 用户评价
-- **Team**: 团队成员展示（从数据库获取）
-- **FAQ**: 常见问题
-- **Newsletter**: 邮件订阅
+- **Hero Section**: 主视觉区域，传达 Blaze Robotics 的核心价值（想象力 → 创新），提供主/副 CTA（例如「Find programs near me」和「Learn about our approach」）
+- **Location Selection**: 城市 / Franchise 选择区块（`/locations/{code}` 卡片），作为多分站入口（Bellevue、Bel-Red、Issaquah、Cherry Crest、未来 New York 等）
+- **Programs Overview**: 全局课程体系介绍（RoboQuests / LaunchPad / RoboChamps 等），强调课程类型、适龄范围和学习目标，而非具体时间表
+- **Advantages**: 教学理念与核心优势展示
+- **Testimonials**: 用户评价（建立信任）
+- **Team（简版）**: 关键团队成员概览（详细信息可在 About 页面或子站中展开）
+- **FAQ**: 全局常见问题（注册流程、退款政策等）
+- **Newsletter / Contact**: 简洁的订阅与联系方式入口
 
 #### 3.1.2 课程目录 (`/course-catalog`)
 - 所有课程列表
@@ -150,10 +175,19 @@ blaze/
 - 支持通过 slug 或 ID 访问
 
 #### 3.1.3 导航栏
-- 响应式设计（移动端使用 Sheet）
-- 用户认证状态显示
-- 购物车图标（显示商品数量）
-- 用户下拉菜单（Profile, Settings, Sign Out）
+- **响应式设计**：桌面端水平导航，移动端使用 Sheet 抽屉导航
+- **核心菜单**（精简数量）：
+  - `Programs`：跳转到首页课程体系介绍或 `/course-catalog`
+  - `Locations`：滚动到首页 Location 选择区块或跳转到 Location 列表页
+  - `About`：滚动到首页 About/Team 概览或 About 页面
+  - `FAQ`：滚动到首页 FAQ 区域
+- **多站点支持**：
+  - 在子站 `/locations/{code}` 中，Logo 旁显示当前 Campus 标签（例如 `Bellevue Campus`）
+  - 预留 Location 切换入口（未来可在用户菜单或独立入口中实现）
+- **用户与注册入口**：
+  - 用户认证状态显示（登录 / 注册 或 Avatar 下拉）
+  - 购物车图标（显示注册清单数量）
+  - 用户下拉菜单（Profile, Settings, Sign Out）
 
 ### 3.2 用户认证模块
 
@@ -435,6 +469,26 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
+### 4.3 Franchise / 多地点相关表
+
+#### 4.3.1 franchises
+```sql
+- id: UUID (PK)
+- code: TEXT (UNIQUE)             -- 'bellevue', 'issaquah'
+- name: TEXT                      -- 'Bellevue Robotics Academy'
+- primary_domain: TEXT            -- 'bellevue.blazeroboticsacademy.org'（可选，用于子域名模式）
+- timezone: TEXT                  -- 默认 'America/Los_Angeles'
+- branding_config: JSONB          -- { logoUrl, colors, contact, socialLinks, ... }
+- is_active: BOOLEAN
+- created_at: TIMESTAMP
+- updated_at: TIMESTAMP
+```
+
+Franchise 是整个多地点架构的根实体，用于：
+- 按城市 / 地区划分子站
+- 存储品牌与本地化配置（联系方式、Logo、色彩等）
+- 作为 Location / Instance / Enrollment 的上层归属
+
 #### 4.2.2 team_social_networks
 ```sql
 - id: UUID (PK)
@@ -444,9 +498,9 @@ Course Instance (课程实例)
 - created_at: TIMESTAMP
 ```
 
-### 4.3 课程相关表
+### 4.4 课程相关表
 
-#### 4.3.1 course_categories
+#### 4.4.1 course_categories
 ```sql
 - id: UUID (PK)
 - name: TEXT (UNIQUE)
@@ -458,7 +512,7 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
-#### 4.3.2 course_series
+#### 4.4.2 course_series
 ```sql
 - id: UUID (PK)
 - category_id: UUID (FK -> course_categories.id)
@@ -474,7 +528,7 @@ Course Instance (课程实例)
 - UNIQUE(category_id, name)
 ```
 
-#### 4.3.3 course_subcategories
+#### 4.4.3 course_subcategories
 ```sql
 - id: UUID (PK)
 - name: TEXT
@@ -486,7 +540,7 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
-#### 4.3.4 courses
+#### 4.4.4 courses
 ```sql
 - id: UUID (PK)
 - name: TEXT
@@ -508,7 +562,7 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
-#### 4.3.5 course_subcategory_tags
+#### 4.4.5 course_subcategory_tags
 ```sql
 - id: UUID (PK)
 - course_id: UUID (FK -> courses.id)
@@ -517,7 +571,7 @@ Course Instance (课程实例)
 - UNIQUE(course_id, subcategory_id)
 ```
 
-#### 4.3.6 course_locations
+#### 4.4.6 course_locations
 ```sql
 - id: UUID (PK)
 - name: TEXT
@@ -527,12 +581,13 @@ Course Instance (课程实例)
 - zip_code: TEXT
 - phone: TEXT
 - email: TEXT
+- franchise_id: UUID (FK -> franchises.id)   -- 所属 Franchise / 子站
 - is_active: BOOLEAN
 - created_at: TIMESTAMP
 - updated_at: TIMESTAMP
 ```
 
-#### 4.3.7 course_assignments
+#### 4.4.7 course_assignments
 ```sql
 - id: UUID (PK)
 - course_id: UUID (FK -> courses.id)
@@ -546,11 +601,12 @@ Course Instance (课程实例)
 - UNIQUE(course_id, category_id, series_id, location_id)
 ```
 
-#### 4.3.8 course_instances
+#### 4.4.8 course_instances
 ```sql
 - id: UUID (PK)
 - assignment_id: UUID (FK -> course_assignments.id)
 - location_id: UUID (FK -> course_locations.id, NULLABLE)
+- franchise_id: UUID (FK -> franchises.id)   -- 冗余字段，加速按 Franchise 过滤
 - start_date: DATE
 - end_date: DATE
 - start_time: TIME
@@ -571,7 +627,7 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
-#### 4.3.9 course_instance_coaches
+#### 4.4.9 course_instance_coaches
 ```sql
 - id: UUID (PK)
 - instance_id: UUID (FK -> course_instances.id)
@@ -580,13 +636,14 @@ Course Instance (课程实例)
 - UNIQUE(instance_id, coach_id)
 ```
 
-### 4.4 注册相关表
+### 4.5 注册相关表
 
-#### 4.4.1 course_enrollments
+#### 4.5.1 course_enrollments
 ```sql
 - id: UUID (PK)
 - user_id: UUID (FK -> users.id)
 - instance_id: UUID (FK -> course_instances.id)
+- franchise_id: UUID (FK -> franchises.id)   -- 冗余字段，标识注册所属 Franchise
 - status: ENUM('cart', 'reserved', 'enrolled', 'waitlisted', 'cancelled', 'expired', 'completed')
 - added_to_cart_at: TIMESTAMP
 - cart_expires_at: TIMESTAMP
@@ -610,7 +667,7 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
-#### 4.4.2 enrollment_status_history
+#### 4.5.2 enrollment_status_history
 ```sql
 - id: UUID (PK)
 - enrollment_id: UUID (FK -> course_enrollments.id)
@@ -622,7 +679,7 @@ Course Instance (课程实例)
 - created_at: TIMESTAMP
 ```
 
-#### 4.4.3 waitlist_notifications
+#### 4.5.3 waitlist_notifications
 ```sql
 - id: UUID (PK)
 - enrollment_id: UUID (FK -> course_enrollments.id)
@@ -633,7 +690,7 @@ Course Instance (课程实例)
 - metadata: JSONB
 ```
 
-#### 4.4.4 enrollment_config
+#### 4.5.4 enrollment_config
 ```sql
 - id: UUID (PK)
 - config_key: TEXT (UNIQUE)
@@ -642,23 +699,27 @@ Course Instance (课程实例)
 - updated_at: TIMESTAMP
 ```
 
-### 4.5 关系图
+### 4.6 关系图
 
 ```
+franchises
+  └── course_locations
+      └── course_instances
+          ├── course_assignments
+          │   ├── courses
+          │   │   └── course_subcategory_tags (多对多)
+          │   │       └── course_subcategories
+          │   ├── course_categories
+          │   ├── course_series
+          │   └── course_locations
+          └── course_enrollments (一对多)
+              ├── enrollment_status_history (一对多)
+              └── waitlist_notifications (一对多)
+
 users
   ├── course_enrollments (一对多)
-  │   ├── course_instances
-  │   ├── enrollment_status_history (一对多)
-  │   └── waitlist_notifications (一对多)
   ├── course_instance_coaches (多对多)
   │   └── course_instances
-  │       └── course_assignments
-  │           ├── courses
-  │           │   └── course_subcategory_tags (多对多)
-  │           │       └── course_subcategories
-  │           ├── course_categories
-  │           ├── course_series
-  │           └── course_locations
   └── teams
       └── team_social_networks
 ```

@@ -2,6 +2,36 @@ import { supabaseAdmin } from './supabase'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
+// 生成随机密码（12位，包含大小写字母、数字、特殊字符）
+export function generateRandomPassword(length: number = 12): string {
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz'
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const numbers = '0123456789'
+  const special = '!@#$%^&*'
+  const allChars = lowercase + uppercase + numbers + special
+  
+  let password = ''
+  
+  // 确保至少包含每种类型的字符
+  password += lowercase[Math.floor(Math.random() * lowercase.length)]
+  password += uppercase[Math.floor(Math.random() * uppercase.length)]
+  password += numbers[Math.floor(Math.random() * numbers.length)]
+  password += special[Math.floor(Math.random() * special.length)]
+  
+  // 填充剩余长度
+  for (let i = password.length; i < length; i++) {
+    password += allChars[Math.floor(Math.random() * allChars.length)]
+  }
+  
+  // 打乱字符顺序
+  return password.split('').sort(() => Math.random() - 0.5).join('')
+}
+
+// 生成邀请令牌（UUID v4）
+export function generateInvitationToken(): string {
+  return crypto.randomUUID()
+}
+
 export interface User {
   id: string
   name: string
@@ -13,6 +43,15 @@ export interface User {
   role?: string
   created_at: string
   updated_at: string
+  // 用户创建和邀请相关字段
+  is_test_user?: boolean
+  created_by?: string | null
+  invitation_token?: string | null
+  invitation_expires_at?: string | null
+  invitation_sent_at?: string | null
+  password_set_at?: string | null
+  must_change_password?: boolean
+  last_password_change?: string | null
 }
 
 export interface PasswordResetToken {
@@ -310,7 +349,7 @@ export async function createOrUpdateGoogleUser(
 export async function getAllUsers() {
   const { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, name, email, email_verified, role, created_at, updated_at')
+    .select('id, name, email, email_verified, role, created_at, updated_at, is_test_user, created_by, invitation_token, invitation_expires_at, password_set_at, must_change_password')
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -318,6 +357,191 @@ export async function getAllUsers() {
   }
 
   return data as Omit<User, 'password_hash' | 'email_verification_token' | 'email_verification_expires'>[]
+}
+
+// 创建用户（Admin 功能，支持三种方式）
+export async function createUserByAdmin(data: {
+  name: string
+  email: string
+  role: 'user' | 'coach' | 'admin'
+  password_option: 'generate' | 'custom' | 'invite'
+  password?: string  // 当 password_option = 'custom' 时必填
+  require_password_change?: boolean
+  is_test_user?: boolean
+  created_by: string  // Admin ID
+}): Promise<{
+  user: User
+  generated_password?: string  // 仅当 password_option = 'generate' 时返回
+  invitation_token?: string  // 仅当 password_option = 'invite' 时返回
+}> {
+  // 检查用户是否已存在
+  const { data: existingUser } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('email', data.email)
+    .single()
+
+  if (existingUser) {
+    throw new Error('User already exists')
+  }
+
+  let password_hash: string | null = null
+  let generated_password: string | undefined
+  let invitation_token: string | undefined
+  let invitation_expires_at: string | undefined
+  let invitation_sent_at: string | undefined
+  let email_verified = false
+
+  // 根据密码选项处理
+  if (data.password_option === 'generate') {
+    // 生成随机密码
+    generated_password = generateRandomPassword(12)
+    password_hash = await bcrypt.hash(generated_password, 10)
+    email_verified = false  // 首次登录后验证
+  } else if (data.password_option === 'custom') {
+    // 使用自定义密码
+    if (!data.password) {
+      throw new Error('Password is required when password_option is "custom"')
+    }
+    password_hash = await bcrypt.hash(data.password, 10)
+    email_verified = false
+  } else if (data.password_option === 'invite') {
+    // 生成邀请令牌
+    invitation_token = generateInvitationToken()
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 7)  // 7天后过期
+    invitation_expires_at = expiresAt.toISOString()
+    invitation_sent_at = new Date().toISOString()
+    password_hash = null  // 等待用户设置密码
+    email_verified = false
+  }
+
+  // 创建用户
+  const insertData: any = {
+    name: data.name,
+    email: data.email,
+    role: data.role,
+    password_hash,
+    email_verified,
+    created_by: data.created_by,
+    is_test_user: data.is_test_user ?? false,
+    must_change_password: data.require_password_change ?? false,
+  }
+
+  if (invitation_token) {
+    insertData.invitation_token = invitation_token
+    insertData.invitation_expires_at = invitation_expires_at
+    insertData.invitation_sent_at = invitation_sent_at
+  }
+
+  const { data: user, error } = await supabaseAdmin
+    .from('users')
+    .insert(insertData)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to create user: ${error.message}`)
+  }
+
+  return {
+    user: user as User,
+    generated_password,
+    invitation_token,
+  }
+}
+
+// 验证邀请令牌并设置密码
+export async function acceptInvitationAndSetPassword(
+  token: string,
+  password: string
+): Promise<User> {
+  // 查找用户
+  const { data: user, error: findError } = await supabaseAdmin
+    .from('users')
+    .select('*')
+    .eq('invitation_token', token)
+    .single()
+
+  if (findError || !user) {
+    throw new Error('Invalid invitation token')
+  }
+
+  // 检查令牌是否过期
+  if (user.invitation_expires_at && new Date(user.invitation_expires_at) < new Date()) {
+    throw new Error('Invitation token has expired')
+  }
+
+  // 检查是否已有密码（已激活）
+  if (user.password_hash) {
+    throw new Error('User already has a password set')
+  }
+
+  // 验证密码强度
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters')
+  }
+
+  // 加密密码
+  const password_hash = await bcrypt.hash(password, 10)
+
+  // 更新用户
+  const { data: updatedUser, error: updateError } = await supabaseAdmin
+    .from('users')
+    .update({
+      password_hash,
+      email_verified: true,  // 通过邀请链接验证邮箱
+      invitation_token: null,
+      invitation_expires_at: null,
+      password_set_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`Failed to set password: ${updateError.message}`)
+  }
+
+  return updatedUser as User
+}
+
+// 重新发送邀请
+export async function resendInvitation(userId: string): Promise<{
+  invitation_token: string
+  invitation_expires_at: string
+}> {
+  // 获取用户
+  const user = await getUserById(userId)
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  // 生成新的邀请令牌
+  const invitation_token = generateInvitationToken()
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 7)  // 7天后过期
+  const invitation_expires_at = expiresAt.toISOString()
+  const invitation_sent_at = new Date().toISOString()
+
+  // 更新用户
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({
+      invitation_token,
+      invitation_expires_at,
+      invitation_sent_at,
+    })
+    .eq('id', userId)
+
+  if (error) {
+    throw new Error(`Failed to resend invitation: ${error.message}`)
+  }
+
+  return {
+    invitation_token,
+    invitation_expires_at,
+  }
 }
 
 // 更新用户（管理员功能）
@@ -342,7 +566,20 @@ export async function updateUser(userId: string, updates: {
 }
 
 // 删除用户（管理员功能）
-export async function deleteUser(userId: string) {
+export async function deleteUser(userId: string): Promise<{
+  success: boolean
+  deletedTeamsCount: number
+  deletedTeams: Array<{ id: string; name: string }>
+}> {
+  // 检查是否有关联的 Teams 记录（在删除前）
+  const { data: teams } = await supabaseAdmin
+    .from('teams')
+    .select('id, name')
+    .eq('user_id', userId)
+
+  // 注意：由于设置了 ON DELETE CASCADE，删除 Users 记录会自动删除关联的 Teams 记录
+  // 这里只是用于返回警告信息，不影响删除操作
+
   const { error } = await supabaseAdmin
     .from('users')
     .delete()
@@ -352,7 +589,11 @@ export async function deleteUser(userId: string) {
     throw new Error(`Failed to delete user: ${error.message}`)
   }
 
-  return true
+  return {
+    success: true,
+    deletedTeamsCount: teams?.length || 0,
+    deletedTeams: teams || [],
+  }
 }
 
 // 获取统计数据（管理员功能）
@@ -418,14 +659,26 @@ export async function getAdminStats(): Promise<AdminStats> {
 // 团队成员相关接口和函数
 export interface TeamMember {
   id: string
+  user_id?: string | null  // 关联 Users 表
   image_url: string
-  name: string
+  name: string  // 保留向后兼容，但建议使用关联 Users 表的 name
   position: string
   description: string
+  bio?: string  // 详细个人简介（可选）
   display_order: number
+  is_featured?: boolean  // 是否在首页展示
+  is_active?: boolean  // 是否激活
   created_at: string
   updated_at: string
   social_networks: TeamSocialNetwork[]
+  // 关联的 Users 信息（可选，JOIN 时填充）
+  user?: {
+    id: string
+    name: string
+    email: string
+    image?: string
+    role: string
+  }
 }
 
 export interface TeamSocialNetwork {
@@ -435,12 +688,89 @@ export interface TeamSocialNetwork {
   display_order: number
 }
 
-// 获取所有团队成员
+// 获取所有团队成员（公开 API，用于首页展示）
 export async function getAllTeamMembers(): Promise<TeamMember[]> {
-  // 获取所有团队成员
+  // 获取所有激活的、在首页展示的团队成员，JOIN Users 表
+  // 使用 * 查询所有字段，然后安全地访问 image（如果存在）
   const { data: teams, error: teamsError } = await supabaseAdmin
     .from('teams')
+    .select(`
+      *,
+      user:users(*)
+    `)
+    .eq('is_active', true)
+    .eq('is_featured', true)
+    .order('display_order', { ascending: true })
+
+  if (teamsError) {
+    throw new Error(`Failed to fetch teams: ${teamsError.message}`)
+  }
+
+  if (!teams || teams.length === 0) {
+    return []
+  }
+
+  // 获取所有社交媒体链接
+  const teamIds = teams.map(team => team.id)
+  const { data: socialNetworks, error: socialError } = await supabaseAdmin
+    .from('team_social_networks')
     .select('*')
+    .in('team_id', teamIds)
+    .order('display_order', { ascending: true })
+
+  if (socialError) {
+    throw new Error(`Failed to fetch social networks: ${socialError.message}`)
+  }
+
+  // 组合数据，优先使用 Users 表的 name 和 image
+  const teamsWithSocial = teams.map(team => {
+    const user = (team as any).user
+    // 安全地访问 image 字段（如果 users 表有该字段）
+    const userImage = user?.image || null
+    return {
+      id: team.id,
+      user_id: team.user_id || null,
+      image_url: userImage || team.image_url,  // 优先使用 Users 表的 image（如果存在）
+      name: user?.name || team.name,  // 优先使用 Users 表的 name
+      position: team.position,
+      description: team.description,
+      bio: team.bio || undefined,
+      display_order: team.display_order,
+      is_featured: team.is_featured ?? true,
+      is_active: team.is_active ?? true,
+      created_at: team.created_at,
+      updated_at: team.updated_at,
+      social_networks: (socialNetworks || [])
+        .filter(sn => sn.team_id === team.id)
+        .map(sn => ({
+          id: sn.id,
+          name: sn.name,
+          url: sn.url,
+          display_order: sn.display_order,
+        })),
+      user: user ? {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+      } : undefined,
+    }
+  })
+
+  return teamsWithSocial as TeamMember[]
+}
+
+// 获取所有团队成员（Admin API，包括所有状态）
+export async function getAllTeamMembersForAdmin(): Promise<TeamMember[]> {
+  // 获取所有团队成员（包括未激活的），JOIN Users 表
+  // 使用 * 查询所有字段，然后安全地访问 image（如果存在）
+  const { data: teams, error: teamsError } = await supabaseAdmin
+    .from('teams')
+    .select(`
+      *,
+      user:users(*)
+    `)
     .order('display_order', { ascending: true })
 
   if (teamsError) {
@@ -464,47 +794,110 @@ export async function getAllTeamMembers(): Promise<TeamMember[]> {
   }
 
   // 组合数据
-  const teamsWithSocial = teams.map(team => ({
-    id: team.id,
-    image_url: team.image_url,
-    name: team.name,
-    position: team.position,
-    description: team.description,
-    display_order: team.display_order,
-    created_at: team.created_at,
-    updated_at: team.updated_at,
-    social_networks: (socialNetworks || [])
-      .filter(sn => sn.team_id === team.id)
-      .map(sn => ({
-        id: sn.id,
-        name: sn.name,
-        url: sn.url,
-        display_order: sn.display_order,
-      })),
-  }))
+  const teamsWithSocial = teams.map(team => {
+    const user = (team as any).user
+    // 安全地访问 image 字段（如果 users 表有该字段）
+    const userImage = user?.image || null
+    return {
+      id: team.id,
+      user_id: team.user_id || null,
+      image_url: userImage || team.image_url,
+      name: user?.name || team.name,
+      position: team.position,
+      description: team.description,
+      bio: team.bio || undefined,
+      display_order: team.display_order,
+      is_featured: team.is_featured ?? false,
+      is_active: team.is_active ?? true,
+      created_at: team.created_at,
+      updated_at: team.updated_at,
+      social_networks: (socialNetworks || [])
+        .filter(sn => sn.team_id === team.id)
+        .map(sn => ({
+          id: sn.id,
+          name: sn.name,
+          url: sn.url,
+          display_order: sn.display_order,
+        })),
+      user: user ? {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image || undefined,  // 安全地访问 image（如果存在）
+        role: user.role,
+      } : undefined,
+    }
+  })
 
   return teamsWithSocial as TeamMember[]
 }
 
 // 创建团队成员
 export async function createTeamMember(data: {
-  image_url: string
-  name: string
+  user_id?: string  // 关联的 Users 表 ID（可选，但推荐）
+  image_url?: string  // 可选，如果 user_id 存在，可以使用 Users 表的 image
+  name?: string  // 可选，如果 user_id 存在，使用 Users 表的 name
   position: string
   description: string
+  bio?: string
   display_order: number
+  is_featured?: boolean
+  is_active?: boolean
   social_networks?: Array<{ name: string; url: string; display_order: number }>
 }): Promise<TeamMember> {
+  // 如果提供了 user_id，验证用户是否存在且是 coach
+  if (data.user_id) {
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, name, email, image, role')
+      .eq('id', data.user_id)
+      .eq('role', 'coach')
+      .single()
+
+    if (userError || !user) {
+      throw new Error(`Invalid user_id: user not found or not a coach`)
+    }
+
+    // 检查是否已经有 Teams 记录
+    const { data: existingTeam } = await supabaseAdmin
+      .from('teams')
+      .select('id')
+      .eq('user_id', data.user_id)
+      .single()
+
+    if (existingTeam) {
+      throw new Error(`User already has a team profile`)
+    }
+  }
+
+  // 准备插入数据
+  const insertData: any = {
+    position: data.position,
+    description: data.description,
+    display_order: data.display_order,
+    is_featured: data.is_featured ?? false,
+    is_active: data.is_active ?? true,
+  }
+
+  if (data.user_id) {
+    insertData.user_id = data.user_id
+  }
+
+  // 如果提供了 name 和 image_url，保留（向后兼容）
+  if (data.name) {
+    insertData.name = data.name
+  }
+  if (data.image_url) {
+    insertData.image_url = data.image_url
+  }
+  if (data.bio) {
+    insertData.bio = data.bio
+  }
+
   // 创建团队成员
   const { data: team, error: teamError } = await supabaseAdmin
     .from('teams')
-    .insert({
-      image_url: data.image_url,
-      name: data.name,
-      position: data.position,
-      description: data.description,
-      display_order: data.display_order,
-    })
+    .insert(insertData)
     .select()
     .single()
 
@@ -532,9 +925,9 @@ export async function createTeamMember(data: {
     }
   }
 
-  // 获取完整的团队成员数据（包括社交媒体链接）
-  const fullTeam = await getAllTeamMembers()
-  const createdTeam = fullTeam.find(t => t.id === team.id)
+  // 获取完整的团队成员数据（包括社交媒体链接和 Users 信息）
+  const fullTeams = await getAllTeamMembersForAdmin()
+  const createdTeam = fullTeams.find(t => t.id === team.id)
 
   if (!createdTeam) {
     throw new Error('Failed to retrieve created team member')
@@ -547,21 +940,57 @@ export async function createTeamMember(data: {
 export async function updateTeamMember(
   teamId: string,
   data: {
+    user_id?: string
     image_url?: string
     name?: string
     position?: string
     description?: string
+    bio?: string
     display_order?: number
+    is_featured?: boolean
+    is_active?: boolean
     social_networks?: Array<{ id?: string; name: string; url: string; display_order: number }>
   }
 ): Promise<TeamMember> {
+  // 如果提供了 user_id，验证用户是否存在且是 coach
+  if (data.user_id !== undefined) {
+    if (data.user_id) {
+      const { data: user, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id, name, email, image, role')
+        .eq('id', data.user_id)
+        .eq('role', 'coach')
+        .single()
+
+      if (userError || !user) {
+        throw new Error(`Invalid user_id: user not found or not a coach`)
+      }
+
+      // 检查是否已经有其他 Teams 记录使用这个 user_id
+      const { data: existingTeam } = await supabaseAdmin
+        .from('teams')
+        .select('id')
+        .eq('user_id', data.user_id)
+        .neq('id', teamId)
+        .single()
+
+      if (existingTeam) {
+        throw new Error(`User already has a team profile`)
+      }
+    }
+  }
+
   // 更新团队成员基本信息
   const updates: any = {}
+  if (data.user_id !== undefined) updates.user_id = data.user_id || null
   if (data.image_url !== undefined) updates.image_url = data.image_url
   if (data.name !== undefined) updates.name = data.name
   if (data.position !== undefined) updates.position = data.position
   if (data.description !== undefined) updates.description = data.description
+  if (data.bio !== undefined) updates.bio = data.bio
   if (data.display_order !== undefined) updates.display_order = data.display_order
+  if (data.is_featured !== undefined) updates.is_featured = data.is_featured
+  if (data.is_active !== undefined) updates.is_active = data.is_active
 
   if (Object.keys(updates).length > 0) {
     const { error: updateError } = await supabaseAdmin
@@ -605,9 +1034,9 @@ export async function updateTeamMember(
     }
   }
 
-  // 获取更新后的完整数据
-  const fullTeam = await getAllTeamMembers()
-  const updatedTeam = fullTeam.find(t => t.id === teamId)
+  // 获取更新后的完整数据（使用 Admin API 以获取所有状态）
+  const fullTeams = await getAllTeamMembersForAdmin()
+  const updatedTeam = fullTeams.find(t => t.id === teamId)
 
   if (!updatedTeam) {
     throw new Error('Failed to retrieve updated team member')
@@ -647,6 +1076,7 @@ export interface CourseCategory {
 export interface CourseSeries {
   id: string
   category_id: string
+  franchise_id?: string | null
   name: string
   display_name: string
   description?: string
@@ -690,7 +1120,8 @@ export interface Course {
   age_min?: number  // 数据库字段
   age_max?: number  // 数据库字段
   grade_level?: string  // 数据库字段
-  is_active: boolean
+  status: 'draft' | 'published' | 'suspended' | 'archived'  // 课程状态
+  is_active?: boolean  // 保留向后兼容，映射自 status
   created_at: string
   updated_at: string
 }
@@ -724,6 +1155,7 @@ export interface CourseLocation {
   zip_code?: string
   phone?: string
   email?: string
+  franchise_id?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -775,6 +1207,16 @@ export interface CourseInstanceException {
   updated_at: string
 }
 
+// Franchise / multi-tenant
+export interface Franchise {
+  id: string
+  code: string
+  name: string
+  primary_domain?: string | null
+  timezone?: string | null
+  is_active: boolean
+}
+
 // 完整的课程信息（包含关联数据）
 export interface CourseWithDetails extends Course {
   subcategories?: CourseSubcategory[]
@@ -798,14 +1240,20 @@ export async function getAllCourseCategories(): Promise<CourseCategory[]> {
   return data as CourseCategory[]
 }
 
-// 获取指定大类的所有系列
-export async function getCourseSeriesByCategory(categoryId: string): Promise<CourseSeries[]> {
-  const { data, error } = await supabaseAdmin
+// 获取指定大类的所有系列（可选按 franchise 过滤）
+export async function getCourseSeriesByCategory(categoryId: string, franchiseId?: string): Promise<CourseSeries[]> {
+  let query = supabaseAdmin
     .from('course_series')
     .select('*')
     .eq('category_id', categoryId)
     .eq('is_active', true)
     .order('display_order', { ascending: true })
+
+  if (franchiseId) {
+    query = query.eq('franchise_id', franchiseId)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     throw new Error(`Failed to fetch course series: ${error.message}`)
@@ -830,11 +1278,11 @@ export async function getAllCourseSubcategories(): Promise<CourseSubcategory[]> 
 }
 
 // 获取所有课程（独立管理）
+// 注意：Admin 可以查看所有状态的课程，公开 API 应使用 getPublishedCourses
 export async function getAllCourses(): Promise<Course[]> {
   const { data, error } = await supabaseAdmin
     .from('courses')
     .select('*')
-    .eq('is_active', true)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -844,13 +1292,51 @@ export async function getAllCourses(): Promise<Course[]> {
   return data as Course[]
 }
 
-// 根据slug获取课程
+// 获取所有已发布的课程（公开 API 使用）
+export async function getPublishedCourses(): Promise<Course[]> {
+  const { data, error } = await supabaseAdmin
+    .from('courses')
+    .select('*')
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to fetch published courses: ${error.message}`)
+  }
+
+  return data as Course[]
+}
+
+// 根据 franchise code 获取 franchise（用于多租户过滤）
+export async function getFranchiseByCode(code: string): Promise<Franchise | null> {
+  const normalized = code.trim().toLowerCase()
+  if (!normalized) return null
+
+  const { data, error } = await supabaseAdmin
+    .from('franchises')
+    .select('*')
+    .eq('code', normalized)
+    .eq('is_active', true)
+    .single()
+
+  if (error) {
+    // 如果是找不到记录，返回 null；其他错误抛出
+    if (error.code === 'PGRST116' || error.message?.toLowerCase().includes('no rows')) {
+      return null
+    }
+    throw new Error(`Failed to fetch franchise: ${error.message}`)
+  }
+
+  return data as Franchise
+}
+
+// 根据slug获取课程（只返回已发布的课程，公开 API 使用）
 export async function getCourseBySlug(slug: string): Promise<Course | null> {
   const { data, error } = await supabaseAdmin
     .from('courses')
     .select('*')
     .eq('slug', slug)
-    .eq('is_active', true)
+    .eq('status', 'published')
     .single()
 
   if (error) {
@@ -861,12 +1347,12 @@ export async function getCourseBySlug(slug: string): Promise<Course | null> {
 }
 
 // 获取课程详细信息（包含关联数据）
+// 注意：Admin 可以查看所有状态的课程，公开 API 应使用 getPublishedCourseWithDetails
 export async function getCourseWithDetails(courseId: string): Promise<CourseWithDetails | null> {
   const { data: course, error: courseError } = await supabaseAdmin
     .from('courses')
     .select('*')
     .eq('id', courseId)
-    .eq('is_active', true)
     .single()
 
   if (courseError || !course) {
@@ -926,14 +1412,14 @@ export async function getCourseWithDetails(courseId: string): Promise<CourseWith
   } as CourseWithDetails
 }
 
-// 根据slug获取课程详细信息（包含关联数据）
+// 根据slug获取课程详细信息（包含关联数据，只返回已发布的课程，公开 API 使用）
 export async function getCourseWithDetailsBySlug(slug: string): Promise<CourseWithDetails | null> {
   // 先尝试精确匹配
   let { data: course, error: courseError } = await supabaseAdmin
     .from('courses')
     .select('*')
     .eq('slug', slug)
-    .eq('is_active', true)
+    .eq('status', 'published')
     .single()
 
   // 如果精确匹配失败，尝试 URL 解码后的匹配（处理 URL 编码问题）
@@ -945,7 +1431,7 @@ export async function getCourseWithDetailsBySlug(slug: string): Promise<CourseWi
           .from('courses')
           .select('*')
           .eq('slug', decodedSlug)
-          .eq('is_active', true)
+          .eq('status', 'published')
           .single()
         
         if (!decodedError && decodedCourse) {
@@ -966,7 +1452,7 @@ export async function getCourseWithDetailsBySlug(slug: string): Promise<CourseWi
       .from('courses')
       .select('*')
       .ilike('slug', `%${normalizedSlug}%`)
-      .eq('is_active', true)
+      .eq('status', 'published')
       .limit(1)
       .maybeSingle()
     
@@ -1096,6 +1582,32 @@ export async function getAllCourseLocations(): Promise<CourseLocation[]> {
 
 // 创建课程实例
 export async function createCourseInstance(instance: Omit<CourseInstance, 'id' | 'created_at' | 'updated_at'>): Promise<CourseInstance> {
+  // 验证课程状态：只有 published 状态的课程可以创建 instance
+  // 首先通过 assignment 获取 course_id
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from('course_assignments')
+    .select('course_id')
+    .eq('id', instance.assignment_id)
+    .single()
+
+  if (assignmentError || !assignment) {
+    throw new Error('Course assignment not found')
+  }
+
+  const { data: course, error: courseError } = await supabaseAdmin
+    .from('courses')
+    .select('status')
+    .eq('id', assignment.course_id)
+    .single()
+
+  if (courseError || !course) {
+    throw new Error('Course not found')
+  }
+
+  if (course.status !== 'published') {
+    throw new Error(`Cannot create instance for course with status '${course.status}'. Only 'published' courses can have instances.`)
+  }
+
   // 自动生成 RRULE（如果提供了 days_of_week 且没有提供 icalendar_rrule）
   const { autoGenerateRRULE } = await import('./icalendar')
   const rrule = instance.icalendar_rrule || autoGenerateRRULE(instance)
@@ -1187,11 +1699,17 @@ export async function deleteCourseInstance(instanceId: string): Promise<boolean>
 
 // ==================== Course CRUD 操作 ====================
 
-// 创建课程
+// 创建课程（默认状态为 draft）
 export async function createCourse(course: Omit<Course, 'id' | 'created_at' | 'updated_at'>): Promise<Course> {
+  // 确保新课程默认状态为 draft（如果未指定）
+  const courseData = {
+    ...course,
+    status: course.status || 'draft',
+  }
+
   const { data, error } = await supabaseAdmin
     .from('courses')
-    .insert(course)
+    .insert(courseData)
     .select()
     .single()
 
@@ -1409,6 +1927,21 @@ export async function getCourseAssignmentsBySeries(seriesId: string): Promise<Co
 export async function createCourseAssignment(
   assignment: Omit<CourseAssignment, 'id' | 'created_at' | 'updated_at'>
 ): Promise<CourseAssignment> {
+  // 验证课程状态：只有 published 状态的课程可以创建 assignment
+  const { data: course, error: courseError } = await supabaseAdmin
+    .from('courses')
+    .select('status')
+    .eq('id', assignment.course_id)
+    .single()
+
+  if (courseError || !course) {
+    throw new Error('Course not found')
+  }
+
+  if (course.status !== 'published') {
+    throw new Error(`Cannot create assignment for course with status '${course.status}'. Only 'published' courses can be assigned.`)
+  }
+
   // 验证 series 属于指定的 category
   const { data: series, error: seriesError } = await supabaseAdmin
     .from('course_series')

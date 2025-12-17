@@ -25,14 +25,29 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { image_url, name, position, description, display_order, social_networks } = body
+    const { 
+      user_id,
+      image_url, 
+      name, 
+      position, 
+      description, 
+      bio,
+      display_order, 
+      is_featured,
+      is_active,
+      social_networks 
+    } = body
 
     const updates: any = {}
+    if (user_id !== undefined) updates.user_id = user_id
     if (image_url !== undefined) updates.image_url = image_url
     if (name !== undefined) updates.name = name
     if (position !== undefined) updates.position = position
     if (description !== undefined) updates.description = description
+    if (bio !== undefined) updates.bio = bio
     if (display_order !== undefined) updates.display_order = display_order
+    if (is_featured !== undefined) updates.is_featured = is_featured
+    if (is_active !== undefined) updates.is_active = is_active
     if (social_networks !== undefined) updates.social_networks = social_networks
 
     const team = await updateTeamMember(id, updates)

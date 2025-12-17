@@ -47,6 +47,7 @@ import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "l
 interface CourseSeries {
   id: string
   category_id: string
+  franchise_id?: string | null
   name: string
   display_name: string
   description?: string
@@ -64,10 +65,19 @@ interface CourseCategory {
   display_name: string
 }
 
+interface Franchise {
+  id: string
+  code: string
+  name: string
+  is_active: boolean
+}
+
 export default function SeriesManagementPage() {
   const [series, setSeries] = useState<CourseSeries[]>([])
   const [filteredSeries, setFilteredSeries] = useState<CourseSeries[]>([])
   const [categories, setCategories] = useState<CourseCategory[]>([])
+  const [franchises, setFranchises] = useState<Franchise[]>([])
+  const [selectedFranchiseFilter, setSelectedFranchiseFilter] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [editingSeries, setEditingSeries] = useState<CourseSeries | null>(null)
@@ -77,6 +87,7 @@ export default function SeriesManagementPage() {
 
   const [formData, setFormData] = useState<Omit<CourseSeries, 'id' | 'created_at' | 'updated_at'>>({
     category_id: "",
+    franchise_id: undefined,
     name: "",
     display_name: "",
     description: "",
@@ -89,27 +100,39 @@ export default function SeriesManagementPage() {
   useEffect(() => {
     fetchSeries()
     fetchCategories()
+    fetchFranchises()
   }, [])
 
   useEffect(() => {
-    if (searchQuery) {
-      const filtered = series.filter(
-        (s) =>
-          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.description?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      setFilteredSeries(filtered)
-    } else {
-      setFilteredSeries(series)
+    let base = [...series]
+
+    if (selectedFranchiseFilter !== "all") {
+      base = base.filter((s) => s.franchise_id === selectedFranchiseFilter)
     }
-  }, [searchQuery, series])
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      base = base.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.display_name.toLowerCase().includes(q) ||
+          s.description?.toLowerCase().includes(q)
+      )
+    }
+
+    setFilteredSeries(base)
+  }, [searchQuery, series, selectedFranchiseFilter])
 
   const fetchSeries = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch("/api/admin/series")
+      const params = new URLSearchParams()
+      if (selectedFranchiseFilter !== "all") {
+        params.set("franchiseId", selectedFranchiseFilter)
+      }
+      const query = params.toString()
+      const response = await fetch(`/api/admin/series${query ? `?${query}` : ""}`)
       
       if (!response.ok) {
         throw new Error("Failed to fetch series")
@@ -135,6 +158,18 @@ export default function SeriesManagementPage() {
       }
     } catch (error) {
       console.error("Error fetching categories:", error)
+    }
+  }
+
+  const fetchFranchises = async () => {
+    try {
+      const response = await fetch("/api/admin/franchises")
+      if (response.ok) {
+        const data = await response.json()
+        setFranchises(data)
+      }
+    } catch (error) {
+      console.error("Error fetching franchises:", error)
     }
   }
 
@@ -164,6 +199,7 @@ export default function SeriesManagementPage() {
     setEditingSeries(s)
     setFormData({
       category_id: s.category_id,
+      franchise_id: s.franchise_id || undefined,
       name: s.name,
       display_name: s.display_name,
       description: s.description || "",
@@ -179,6 +215,7 @@ export default function SeriesManagementPage() {
     setEditingSeries(null)
     setFormData({
       category_id: "",
+      franchise_id: undefined,
       name: "",
       display_name: "",
       description: "",
@@ -205,7 +242,10 @@ export default function SeriesManagementPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          franchise_id: formData.franchise_id || undefined,
+        }),
       })
 
       if (response.ok) {
@@ -229,6 +269,12 @@ export default function SeriesManagementPage() {
     return category?.display_name || "Unknown"
   }
 
+  const getFranchiseName = (franchiseId?: string | null) => {
+    if (!franchiseId) return "Global / Unassigned"
+    const f = franchises.find((fr) => fr.id === franchiseId)
+    return f ? f.name || f.code : "Unknown"
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -240,37 +286,53 @@ export default function SeriesManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Series Management</h1>
+        <h1 className="text-3xl font-bold">Series / Programs Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage course series (e.g., "2025 Winter Courses")
+          Manage course series / programs (e.g., "2025 Winter Courses") per franchise.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Series</CardTitle>
-              <CardDescription>
-                A list of all course series in the system
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search series..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Series</CardTitle>
+                <CardDescription>
+                  A list of all course series / programs in the system
+                </CardDescription>
               </div>
-              <Button onClick={handleAdd}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Series
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search series..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 w-64"
+                  />
+                </div>
+                <Select
+                  value={selectedFranchiseFilter}
+                  onValueChange={setSelectedFranchiseFilter}
+                >
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="All franchises" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All franchises</SelectItem>
+                    {franchises.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.name} ({f.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleAdd}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Series
+                </Button>
+              </div>
             </div>
-          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -296,6 +358,7 @@ export default function SeriesManagementPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Display Name</TableHead>
+                    <TableHead>Franchise</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Date Range</TableHead>
                     <TableHead>Order</TableHead>
@@ -309,6 +372,7 @@ export default function SeriesManagementPage() {
                     <TableRow key={s.id}>
                       <TableCell className="font-medium">{s.name}</TableCell>
                       <TableCell>{s.display_name}</TableCell>
+                      <TableCell>{getFranchiseName(s.franchise_id)}</TableCell>
                       <TableCell>{getCategoryName(s.category_id)}</TableCell>
                       <TableCell>
                         {s.start_date && s.end_date
@@ -377,6 +441,30 @@ export default function SeriesManagementPage() {
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                       {category.display_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="franchise_id">Franchise</Label>
+              <Select
+                value={formData.franchise_id || ""}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    franchise_id: value || undefined,
+                  })
+                }
+              >
+                <SelectTrigger id="franchise_id">
+                  <SelectValue placeholder="Select a franchise (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {franchises.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name} ({f.code})
                     </SelectItem>
                   ))}
                 </SelectContent>

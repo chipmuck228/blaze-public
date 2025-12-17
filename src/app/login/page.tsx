@@ -53,11 +53,34 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
+    setError("")
     try {
-      await signIn("google", { callbackUrl: "/" })
-    } catch (error) {
+      const result = await signIn("google", { 
+        callbackUrl: "/",
+        redirect: false 
+      })
+      
+      if (result?.error) {
+        console.error("Google sign in error:", result.error)
+        setError(`Google login failed: ${result.error}. Please check server logs for more details.`)
+        setIsLoading(false)
+      } else if (result?.ok) {
+        // 登录成功，手动重定向
+        router.push("/")
+        router.refresh()
+      } else {
+        // 如果 signIn 返回 URL，说明需要重定向到 Google
+        if (result?.url) {
+          window.location.href = result.url
+        } else {
+          setError("Unexpected response from Google login. Please try again.")
+          setIsLoading(false)
+        }
+      }
+    } catch (error: any) {
+      console.error("Google login exception:", error)
       setIsLoading(false)
-      setError("Google login failed, please try again later")
+      setError(`Google login failed: ${error?.message || "Unknown error"}. Please check server logs.`)
     }
   }
 

@@ -22,6 +22,10 @@ CREATE POLICY "Service can select users" ON users
 CREATE POLICY "Service can update users" ON users
   FOR UPDATE USING (true);
 
+-- 允许服务端删除用户（用于 Admin 管理）
+CREATE POLICY "Service can delete users" ON users
+  FOR DELETE USING (true);
+
 -- 允许用户查看自己的数据
 CREATE POLICY "Users can view own data" ON users
   FOR SELECT USING (auth.uid() = id);

@@ -101,12 +101,30 @@ export const Courses = () => {
   const [isLoadingInstances, setIsLoadingInstances] = useState(false);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [franchiseCode, setFranchiseCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 从 URL 路径推断当前 franchise（仅作简单匹配，未来可用全局上下文）
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      if (path.startsWith('/locations/bellevue')) setFranchiseCode('bellevue');
+      else if (path.startsWith('/locations/belred')) setFranchiseCode('belred');
+      else if (path.startsWith('/locations/issaquah')) setFranchiseCode('issaquah');
+      else if (path.startsWith('/locations/cherrycrest')) setFranchiseCode('cherrycrest');
+      else setFranchiseCode(null);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchCourses = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/courses/featured');
+        const params = new URLSearchParams();
+        if (franchiseCode) {
+          params.set('franchise', franchiseCode);
+        }
+        const query = params.toString();
+        const response = await fetch(`/api/courses/featured${query ? `?${query}` : ''}`);
         if (!response.ok) {
           throw new Error('Failed to fetch courses');
         }
@@ -157,7 +175,14 @@ export const Courses = () => {
     setSelectedInstanceId(null);
 
     try {
-      const response = await fetch(`/api/courses/${courseId}/instances`);
+      const params = new URLSearchParams();
+      if (franchiseCode) {
+        params.set("franchise", franchiseCode);
+      }
+      const query = params.toString();
+      const response = await fetch(
+        `/api/courses/${courseId}/instances${query ? `?${query}` : ""}`
+      );
       if (response.ok) {
         const instances = await response.json();
         setCourseInstances(instances);

@@ -20,8 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2, Plus, X } from "lucide-react"
-import { Card } from "@/components/ui/card"
+import { Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 
@@ -40,6 +39,7 @@ interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
+  status?: 'draft' | 'published' | 'suspended' | 'archived'
   tags?: Array<{ id: string; name: string; display_name: string }>
 }
 
@@ -65,7 +65,22 @@ export function CourseEditDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [subcategories, setSubcategories] = useState<CourseSubcategory[]>([])
   const [selectedSubcategoryIds, setSelectedSubcategoryIds] = useState<string[]>([])
-  const [targetGrades, setTargetGrades] = useState<string[]>([])
+  const [targetGradesInput, setTargetGradesInput] = useState<string>("")
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
+  const [statusChangeCheck, setStatusChangeCheck] = useState<{
+    showDialog: boolean
+    newStatus: 'draft' | 'published' | 'suspended' | 'archived' | null
+    warnings: string[]
+    activeInstances: number
+    activeEnrollments: number
+  }>({
+    showDialog: false,
+    newStatus: null,
+    warnings: [],
+    activeInstances: 0,
+    activeEnrollments: 0,
+  })
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false)
 
   const [formData, setFormData] = useState<Omit<Course, 'tags'>>({
     name: "",
@@ -81,6 +96,7 @@ export function CourseEditDialog({
     target_grades: [],
     base_price: undefined,
     currency: "USD",
+    status: "draft",
   })
 
   useEffect(() => {
@@ -102,11 +118,14 @@ export function CourseEditDialog({
           target_grades: course.target_grades || [],
           base_price: course.base_price,
           currency: course.currency || "USD",
+          status: course.status || "draft",
         })
         setSelectedSubcategoryIds(course.tags?.map(t => t.id) || [])
-        setTargetGrades(course.target_grades || [])
+        setTargetGradesInput(course.target_grades?.join("; ") || "")
+        setSlugManuallyEdited(!!course.slug) // If course has slug, consider it manually edited
       } else {
         resetForm()
+        setSlugManuallyEdited(false) // New course, allow auto-generation
       }
     }
   }, [open, course])
@@ -138,9 +157,11 @@ export function CourseEditDialog({
       target_grades: [],
       base_price: undefined,
       currency: "USD",
+      status: "draft",
     })
     setSelectedSubcategoryIds([])
-    setTargetGrades([])
+    setTargetGradesInput("")
+    setSlugManuallyEdited(false)
   }
 
   const toggleSubcategory = (subcategoryId: string) => {
@@ -151,19 +172,73 @@ export function CourseEditDialog({
     )
   }
 
-  const addTargetGrade = () => {
-    setTargetGrades([...targetGrades, ""])
+  // Validate grade input - only allow grade-specific characters (K, numbers, -, ;, spaces, comma)
+  const validateGradeInput = (value: string): boolean => {
+    // Allow: K (case insensitive), numbers (0-9), hyphen (-), semicolon (;), comma (,), and spaces
+    const gradePattern = /^[K0-9\s\-;,]*$/i
+    return gradePattern.test(value)
   }
 
-  const removeTargetGrade = (index: number) => {
-    setTargetGrades(targetGrades.filter((_, i) => i !== index))
+  // Parse semicolon-separated grades string into array
+  const parseGrades = (input: string): string[] => {
+    if (!input.trim()) return []
+    return input
+      .split(";")
+      .map((g) => g.trim())
+      .filter((g) => g !== "")
   }
 
-  const updateTargetGrade = (index: number, value: string) => {
-    const updated = [...targetGrades]
-    updated[index] = value
-    setTargetGrades(updated)
-    setFormData({ ...formData, target_grades: updated.filter((g) => g.trim() !== "") })
+  // Handle target grades input change
+  const handleTargetGradesChange = (value: string) => {
+    // Validate input
+    if (!validateGradeInput(value)) {
+      return // Don't update if invalid characters
+    }
+    
+    setTargetGradesInput(value)
+    const parsedGrades = parseGrades(value)
+    
+    // Auto-generate slug when grade changes (only if not manually edited)
+    let newSlug = formData.slug || ""
+    if (formData.name && !slugManuallyEdited && parsedGrades.length > 0) {
+      newSlug = generateSlug(formData.name, parsedGrades)
+    }
+    
+    // Update both target_grades and slug in a single state update
+    setFormData({ ...formData, target_grades: parsedGrades, slug: newSlug })
+  }
+
+  // Function to generate slug from name and grades (returns slug string, doesn't update state)
+  const generateSlug = (name: string, grades: string[]): string => {
+    if (!name) return ""
+    
+    // Combine name and all grades
+    let slugParts: string[] = [name]
+    
+    // Add all grades if available
+    if (grades.length > 0) {
+      const validGrades = grades
+        .map((g) => g.trim())
+        .filter((g) => g !== "")
+      if (validGrades.length > 0) {
+        // Join all grades with a space, they will be converted to hyphens later
+        slugParts.push(validGrades.join(" "))
+      }
+    }
+    
+    // Join all parts and convert to slug format
+    const combined = slugParts.join(" ")
+    
+    // Convert to slug: lowercase, replace spaces with hyphens, remove special characters
+    const slug = combined
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")  // Replace spaces with hyphens
+      .replace(/[^a-z0-9-]/g, "")  // Remove special characters except hyphens
+      .replace(/-+/g, "-")  // Replace multiple hyphens with single hyphen
+      .replace(/^-|-$/g, "")  // Remove leading/trailing hyphens
+    
+    return slug
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -173,7 +248,7 @@ export function CourseEditDialog({
     try {
       const submitData = {
         ...formData,
-        target_grades: targetGrades.filter((g) => g.trim() !== ""),
+        target_grades: parseGrades(targetGradesInput),
         subcategory_ids: selectedSubcategoryIds,
       }
 
@@ -204,9 +279,86 @@ export function CourseEditDialog({
     }
   }
 
+  const handleStatusChangeConfirm = () => {
+    if (statusChangeCheck.newStatus) {
+      setFormData({ ...formData, status: statusChangeCheck.newStatus })
+      setStatusChangeCheck({
+        showDialog: false,
+        newStatus: null,
+        warnings: [],
+        activeInstances: 0,
+        activeEnrollments: 0,
+      })
+    }
+  }
+
+  const handleStatusChangeCancel = () => {
+    setStatusChangeCheck({
+      showDialog: false,
+      newStatus: null,
+      warnings: [],
+      activeInstances: 0,
+      activeEnrollments: 0,
+    })
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+    <>
+      {/* Status Change Confirmation Dialog */}
+      <Dialog open={statusChangeCheck.showDialog} onOpenChange={handleStatusChangeCancel}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Confirm Status Change</DialogTitle>
+            <DialogDescription>
+              You are about to change the course status from <strong>Published</strong> to <strong>
+                {statusChangeCheck.newStatus === 'suspended' ? 'Suspended' : 'Archived'}
+              </strong>. This action will have the following impacts:
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 py-4">
+            {statusChangeCheck.warnings.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Warnings:</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  {statusChangeCheck.warnings.map((warning, index) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {statusChangeCheck.activeInstances > 0 && (
+              <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  {statusChangeCheck.activeInstances} active instance(s) will be affected
+                </p>
+              </div>
+            )}
+            
+            {statusChangeCheck.activeEnrollments > 0 && (
+              <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  {statusChangeCheck.activeEnrollments} active enrollment(s) will be affected
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleStatusChangeCancel}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleStatusChangeConfirm}>
+              Confirm Change
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Main Course Edit Dialog */}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{course ? "Edit Course" : "Add New Course"}</DialogTitle>
           <DialogDescription>
@@ -221,7 +373,23 @@ export function CourseEditDialog({
             <Input
               id="name"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => {
+                const newName = e.target.value
+                // Calculate new slug if not manually edited
+                let newSlug = formData.slug || ""
+                if (!slugManuallyEdited) {
+                  const parsedGrades = parseGrades(targetGradesInput)
+                  if (newName && parsedGrades.length > 0 && parsedGrades[0].trim()) {
+                    newSlug = generateSlug(newName, parsedGrades)
+                  } else if (newName) {
+                    newSlug = generateSlug(newName, [])
+                  } else {
+                    newSlug = ""
+                  }
+                }
+                // Update both name and slug in a single state update
+                setFormData({ ...formData, name: newName, slug: newSlug })
+              }}
               placeholder="e.g., Introduction to Robotics with VEX GO"
               required
             />
@@ -229,13 +397,19 @@ export function CourseEditDialog({
 
           {/* Slug */}
           <div className="space-y-2">
-            <Label htmlFor="slug">Slug</Label>
+            <Label htmlFor="slug">Slug (Auto-generated from name and grade)</Label>
             <Input
               id="slug"
               value={formData.slug || ""}
-              onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-              placeholder="e.g., intro-robotics-vex-go"
+              onChange={(e) => {
+                setFormData({ ...formData, slug: e.target.value })
+                setSlugManuallyEdited(true) // Mark as manually edited when user types
+              }}
+              placeholder="e.g., introduction-to-robotics-with-vex-go-k-2"
             />
+            <p className="text-xs text-muted-foreground">
+              Automatically generated from course name and first target grade. You can manually edit if needed.
+            </p>
           </div>
 
           {/* Subcategory Tags (Multi-select) */}
@@ -345,41 +519,16 @@ export function CourseEditDialog({
 
           {/* Target Grades */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Target Grades</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addTargetGrade}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Grade
-              </Button>
-            </div>
-            {targetGrades.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-2">
-                No grades added. Click 'Add Grade' to add one.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {targetGrades.map((grade, index) => (
-                  <Card key={index} className="p-2">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={grade}
-                        onChange={(e) => updateTargetGrade(index, e.target.value)}
-                        placeholder="e.g., K-2, 3-4"
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeTargetGrade(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <Label htmlFor="targetGrades">Target Grades</Label>
+            <Input
+              id="targetGrades"
+              value={targetGradesInput}
+              onChange={(e) => handleTargetGradesChange(e.target.value)}
+              placeholder="e.g., K-2; 3-5; 6 (use semicolon to separate multiple grades)"
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter grades separated by semicolons (;). Only grade-specific characters allowed (K, numbers, -, ;). Example: K-2; 3-5; 6
+            </p>
           </div>
 
           {/* Price */}
@@ -417,6 +566,65 @@ export function CourseEditDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Course Status */}
+          <div className="space-y-2">
+            <Label htmlFor="status">Course Status *</Label>
+            <Select
+              value={formData.status || "draft"}
+              onValueChange={async (value: 'draft' | 'published' | 'suspended' | 'archived') => {
+                const currentStatus = course?.status || formData.status || 'draft'
+                
+                // 如果是从 published 改为 suspended 或 archived，需要检查
+                if (currentStatus === 'published' && (value === 'suspended' || value === 'archived')) {
+                  if (course?.id) {
+                    setIsCheckingStatus(true)
+                    try {
+                      const response = await fetch(
+                        `/api/admin/courses/${course.id}/check-status-change?newStatus=${value}`
+                      )
+                      if (response.ok) {
+                        const data = await response.json()
+                        if (data.warnings && data.warnings.length > 0) {
+                          // 显示确认对话框
+                          setStatusChangeCheck({
+                            showDialog: true,
+                            newStatus: value,
+                            warnings: data.warnings,
+                            activeInstances: data.activeInstances || 0,
+                            activeEnrollments: data.activeEnrollments || 0,
+                          })
+                          return // 不立即更新状态，等待用户确认
+                        }
+                      }
+                    } catch (error) {
+                      console.error("Error checking status change:", error)
+                    } finally {
+                      setIsCheckingStatus(false)
+                    }
+                  }
+                }
+                
+                // 其他情况直接更新状态
+                setFormData({ ...formData, status: value })
+              }}
+              disabled={isCheckingStatus}
+            >
+              <SelectTrigger>
+                <SelectValue />
+                {isCheckingStatus && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft (草稿)</SelectItem>
+                <SelectItem value="published">Published (已发布)</SelectItem>
+                <SelectItem value="suspended">Suspended (暂停)</SelectItem>
+                <SelectItem value="archived">Archived (已归档)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Draft: 正在设计中，不能分配。 Published: 可以分配和上架。 Suspended: 临时下架。 Archived: 已归档。
+            </p>
           </div>
 
           {/* Target Audience */}
@@ -489,5 +697,6 @@ export function CourseEditDialog({
         </form>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

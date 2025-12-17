@@ -131,11 +131,12 @@ export default function EnrollmentsManagementPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [franchiseFilter, setFranchiseFilter] = useState<string>("all")
 
   useEffect(() => {
     fetchEnrollments()
     fetchStats()
-  }, [])
+  }, [franchiseFilter])
 
   useEffect(() => {
     applyFilters()
@@ -144,7 +145,13 @@ export default function EnrollmentsManagementPage() {
   const fetchEnrollments = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch("/api/admin/enrollments?limit=100")
+      const params = new URLSearchParams()
+      params.set("limit", "100")
+      if (franchiseFilter !== "all") {
+        params.set("franchise", franchiseFilter)
+      }
+      const query = params.toString()
+      const response = await fetch(`/api/admin/enrollments?${query}`)
       if (response.ok) {
         const data = await response.json()
         setEnrollments(data.enrollments || [])
@@ -158,7 +165,12 @@ export default function EnrollmentsManagementPage() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch("/api/admin/enrollments/stats")
+      const params = new URLSearchParams()
+      if (franchiseFilter !== "all") {
+        params.set("franchise", franchiseFilter)
+      }
+      const query = params.toString()
+      const response = await fetch(`/api/admin/enrollments/stats${query ? `?${query}` : ""}`)
       if (response.ok) {
         const data = await response.json()
         setStats(data)
@@ -367,29 +379,46 @@ export default function EnrollmentsManagementPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle>Enrollments</CardTitle>
               <CardDescription>
                 A list of all enrollments in the system
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by user or course..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by user or course..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 w-64"
+                  />
+                </div>
+                <Select
+                  value={franchiseFilter}
+                  onValueChange={setFranchiseFilter}
+                >
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="All franchises" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All franchises</SelectItem>
+                    <SelectItem value="bellevue">Bellevue</SelectItem>
+                    <SelectItem value="belred">Bel-Red</SelectItem>
+                    <SelectItem value="issaquah">Issaquah</SelectItem>
+                    <SelectItem value="cherrycrest">Cherry Crest</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           {/* 筛选器 */}
-          <div className="flex gap-4 mb-4">
+          <div className="flex gap-4 mb-4 flex-wrap items-center">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by status" />

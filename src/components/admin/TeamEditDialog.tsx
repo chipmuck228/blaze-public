@@ -13,20 +13,42 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { X, Plus, Upload, Loader2 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 
 interface TeamMember {
   id: string
+  user_id?: string | null
   image_url: string
   name: string
   position: string
   description: string
+  bio?: string
   display_order: number
+  is_featured?: boolean
+  is_active?: boolean
   social_networks: Array<{
     id: string
     name: string
     url: string
     display_order: number
   }>
+  user?: {
+    id: string
+    name: string
+    email: string
+    image?: string
+    role: string
+  }
+}
+
+interface Coach {
+  id: string
+  name: string
+  email: string
+  image?: string
+  role: string
 }
 
 interface TeamEditDialogProps {
@@ -34,6 +56,7 @@ interface TeamEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onTeamUpdated: () => void
+  prefilledUserId?: string  // 从 User Management 跳转时预填充的 user_id
 }
 
 export function TeamEditDialog({
@@ -41,28 +64,78 @@ export function TeamEditDialog({
   open,
   onOpenChange,
   onTeamUpdated,
+  prefilledUserId,
 }: TeamEditDialogProps) {
+  const [userId, setUserId] = useState<string>("")
+  const [coaches, setCoaches] = useState<Coach[]>([])
   const [imageUrl, setImageUrl] = useState("")
   const [name, setName] = useState("")
   const [position, setPosition] = useState("")
   const [description, setDescription] = useState("")
+  const [bio, setBio] = useState("")
   const [displayOrder, setDisplayOrder] = useState(0)
+  const [isFeatured, setIsFeatured] = useState(false)
+  const [isActive, setIsActive] = useState(true)
   const [socialNetworks, setSocialNetworks] = useState<Array<{ name: string; url: string; display_order: number }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isLoadingCoaches, setIsLoadingCoaches] = useState(false)
   const [error, setError] = useState("")
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // 获取 coach 用户列表
+  useEffect(() => {
+    if (open) {
+      fetchCoaches()
+    }
+  }, [open])
+
+  const fetchCoaches = async () => {
+    try {
+      setIsLoadingCoaches(true)
+      const response = await fetch("/api/admin/users/coaches")
+      if (response.ok) {
+        const data = await response.json()
+        setCoaches(data)
+      }
+    } catch (error) {
+      console.error("Error fetching coaches:", error)
+    } finally {
+      setIsLoadingCoaches(false)
+    }
+  }
+
+  // 当选择 user_id 时，自动填充 name 和 image
+  useEffect(() => {
+    if (userId && coaches.length > 0) {
+      const selectedCoach = coaches.find(c => c.id === userId)
+      if (selectedCoach) {
+        if (!team) {
+          // 新建模式：自动填充
+          setName(selectedCoach.name || "")
+          if (selectedCoach.image) {
+            setImageUrl(selectedCoach.image)
+            setPreviewUrl(selectedCoach.image)
+          }
+        }
+      }
+    }
+  }, [userId, coaches, team])
 
   useEffect(() => {
     if (open) {
       if (team) {
         // 编辑模式
-        setImageUrl(team.image_url || "")
-        setPreviewUrl(team.image_url || null)
-        setName(team.name || "")
+        setUserId(team.user_id || "")
+        setImageUrl(team.image_url || team.user?.image || "")
+        setPreviewUrl(team.image_url || team.user?.image || null)
+        setName(team.name || team.user?.name || "")
         setPosition(team.position || "")
         setDescription(team.description || "")
+        setBio(team.bio || "")
         setDisplayOrder(team.display_order || 0)
+        setIsFeatured(team.is_featured ?? false)
+        setIsActive(team.is_active ?? true)
         setSocialNetworks(
           team.social_networks.map(sn => ({
             name: sn.name || "",
@@ -72,19 +145,23 @@ export function TeamEditDialog({
         )
       } else {
         // 新建模式 - 清空所有字段
+        setUserId(prefilledUserId || "")
         setImageUrl("")
         setPreviewUrl(null)
         setName("")
         setPosition("")
         setDescription("")
+        setBio("")
         setDisplayOrder(0)
+        setIsFeatured(false)
+        setIsActive(true)
         setSocialNetworks([])
       }
       setError("")
       setIsLoading(false)
       setIsUploading(false)
     }
-  }, [open, team])
+  }, [open, team, prefilledUserId])
 
   // 清理预览 URL
   useEffect(() => {
@@ -166,8 +243,15 @@ export function TeamEditDialog({
   }
 
   const handleSave = async () => {
-    if (!imageUrl || !name || !position || !description) {
-      setError("Please fill in all required fields")
+    // 验证必填字段
+    if (!position || !description) {
+      setError("Please fill in all required fields (Position and Description)")
+      return
+    }
+
+    // 如果没有 user_id，name 和 image_url 是必需的（向后兼容）
+    if (!userId && (!name || !imageUrl)) {
+      setError("Please either select a Coach user or provide Name and Avatar Image")
       return
     }
 
@@ -178,19 +262,36 @@ export function TeamEditDialog({
       const url = team ? `/api/admin/teams/${team.id}` : "/api/admin/teams"
       const method = team ? "PATCH" : "POST"
 
+      const payload: any = {
+        position,
+        description,
+        display_order: displayOrder,
+        is_featured: isFeatured,
+        is_active: isActive,
+        social_networks: socialNetworks.filter(sn => sn.name && sn.url),
+      }
+
+      // 如果提供了 user_id，这些字段是可选的（会使用 Users 表的）
+      if (userId) {
+        payload.user_id = userId
+        if (name) payload.name = name
+        if (imageUrl) payload.image_url = imageUrl
+      } else {
+        // 向后兼容：如果没有 user_id，name 和 image_url 是必需的
+        payload.name = name
+        payload.image_url = imageUrl
+      }
+
+      if (bio) {
+        payload.bio = bio
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          image_url: imageUrl,
-          name,
-          position,
-          description,
-          display_order: displayOrder,
-          social_networks: socialNetworks.filter(sn => sn.name && sn.url),
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -221,17 +322,55 @@ export function TeamEditDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="user_id">
+              Coach User <span className="text-muted-foreground">(Optional but recommended)</span>
+            </Label>
+            <Select
+              value={userId || "__none__"}
+              onValueChange={(value) => setUserId(value === "__none__" ? "" : value)}
+              disabled={isLoadingCoaches || !!team?.user_id}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={isLoadingCoaches ? "Loading coaches..." : "Select a coach user"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None (Manual Entry)</SelectItem>
+                {coaches
+                  .filter((coach: any) => {
+                    // 编辑模式：显示所有 coach（包括当前选中的）
+                    if (team) {
+                      return coach.id === team.user_id || !coach.has_team_profile
+                    }
+                    // 创建模式：只显示没有 Teams 记录的用户
+                    return !coach.has_team_profile
+                  })
+                  .map((coach) => (
+                    <SelectItem key={coach.id} value={coach.id}>
+                      {coach.name} ({coach.email})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {team?.user_id 
+                ? "User cannot be changed after creation. Edit user information in User Management."
+                : "Selecting a coach user will auto-fill name and avatar. Leave empty to enter manually."}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">
-                Name <span className="text-destructive">*</span>
+                Name {!userId && <span className="text-destructive">*</span>}
               </Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter team member name"
-                required
+                placeholder={userId ? "Auto-filled from user" : "Enter team member name"}
+                disabled={!!userId && !team}
+                required={!userId}
               />
             </div>
             <div className="space-y-2">
@@ -250,7 +389,7 @@ export function TeamEditDialog({
 
           <div className="space-y-2">
             <Label htmlFor="avatar_upload">
-              Avatar Image <span className="text-destructive">*</span>
+              Avatar Image {!userId && <span className="text-destructive">*</span>}
             </Label>
             <div className="flex flex-col gap-4">
               {previewUrl && (
@@ -290,15 +429,53 @@ export function TeamEditDialog({
             <Label htmlFor="description">
               Description <span className="text-destructive">*</span>
             </Label>
-            <textarea
+            <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter a brief description of the team member..."
-              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               rows={4}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bio">
+              Bio <span className="text-muted-foreground">(Optional)</span>
+            </Label>
+            <Textarea
+              id="bio"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="Enter a detailed biography (optional)..."
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground">
+              Detailed personal biography. This will be displayed on the team member's profile page.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="is_featured"
+                checked={isFeatured}
+                onCheckedChange={(checked) => setIsFeatured(checked === true)}
+              />
+              <Label htmlFor="is_featured" className="cursor-pointer">
+                Featured on Homepage
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="is_active"
+                checked={isActive}
+                onCheckedChange={(checked) => setIsActive(checked === true)}
+              />
+              <Label htmlFor="is_active" className="cursor-pointer">
+                Active
+              </Label>
+            </div>
           </div>
 
           <div className="space-y-2">

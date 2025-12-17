@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -26,24 +27,37 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2 } from "lucide-react"
 import { TeamEditDialog } from "@/components/admin/TeamEditDialog"
+import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 
 interface TeamMember {
   id: string
+  user_id?: string | null
   image_url: string
   name: string
   position: string
   description: string
+  bio?: string
   display_order: number
+  is_featured?: boolean
+  is_active?: boolean
   social_networks: Array<{
     id: string
     name: string
     url: string
     display_order: number
   }>
+  user?: {
+    id: string
+    name: string
+    email: string
+    image?: string
+    role: string
+  }
 }
 
-export default function TeamsManagementPage() {
+function TeamsManagementPageContent() {
+  const searchParams = useSearchParams()
   const [teams, setTeams] = useState<TeamMember[]>([])
   const [filteredTeams, setFilteredTeams] = useState<TeamMember[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -51,10 +65,31 @@ export default function TeamsManagementPage() {
   const [editingTeam, setEditingTeam] = useState<TeamMember | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [prefilledUserId, setPrefilledUserId] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     fetchTeams()
   }, [])
+
+  useEffect(() => {
+    // 检查 URL 参数
+    const editId = searchParams.get('edit')
+    const create = searchParams.get('create')
+    const userId = searchParams.get('user_id')
+    
+    if (editId && teams.length > 0) {
+      // 编辑模式：找到对应的 team 并打开编辑对话框
+      const team = teams.find(t => t.id === editId)
+      if (team) {
+        setEditingTeam(team)
+        setIsEditDialogOpen(true)
+      }
+    } else if (create && userId) {
+      // 创建模式：预填充 user_id
+      setPrefilledUserId(userId)
+      setIsAddDialogOpen(true)
+    }
+  }, [searchParams, teams])
 
   useEffect(() => {
     if (searchQuery) {
@@ -177,8 +212,10 @@ export default function TeamsManagementPage() {
                 <TableRow>
                   <TableHead>Image</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>User</TableHead>
                   <TableHead>Position</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Social Networks</TableHead>
                   <TableHead>Order</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -198,9 +235,29 @@ export default function TeamsManagementPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{team.name}</TableCell>
+                    <TableCell>
+                      {team.user ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium">{team.user.name}</span>
+                          <span className="text-xs text-muted-foreground">{team.user.email}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">No user linked</span>
+                      )}
+                    </TableCell>
                     <TableCell>{team.position}</TableCell>
                     <TableCell className="max-w-xs truncate">
                       {team.description}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {team.is_featured && (
+                          <Badge variant="default" className="w-fit">Featured</Badge>
+                        )}
+                        {!team.is_active && (
+                          <Badge variant="secondary" className="w-fit">Inactive</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
@@ -257,8 +314,17 @@ export default function TeamsManagementPage() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onTeamUpdated={handleTeamUpdated}
+        prefilledUserId={prefilledUserId}
       />
     </div>
+  )
+}
+
+export default function TeamsManagementPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading...</div>}>
+      <TeamsManagementPageContent />
+    </Suspense>
   )
 }
 

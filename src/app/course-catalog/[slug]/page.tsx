@@ -35,6 +35,13 @@ export async function generateMetadata({
     };
   }
 
+  // 公开页面只显示 published 状态的课程
+  if (course.status !== 'published') {
+    return {
+      title: "Course Not Found",
+    };
+  }
+
   return {
     title: course.name,
     description: course.description || `Learn more about ${course.name}`,
@@ -64,6 +71,11 @@ export default async function CourseDetailPage({
     : await getCourseWithDetailsBySlug(slug);
 
   if (!course) {
+    notFound();
+  }
+
+  // 公开页面只显示 published 状态的课程
+  if (course.status !== 'published') {
     notFound();
   }
 

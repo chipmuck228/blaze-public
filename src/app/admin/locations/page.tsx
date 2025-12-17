@@ -35,6 +35,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, MapPin } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface CourseLocation {
   id: string
@@ -45,9 +52,17 @@ interface CourseLocation {
   zip_code?: string
   phone?: string
   email?: string
+  franchise_id?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+interface Franchise {
+  id: string
+  code: string
+  name: string
+  is_active: boolean
 }
 
 export default function LocationsManagementPage() {
@@ -59,6 +74,8 @@ export default function LocationsManagementPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [franchises, setFranchises] = useState<Franchise[]>([])
+  const [isLoadingFranchises, setIsLoadingFranchises] = useState(true)
 
   const [formData, setFormData] = useState<Omit<CourseLocation, 'id' | 'created_at' | 'updated_at'>>({
     name: "",
@@ -68,11 +85,13 @@ export default function LocationsManagementPage() {
     zip_code: "",
     phone: "",
     email: "",
+    franchise_id: undefined,
     is_active: true,
   })
 
   useEffect(() => {
     fetchLocations()
+    fetchFranchises()
   }, [])
 
   useEffect(() => {
@@ -111,8 +130,24 @@ export default function LocationsManagementPage() {
     }
   }
 
+  const fetchFranchises = async () => {
+    try {
+      setIsLoadingFranchises(true)
+      const response = await fetch("/api/admin/franchises")
+      if (!response.ok) {
+        throw new Error("Failed to fetch franchises")
+      }
+      const data = await response.json()
+      setFranchises(data || [])
+    } catch (err) {
+      console.error("Error fetching franchises:", err)
+    } finally {
+      setIsLoadingFranchises(false)
+    }
+  }
+
   const handleDelete = async (locationId: string) => {
-    if (!confirm("Are you sure you want to delete this location? This will fail if there are existing assignments or instances using it.")) {
+    if (!confirm("Are you sure you want to delete this campus? This will fail if there are existing assignments or instances using it.")) {
       return
     }
 
@@ -125,11 +160,11 @@ export default function LocationsManagementPage() {
         fetchLocations()
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete location")
+        alert(data.error || "Failed to delete campus")
       }
     } catch (error) {
-      console.error("Error deleting location:", error)
-      alert("Failed to delete location")
+      console.error("Error deleting campus:", error)
+      alert("Failed to delete campus")
     }
   }
 
@@ -143,6 +178,7 @@ export default function LocationsManagementPage() {
       zip_code: location.zip_code || "",
       phone: location.phone || "",
       email: location.email || "",
+      franchise_id: location.franchise_id || undefined,
       is_active: location.is_active,
     })
     setIsEditDialogOpen(true)
@@ -158,6 +194,7 @@ export default function LocationsManagementPage() {
       zip_code: "",
       phone: "",
       email: "",
+      franchise_id: undefined,
       is_active: true,
     })
     setIsEditDialogOpen(true)
@@ -176,6 +213,7 @@ export default function LocationsManagementPage() {
         zip_code: formData.zip_code || undefined,
         phone: formData.phone || undefined,
         email: formData.email || undefined,
+        franchise_id: formData.franchise_id || undefined,
       }
 
       const url = editingLocation
@@ -197,11 +235,11 @@ export default function LocationsManagementPage() {
         setEditingLocation(null)
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to save location")
+        alert(error.error || "Failed to save campus")
       }
     } catch (error) {
-      console.error("Error saving location:", error)
-      alert("Failed to save location")
+      console.error("Error saving campus:", error)
+      alert("Failed to save campus")
     } finally {
       setIsSubmitting(false)
     }
@@ -224,12 +262,19 @@ export default function LocationsManagementPage() {
     return parts.length > 0 ? parts.join(", ") : "N/A"
   }
 
+  const getFranchiseLabel = (location: CourseLocation) => {
+    if (!location.franchise_id) return "N/A"
+    const f = franchises.find(fr => fr.id === location.franchise_id)
+    if (!f) return "N/A"
+    return f.name || f.code
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Locations Management</h1>
+        <h1 className="text-3xl font-bold">Campuses Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage course locations (where courses are held)
+          Manage course campuses (where courses are held)
         </p>
       </div>
 
@@ -237,16 +282,16 @@ export default function LocationsManagementPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Locations</CardTitle>
+              <CardTitle>Campuses</CardTitle>
               <CardDescription>
-                A list of all course locations in the system
+                A list of all course campuses in the system
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search locations..."
+                  placeholder="Search campuses..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 w-64"
@@ -254,7 +299,7 @@ export default function LocationsManagementPage() {
               </div>
               <Button onClick={handleAdd}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Location
+                Add Campus
               </Button>
             </div>
           </div>
@@ -274,7 +319,7 @@ export default function LocationsManagementPage() {
             </div>
           ) : filteredLocations.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No locations found matching your search." : "No locations found."}
+              {searchQuery ? "No campuses found matching your search." : "No campuses found."}
             </div>
           ) : (
             <div className="rounded-md border">
@@ -285,6 +330,7 @@ export default function LocationsManagementPage() {
                     <TableHead>Address</TableHead>
                     <TableHead>City</TableHead>
                     <TableHead>State</TableHead>
+                    <TableHead>Franchise</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
@@ -301,6 +347,7 @@ export default function LocationsManagementPage() {
                       </TableCell>
                       <TableCell>{location.city || "N/A"}</TableCell>
                       <TableCell>{location.state || "N/A"}</TableCell>
+                      <TableCell>{getFranchiseLabel(location)}</TableCell>
                       <TableCell>{location.phone || "N/A"}</TableCell>
                       <TableCell className="max-w-[200px] truncate">
                         {location.email || "N/A"}
@@ -345,15 +392,15 @@ export default function LocationsManagementPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingLocation ? "Edit Location" : "Add New Location"}</DialogTitle>
+            <DialogTitle>{editingLocation ? "Edit Campus" : "Add New Campus"}</DialogTitle>
             <DialogDescription>
-              {editingLocation ? "Update location information" : "Create a new course location"}
+              {editingLocation ? "Update campus information" : "Create a new course campus"}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Location Name *</Label>
+              <Label htmlFor="name">Campus Name *</Label>
               <Input
                 id="name"
                 value={formData.name}
@@ -393,6 +440,30 @@ export default function LocationsManagementPage() {
                   placeholder="e.g., NY"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="franchise">Franchise</Label>
+              <Select
+                value={formData.franchise_id || ""}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    franchise_id: value || undefined,
+                  })
+                }
+              >
+                <SelectTrigger id="franchise">
+                  <SelectValue placeholder={isLoadingFranchises ? "Loading..." : "Select a franchise"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {franchises.map((franchise) => (
+                    <SelectItem key={franchise.id} value={franchise.id}>
+                      {franchise.name} ({franchise.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -439,9 +510,9 @@ export default function LocationsManagementPage() {
                     Saving...
                   </>
                 ) : editingLocation ? (
-                  "Update Location"
+                  "Update Campus"
                 ) : (
-                  "Create Location"
+                  "Create Campus"
                 )}
               </Button>
             </DialogFooter>

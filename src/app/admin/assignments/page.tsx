@@ -41,7 +41,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar as CalendarIcon, Copy } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { BatchCreateInstanceDialog } from "@/components/admin/BatchCreateInstanceDialog"
 
 interface CourseAssignment {
   id: string
@@ -53,7 +55,13 @@ interface CourseAssignment {
   is_active: boolean
   created_at: string
   updated_at: string
-  course?: { id: string; name: string }
+  course?: { 
+    id: string
+    name: string
+    slug?: string
+    target_grades?: string[]
+    status?: 'draft' | 'published' | 'suspended' | 'archived'
+  }
   category?: { id: string; display_name: string }
   series?: { id: string; display_name: string }
   location?: { id: string; name: string }
@@ -62,6 +70,9 @@ interface CourseAssignment {
 interface Course {
   id: string
   name: string
+  slug?: string
+  target_grades?: string[]
+  status?: 'draft' | 'published' | 'suspended' | 'archived'
 }
 
 interface CourseCategory {
@@ -81,6 +92,7 @@ interface CourseLocation {
 }
 
 export default function AssignmentsManagementPage() {
+  const router = useRouter()
   const [assignments, setAssignments] = useState<CourseAssignment[]>([])
   const [filteredAssignments, setFilteredAssignments] = useState<CourseAssignment[]>([])
   const [courses, setCourses] = useState<Course[]>([])
@@ -93,6 +105,9 @@ export default function AssignmentsManagementPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [instanceCounts, setInstanceCounts] = useState<Record<string, number>>({})
+  const [isBatchCreateDialogOpen, setIsBatchCreateDialogOpen] = useState(false)
+  const [selectedAssignmentForBatch, setSelectedAssignmentForBatch] = useState<CourseAssignment | null>(null)
 
   const [formData, setFormData] = useState<Omit<CourseAssignment, 'id' | 'created_at' | 'updated_at'>>({
     course_id: "",
@@ -108,7 +123,42 @@ export default function AssignmentsManagementPage() {
     fetchCourses()
     fetchCategories()
     fetchLocations()
+    fetchInstanceCounts()
   }, [])
+
+  const fetchInstanceCounts = async () => {
+    try {
+      const response = await fetch("/api/admin/instances")
+      if (response.ok) {
+        const instances = await response.json()
+        // 统计每个 assignment 的 instance 数量
+        const counts: Record<string, number> = {}
+        instances.forEach((instance: any) => {
+          if (instance.assignment_id) {
+            counts[instance.assignment_id] = (counts[instance.assignment_id] || 0) + 1
+          }
+        })
+        setInstanceCounts(counts)
+      }
+    } catch (error) {
+      console.error("Error fetching instance counts:", error)
+    }
+  }
+
+  const handleCreateInstance = (assignmentId: string) => {
+    // 导航到 Instance 管理页面，并传递 assignment_id 参数
+    router.push(`/admin/instances?assignmentId=${assignmentId}&action=create`)
+  }
+
+  const handleBatchCreateInstance = (assignment: CourseAssignment) => {
+    setSelectedAssignmentForBatch(assignment)
+    setIsBatchCreateDialogOpen(true)
+  }
+
+  const handleBatchCreateSuccess = () => {
+    fetchInstanceCounts()
+    fetchAssignments() // 刷新列表
+  }
 
   useEffect(() => {
     if (formData.category_id) {
@@ -305,7 +355,7 @@ export default function AssignmentsManagementPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Assignments Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage course assignments (assign courses to categories, series, and locations)
+          Manage course assignments (assign courses to categories, series, and campuses)
         </p>
       </div>
 
@@ -360,30 +410,63 @@ export default function AssignmentsManagementPage() {
                     <TableHead>Course</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Series</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Order</TableHead>
+                    <TableHead>Campus</TableHead>
+                    <TableHead>Instances</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAssignments.map((assignment) => (
-                    <TableRow key={assignment.id}>
-                      <TableCell className="font-medium">
-                        {assignment.course?.name || "Unknown"}
-                      </TableCell>
-                      <TableCell>{assignment.category?.display_name || "Unknown"}</TableCell>
-                      <TableCell>{assignment.series?.display_name || "Unknown"}</TableCell>
-                      <TableCell>{assignment.location?.name || "N/A"}</TableCell>
-                      <TableCell>{assignment.display_order}</TableCell>
-                      <TableCell>
-                        <Badge variant={assignment.is_active ? "default" : "secondary"}>
-                          {assignment.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(assignment.created_at)}</TableCell>
-                      <TableCell className="text-right">
+                  {filteredAssignments.map((assignment) => {
+                    const course = assignment.course
+                    const gradesText = course?.target_grades && course.target_grades.length > 0
+                      ? `Grades: ${course.target_grades.join(', ')}`
+                      : ''
+                    const slugText = course?.slug ? `Slug: ${course.slug}` : ''
+                    const statusText = course?.status && course.status !== 'published'
+                      ? `[${course.status}]`
+                      : ''
+                    
+                    return (
+                      <TableRow key={assignment.id}>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium">{course?.name || "Unknown"}</span>
+                            {(gradesText || slugText || statusText) && (
+                              <span className="text-xs text-muted-foreground">
+                                {[gradesText, slugText, statusText].filter(Boolean).join(' • ')}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{assignment.category?.display_name || "Unknown"}</TableCell>
+                        <TableCell>{assignment.series?.display_name || "Unknown"}</TableCell>
+                        <TableCell>{assignment.location?.name || "N/A"}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">
+                              {instanceCounts[assignment.id] || 0}
+                            </Badge>
+                            {instanceCounts[assignment.id] > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => router.push(`/admin/instances?assignmentId=${assignment.id}`)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                View
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={assignment.is_active ? "default" : "secondary"}>
+                            {assignment.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(assignment.created_at)}</TableCell>
+                        <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon">
@@ -391,6 +474,14 @@ export default function AssignmentsManagementPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleCreateInstance(assignment.id)}>
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              Create Instance
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleBatchCreateInstance(assignment)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Batch Create Instances
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleEdit(assignment)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
@@ -404,9 +495,10 @@ export default function AssignmentsManagementPage() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -419,7 +511,7 @@ export default function AssignmentsManagementPage() {
           <DialogHeader>
             <DialogTitle>{editingAssignment ? "Edit Assignment" : "Add New Assignment"}</DialogTitle>
             <DialogDescription>
-              {editingAssignment ? "Update assignment information" : "Assign a course to a category, series, and optionally a location"}
+              {editingAssignment ? "Update assignment information" : "Assign a course to a category, series, and optionally a campus"}
             </DialogDescription>
           </DialogHeader>
 
@@ -431,15 +523,49 @@ export default function AssignmentsManagementPage() {
                 onValueChange={(value) => setFormData({ ...formData, course_id: value })}
                 required
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a course" />
                 </SelectTrigger>
-                <SelectContent>
-                  {courses.map((course) => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.name}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[400px]">
+                  {courses.map((course) => {
+                    // 构建显示文本，包含区分信息
+                    const gradesText = course.target_grades && course.target_grades.length > 0
+                      ? `Grades: ${course.target_grades.join(', ')}`
+                      : ''
+                    const slugText = course.slug ? `Slug: ${course.slug}` : ''
+                    const statusText = course.status && course.status !== 'published' 
+                      ? `[${course.status}]` 
+                      : ''
+                    
+                    // 组合显示文本：主标题 + 副信息（用换行分隔）
+                    const subTexts = [gradesText, slugText, statusText].filter(Boolean)
+                    const displayText = subTexts.length > 0
+                      ? `${course.name}\n${subTexts.join(' • ')}`
+                      : course.name
+                    
+                    // 为 SelectValue 构建简洁的显示文本
+                    const valueText = subTexts.length > 0
+                      ? `${course.name} • ${subTexts.join(' • ')}`
+                      : course.name
+                    
+                    return (
+                      <SelectItem 
+                        key={course.id} 
+                        value={course.id} 
+                        textValue={valueText}
+                        className="py-2.5"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-sm leading-tight">{course.name}</span>
+                          {subTexts.length > 0 && (
+                            <span className="text-xs text-muted-foreground leading-tight">
+                              {subTexts.join(' • ')}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -488,13 +614,13 @@ export default function AssignmentsManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="location_id">Location (Optional)</Label>
+              <Label htmlFor="location_id">Campus (Optional)</Label>
               <Select
                 value={formData.location_id || "__none__"}
                 onValueChange={(value) => setFormData({ ...formData, location_id: value === "__none__" ? "" : value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a location (optional)" />
+                  <SelectValue placeholder="Select a campus (optional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
@@ -540,6 +666,15 @@ export default function AssignmentsManagementPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <BatchCreateInstanceDialog
+        open={isBatchCreateDialogOpen}
+        onOpenChange={setIsBatchCreateDialogOpen}
+        assignment={selectedAssignmentForBatch || undefined}
+        assignments={assignments}
+        locations={locations}
+        onSuccess={handleBatchCreateSuccess}
+      />
     </div>
   )
 }

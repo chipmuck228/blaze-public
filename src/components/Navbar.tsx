@@ -45,24 +45,16 @@ interface RouteProps {
   
   const routeList: RouteProps[] = [
     {
-      href: "#courses",
-      label: "Courses",
+      href: "#locations",
+      label: "Locations",
     },
     {
-      href: "#camps",
-      label: "Camps",
+      href: "#programs",
+      label: "Programs",
     },
     {
-      href: "#workshops",
-      label: "Workshops",
-    },
-    {
-      href: "#competion-teams",
-      label: "Competion Teams",
-    },
-    {
-        href: "#about",
-        label: "About US",
+      href: "#about",
+      label: "About",
     },
     {
       href: "#faq",
@@ -78,13 +70,19 @@ interface RouteProps {
     const isHomePage = pathname === '/';
     const { data: session, status } = useSession();
 
+    const currentLocationLabel = (() => {
+      if (!pathname) return null;
+      if (pathname.startsWith("/locations/bellevue")) return "Bellevue";
+      if (pathname.startsWith("/locations/belred")) return "Bel-Red";
+      if (pathname.startsWith("/locations/issaquah")) return "Issaquah";
+      if (pathname.startsWith("/locations/cherrycrest")) return "Cherry Crest";
+      return null;
+    })();
+
     // Helper function to get the correct href
     const getHref = (href: string) => {
-      // For courses and camps, if not on home page, navigate to home page with hash
-      if ((href === '#courses' || href === '#camps') && !isHomePage) {
-        // Return absolute path to home with hash: '/#courses' or '/#camps'
-        // Using href.slice(1) would remove the hash, but we want to keep it
-        // So we return the full path with hash
+      // For hash links, if不在首页则跳转到首页并带上 hash
+      if (href.startsWith("#") && !isHomePage) {
         return `/${href}`;
       }
       return href;
@@ -132,247 +130,251 @@ interface RouteProps {
     }, [status, session]);
 
     return (
-      <header 
+      <header
         className="sticky border-b top-0 z-40 w-full backdrop-blur-sm"
-        style={{ 
-          backgroundColor: 'hsl(var(--background))',
-          borderBottomColor: 'hsl(var(--border))'
+        style={{
+          backgroundColor: "hsl(var(--background))",
+          borderBottomColor: "hsl(var(--border))",
         }}
       >
         <NavigationMenu className="mx-auto">
-          <NavigationMenuList className="container mx-auto h-14 px-4 sm:px-6 lg:px-8 flex justify-between max-w-7xl">
-            <NavigationMenuItem className="font-bold flex">
-              <a
-                rel="noreferrer noopener"
-                href="/"
-                className="ml-2 font-bold text-xl flex"
-              >
-                <BlazeLogoIcon />
-              </a>
-            </NavigationMenuItem>
-  
-            {/* mobile */}
-            <span className="flex md:hidden">
-              <ModeToggle />
-  
-              <Sheet
-                open={isOpen}
-                onOpenChange={setIsOpen}
-              >
-                <SheetTrigger className="px-2">
-                  <Menu
-                    className="flex md:hidden h-5 w-5"
-                    onClick={() => setIsOpen(true)}
+          <NavigationMenuList className="container mx-auto h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between max-w-7xl">
+            {/* Left: logo + desktop menu */}
+            <div className="flex items-center gap-4">
+              <NavigationMenuItem className="font-bold flex items-center gap-3">
+                <a
+                  rel="noreferrer noopener"
+                  href="/"
+                  className="ml-2 font-bold text-xl flex"
+                >
+                  <BlazeLogoIcon />
+                </a>
+                {currentLocationLabel && (
+                  <span className="hidden sm:inline-flex text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {currentLocationLabel} Campus
+                  </span>
+                )}
+              </NavigationMenuItem>
+
+              {/* desktop menu */}
+              <nav className="hidden md:flex gap-2">
+                {routeList.map((route: RouteProps, i) => (
+                  <Button
+                    key={i}
+                    variant="ghost"
+                    className="text-[12px]"
+                    asChild
                   >
-                  </Menu>
-                </SheetTrigger>
-  
-                <SheetContent side={"left"}>
-                  <SheetHeader>
-                    <SheetTitle className="font-bold text-xl">
-                      Shadcn/React
-                    </SheetTitle>
-                  </SheetHeader>
-                  <nav className="flex flex-col justify-center items-center gap-2 mt-4">
-                    {routeList.map(({ href, label }: RouteProps) => (
-                      <Button
-                        key={label}
-                        variant="ghost"
-                        asChild
-                      >
-                        <a
-                          rel="noreferrer noopener"
-                          href={getHref(href)}
-                          onClick={() => setIsOpen(false)}
-                        >
-                          {label}
-                        </a>
-                      </Button>
-                    ))}
+                    <a
+                      rel="noreferrer noopener"
+                      href={getHref(route.href)}
+                    >
+                      {route.label}
+                    </a>
+                  </Button>
+                ))}
+              </nav>
+            </div>
+
+            {/* Right: cart, user menu, mode toggle, and mobile menu */}
+            <div className="flex items-center gap-2">
+              {/* desktop: cart + user + theme */}
+              <div className="hidden md:flex gap-2 items-center">
+                {status === "loading" ? (
+                  <div className="h-9 w-9 flex items-center justify-center">
+                    <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : session ? (
+                  <>
+                    {/* Shopping Cart Icon */}
                     <Button
-                      variant="secondary"
-                      className="w-[110px]"
+                      variant="ghost"
+                      size="icon"
+                      className="relative h-9 w-9"
                       asChild
                     >
-                      <a
-                        rel="noreferrer noopener"
-                        href="https://github.com/leoMirandaa/shadcn-landing-page.git"
-                        target="_blank"
-                      >
-                        <GitHubLogoIcon className="mr-2 w-5 h-5" />
-                        Github
-                      </a>
+                      <Link href="/enrollments/cart">
+                        <ShoppingCart className="h-5 w-5" />
+                        {cartCount > 0 && (
+                          <Badge
+                            variant="destructive"
+                            className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                          >
+                            {cartCount > 9 ? "9+" : cartCount}
+                          </Badge>
+                        )}
+                      </Link>
                     </Button>
-                    {status === "loading" ? (
-                      <div className="w-full mt-2 h-9 flex items-center justify-center">
-                        <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    ) : session ? (
-                      <div className="w-full mt-2 flex flex-col gap-2">
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-muted">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={session.user?.image || undefined} />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="relative h-9 w-9 rounded-full"
+                        >
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage
+                              src={session.user?.image || undefined}
+                            />
                             <AvatarFallback>
                               {getUserInitials(session.user?.name)}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        className="w-56"
+                        align="end"
+                        forceMount
+                      >
+                        <DropdownMenuLabel className="font-normal">
+                          <div className="flex flex-col space-y-1">
+                            <p className="text-sm font-medium leading-none">
                               {session.user?.name}
                             </p>
-                            <p className="text-xs text-muted-foreground truncate">
+                            <p className="text-xs leading-none text-muted-foreground">
                               {session.user?.email}
                             </p>
                           </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          asChild
-                        >
-                          <Link href="/enrollments/cart" onClick={() => setIsOpen(false)}>
-                            <ShoppingCart className="mr-2 h-4 w-4" />
-                            Shopping Cart
-                            {cartCount > 0 && (
-                              <Badge variant="destructive" className="ml-2">
-                                {cartCount}
-                              </Badge>
-                            )}
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <Link href="/profile" className="cursor-pointer">
+                            <User className="mr-2 h-4 w-4" />
+                            <span>Profile</span>
                           </Link>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => {
-                            handleSignOut();
-                            setIsOpen(false);
-                          }}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/settings" className="cursor-pointer">
+                            <Settings className="mr-2 h-4 w-4" />
+                            <span>Settings</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="cursor-pointer text-destructive focus:text-destructive"
+                          onClick={handleSignOut}
                         >
                           <LogOut className="mr-2 h-4 w-4" />
-                          Sign Out
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="default"
-                        className="w-full mt-2"
-                        asChild
-                      >
-                        <Link href="/login" onClick={() => setIsOpen(false)}>
-                          Sign In / Sign Up
-                        </Link>
-                      </Button>
-                    )}
-                  </nav>
-                </SheetContent>
-              </Sheet>
-            </span>
-  
-            {/* desktop */}
-            <nav className="hidden md:flex gap-2">
-              {routeList.map((route: RouteProps, i) => (
-                <Button
-                  key={i}
-                  variant="ghost"
-                  className="text-[12px]"
-                  asChild
-                >
-                  <a
-                    rel="noreferrer noopener"
-                    href={getHref(route.href)}
-                  >
-                    {route.label}
-                  </a>
-                </Button>
-              ))}
-            </nav>
-  
-            <div className="hidden md:flex gap-2 items-center">
-              {status === "loading" ? (
-                <div className="h-9 w-9 flex items-center justify-center">
-                  <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : session ? (
-                <>
-                  {/* Shopping Cart Icon */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative h-9 w-9"
-                    asChild
-                  >
-                    <Link href="/enrollments/cart">
-                      <ShoppingCart className="h-5 w-5" />
-                      {cartCount > 0 && (
-                        <Badge
-                          variant="destructive"
-                          className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                        >
-                          {cartCount > 9 ? '9+' : cartCount}
-                        </Badge>
-                      )}
-                    </Link>
+                          <span>Sign Out</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                ) : (
+                  <Button variant="default" asChild>
+                    <Link href="/login">Sign In / Sign Up</Link>
                   </Button>
-                  <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="relative h-9 w-9 rounded-full"
+                )}
+                <ModeToggle />
+              </div>
+
+              {/* mobile: theme + hamburger menu */}
+              <span className="flex md:hidden items-center gap-2">
+                <ModeToggle />
+
+                <Sheet open={isOpen} onOpenChange={setIsOpen}>
+                  <SheetTrigger className="px-2">
+                    <Menu
+                      className="flex md:hidden h-5 w-5"
+                      onClick={() => setIsOpen(true)}
                     >
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={session.user?.image || undefined} />
-                        <AvatarFallback>
-                          {getUserInitials(session.user?.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">
-                          {session.user?.name}
-                        </p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                          {session.user?.email}
-                        </p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile" className="cursor-pointer">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Profile</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/settings" className="cursor-pointer">
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="cursor-pointer text-destructive focus:text-destructive"
-                      onClick={handleSignOut}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Sign Out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                </>
-              ) : (
-                <Button
-                  variant="default"
-                  asChild
-                >
-                  <Link href="/login">
-                    Sign In / Sign Up
-                  </Link>
-                </Button>
-              )}
-              <ModeToggle />
+                    </Menu>
+                  </SheetTrigger>
+
+                  <SheetContent side={"left"}>
+                    <SheetHeader>
+                      <SheetTitle className="font-bold text-xl">
+                        Blaze Robotics
+                      </SheetTitle>
+                    </SheetHeader>
+                    <nav className="flex flex-col justify-center items-center gap-2 mt-4">
+                      {routeList.map(({ href, label }: RouteProps) => (
+                        <Button
+                          key={label}
+                          variant="ghost"
+                          asChild
+                        >
+                          <a
+                            rel="noreferrer noopener"
+                            href={getHref(href)}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            {label}
+                          </a>
+                        </Button>
+                      ))}
+                      {status === "loading" ? (
+                        <div className="w-full mt-2 h-9 flex items-center justify-center">
+                          <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      ) : session ? (
+                        <div className="w-full mt-2 flex flex-col gap-2">
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage
+                                src={session.user?.image || undefined}
+                              />
+                              <AvatarFallback>
+                                {getUserInitials(session.user?.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {session.user?.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {session.user?.email}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            asChild
+                          >
+                            <Link
+                              href="/enrollments/cart"
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <ShoppingCart className="mr-2 h-4 w-4" />
+                              Shopping Cart
+                              {cartCount > 0 && (
+                                <Badge variant="destructive" className="ml-2">
+                                  {cartCount}
+                                </Badge>
+                              )}
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => {
+                              handleSignOut()
+                              setIsOpen(false)
+                            }}
+                          >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Sign Out
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="default"
+                          className="w-full mt-2"
+                          asChild
+                        >
+                          <Link
+                            href="/login"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            Sign In / Sign Up
+                          </Link>
+                        </Button>
+                      )}
+                    </nav>
+                  </SheetContent>
+                </Sheet>
+              </span>
             </div>
           </NavigationMenuList>
         </NavigationMenu>

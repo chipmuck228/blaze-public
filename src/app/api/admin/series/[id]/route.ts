@@ -48,7 +48,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { category_id, name, display_name, description, start_date, end_date, display_order, is_active } = body
+    const { category_id, franchise_id, name, display_name, description, start_date, end_date, display_order, is_active } = body
 
     // 如果更新了 category_id，需要验证
     if (category_id) {
@@ -74,6 +74,7 @@ export async function PUT(
       .from("course_series")
       .update({
         category_id,
+        franchise_id: franchise_id || null,
         name,
         display_name,
         description,

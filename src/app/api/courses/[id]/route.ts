@@ -16,6 +16,14 @@ export async function GET(
       )
     }
 
+    // 公开 API 只返回 published 状态的课程
+    if (course.status !== 'published') {
+      return NextResponse.json(
+        { error: "Course not found" },
+        { status: 404 }
+      )
+    }
+
     // 映射到前端需要的格式
     const mappedCourse = {
       id: course.id,
