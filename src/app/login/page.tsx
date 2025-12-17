@@ -80,9 +80,15 @@ export default function LoginPage() {
         }
         setError(errorMessage)
         setIsLoading(false)
-      } else if (result?.ok || result === undefined || result === null) {
-        // 登录成功（包括 result 为 undefined/null 的情况，可能是 OAuth 回调已完成）
-        console.log("Google sign in successful (or callback completed), updating session and redirecting...")
+      } else if (result?.url) {
+        // 优先检查 URL：如果 signIn 返回 URL，说明需要重定向到 Google OAuth 页面
+        // 即使 result.ok === true，如果有 URL，也应该重定向到 Google
+        console.log("Redirecting to Google OAuth:", result.url)
+        window.location.href = result.url
+        // 注意：这里不需要 setIsLoading(false)，因为页面会立即重定向
+      } else if (result?.ok) {
+        // 登录成功且没有 URL（OAuth 回调已完成）
+        console.log("Google sign in successful, updating session and redirecting...")
         
         // 强制更新 session
         try {
@@ -99,10 +105,17 @@ export default function LoginPage() {
         // 重定向到首页
         router.push("/")
         router.refresh()
-      } else if (result?.url) {
-        // 如果 signIn 返回 URL，说明需要重定向到 Google
-        console.log("Redirecting to Google OAuth:", result.url)
-        window.location.href = result.url
+      } else if (result === undefined || result === null) {
+        // result 为 undefined/null，可能是 OAuth 回调已完成但 session 还未更新
+        console.log("No explicit result, checking session and redirecting...")
+        try {
+          await updateSession()
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } catch (sessionError) {
+          console.error("Error updating session:", sessionError)
+        }
+        router.push("/")
+        router.refresh()
       } else {
         // 其他情况：尝试更新 session 并重定向
         console.log("Unexpected result format, attempting to update session and redirect...", result)
