@@ -1971,6 +1971,23 @@ export async function updateCourseAssignment(
   assignmentId: string,
   updates: Partial<Omit<CourseAssignment, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<CourseAssignment> {
+  // 如果更新了 course_id，需要验证课程状态
+  if (updates.course_id) {
+    const { data: course, error: courseError } = await supabaseAdmin
+      .from('courses')
+      .select('status')
+      .eq('id', updates.course_id)
+      .single()
+
+    if (courseError || !course) {
+      throw new Error('Course not found')
+    }
+
+    if (course.status !== 'published') {
+      throw new Error(`Cannot update assignment to course with status '${course.status}'. Only 'published' courses can be assigned.`)
+    }
+  }
+
   // 如果更新了 category_id 或 series_id，需要验证
   if (updates.category_id || updates.series_id) {
     const { data: currentAssignment } = await supabaseAdmin

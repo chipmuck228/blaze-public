@@ -25,8 +25,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Eye } from "lucide-react"
 import { CourseEditDialog } from "@/components/admin/CourseEditDialog"
+import { CourseDetailDialog } from "@/components/admin/CourseDetailDialog"
 
 interface Course {
   id: string
@@ -56,6 +57,8 @@ export default function CoursesManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [editingCourse, setEditingCourse] = useState<Course | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [viewingCourseId, setViewingCourseId] = useState<string | null>(null)
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -126,7 +129,17 @@ export default function CoursesManagementPage() {
     }
   }
 
+  const handleView = (course: Course) => {
+    setViewingCourseId(course.id)
+    setIsDetailDialogOpen(true)
+  }
+
   const handleEdit = (course: Course) => {
+    // 禁止编辑 archived 状态的课程
+    if (course.status === 'archived') {
+      alert('Cannot edit archived courses. Please view the course details instead.')
+      return
+    }
     setEditingCourse(course)
     setIsEditDialogOpen(true)
   }
@@ -257,7 +270,12 @@ export default function CoursesManagementPage() {
                       >
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            <span className="font-medium">{course.name}</span>
+                            <button
+                              onClick={() => handleView(course)}
+                              className="text-left font-medium hover:text-primary transition-colors cursor-pointer"
+                            >
+                              {course.name}
+                            </button>
                             {(gradesText || slugText || statusText) && (
                               <span className="text-xs text-muted-foreground">
                                 {[gradesText, slugText, statusText].filter(Boolean).join(' • ')}
@@ -328,9 +346,16 @@ export default function CoursesManagementPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(course)}>
+                            <DropdownMenuItem onClick={() => handleView(course)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleEdit(course)}
+                              disabled={course.status === 'archived'}
+                            >
                               <Edit className="mr-2 h-4 w-4" />
-                              Edit
+                              Edit {course.status === 'archived' && '(Archived courses cannot be edited)'}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
@@ -358,6 +383,12 @@ export default function CoursesManagementPage() {
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         onCourseUpdated={handleCourseUpdated}
+      />
+
+      <CourseDetailDialog
+        courseId={viewingCourseId}
+        open={isDetailDialogOpen}
+        onOpenChange={setIsDetailDialogOpen}
       />
     </div>
   )

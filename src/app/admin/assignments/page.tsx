@@ -208,7 +208,9 @@ export default function AssignmentsManagementPage() {
       const response = await fetch("/api/admin/courses")
       if (response.ok) {
         const data = await response.json()
-        setCourses(data)
+        // 只显示 published 状态的课程（archived, draft, suspended 不能用于 assignment）
+        const publishedCourses = data.filter((course: Course) => course.status === 'published')
+        setCourses(publishedCourses)
       }
     } catch (error) {
       console.error("Error fetching courses:", error)
@@ -527,45 +529,44 @@ export default function AssignmentsManagementPage() {
                   <SelectValue placeholder="Select a course" />
                 </SelectTrigger>
                 <SelectContent className="max-h-[400px]">
-                  {courses.map((course) => {
-                    // 构建显示文本，包含区分信息
-                    const gradesText = course.target_grades && course.target_grades.length > 0
-                      ? `Grades: ${course.target_grades.join(', ')}`
-                      : ''
-                    const slugText = course.slug ? `Slug: ${course.slug}` : ''
-                    const statusText = course.status && course.status !== 'published' 
-                      ? `[${course.status}]` 
-                      : ''
-                    
-                    // 组合显示文本：主标题 + 副信息（用换行分隔）
-                    const subTexts = [gradesText, slugText, statusText].filter(Boolean)
-                    const displayText = subTexts.length > 0
-                      ? `${course.name}\n${subTexts.join(' • ')}`
-                      : course.name
-                    
-                    // 为 SelectValue 构建简洁的显示文本
-                    const valueText = subTexts.length > 0
-                      ? `${course.name} • ${subTexts.join(' • ')}`
-                      : course.name
-                    
-                    return (
-                      <SelectItem 
-                        key={course.id} 
-                        value={course.id} 
-                        textValue={valueText}
-                        className="py-2.5"
-                      >
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium text-sm leading-tight">{course.name}</span>
-                          {subTexts.length > 0 && (
-                            <span className="text-xs text-muted-foreground leading-tight">
-                              {subTexts.join(' • ')}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    )
-                  })}
+                  {courses
+                    .filter((course) => course.status === 'published') // 只显示 published 状态的课程
+                    .map((course) => {
+                      // 构建显示文本，包含区分信息
+                      const gradesText = course.target_grades && course.target_grades.length > 0
+                        ? `Grades: ${course.target_grades.join(', ')}`
+                        : ''
+                      const slugText = course.slug ? `Slug: ${course.slug}` : ''
+                      
+                      // 组合显示文本：主标题 + 副信息（用换行分隔）
+                      const subTexts = [gradesText, slugText].filter(Boolean)
+                      const displayText = subTexts.length > 0
+                        ? `${course.name}\n${subTexts.join(' • ')}`
+                        : course.name
+                      
+                      // 为 SelectValue 构建简洁的显示文本
+                      const valueText = subTexts.length > 0
+                        ? `${course.name} • ${subTexts.join(' • ')}`
+                        : course.name
+                      
+                      return (
+                        <SelectItem 
+                          key={course.id} 
+                          value={course.id} 
+                          textValue={valueText}
+                          className="py-2.5"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-sm leading-tight">{course.name}</span>
+                            {subTexts.length > 0 && (
+                              <span className="text-xs text-muted-foreground leading-tight">
+                                {subTexts.join(' • ')}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
                 </SelectContent>
               </Select>
             </div>

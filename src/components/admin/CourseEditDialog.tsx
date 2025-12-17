@@ -82,6 +82,9 @@ export function CourseEditDialog({
   })
   const [isCheckingStatus, setIsCheckingStatus] = useState(false)
 
+  // 检查是否是 archived 状态的课程（只读模式）
+  const isArchived = course?.status === 'archived'
+
   const [formData, setFormData] = useState<Omit<Course, 'tags'>>({
     name: "",
     slug: "",
@@ -360,10 +363,23 @@ export function CourseEditDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{course ? "Edit Course" : "Add New Course"}</DialogTitle>
+          <DialogTitle>
+            {course ? (isArchived ? "View Course (Archived)" : "Edit Course") : "Add New Course"}
+          </DialogTitle>
           <DialogDescription>
-            {course ? "Update course information" : "Create a new course (assignments will be created separately)"}
+            {course 
+              ? (isArchived 
+                  ? "This course is archived and cannot be edited. You can only view the details."
+                  : "Update course information")
+              : "Create a new course (assignments will be created separately)"}
           </DialogDescription>
+          {isArchived && (
+            <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ This course is archived and cannot be edited. All fields are read-only.
+              </p>
+            </div>
+          )}
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -374,6 +390,7 @@ export function CourseEditDialog({
               id="name"
               value={formData.name}
               onChange={(e) => {
+                if (isArchived) return // 禁止编辑 archived 课程
                 const newName = e.target.value
                 // Calculate new slug if not manually edited
                 let newSlug = formData.slug || ""
@@ -392,6 +409,7 @@ export function CourseEditDialog({
               }}
               placeholder="e.g., Introduction to Robotics with VEX GO"
               required
+              disabled={isArchived}
             />
           </div>
 
@@ -402,10 +420,12 @@ export function CourseEditDialog({
               id="slug"
               value={formData.slug || ""}
               onChange={(e) => {
+                if (isArchived) return // 禁止编辑 archived 课程
                 setFormData({ ...formData, slug: e.target.value })
                 setSlugManuallyEdited(true) // Mark as manually edited when user types
               }}
               placeholder="e.g., introduction-to-robotics-with-vex-go-k-2"
+              disabled={isArchived}
             />
             <p className="text-xs text-muted-foreground">
               Automatically generated from course name and first target grade. You can manually edit if needed.
@@ -427,7 +447,11 @@ export function CourseEditDialog({
                       <Checkbox
                         id={`subcategory-${subcategory.id}`}
                         checked={selectedSubcategoryIds.includes(subcategory.id)}
-                        onCheckedChange={() => toggleSubcategory(subcategory.id)}
+                        onCheckedChange={() => {
+                          if (isArchived) return // 禁止编辑 archived 课程
+                          toggleSubcategory(subcategory.id)
+                        }}
+                        disabled={isArchived}
                       />
                       <Label
                         htmlFor={`subcategory-${subcategory.id}`}
@@ -460,9 +484,13 @@ export function CourseEditDialog({
             <Textarea
               id="description"
               value={formData.description || ""}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => {
+                if (isArchived) return // 禁止编辑 archived 课程
+                setFormData({ ...formData, description: e.target.value })
+              }}
               placeholder="Course description"
               rows={3}
+              disabled={isArchived}
             />
           </div>
 
@@ -474,13 +502,15 @@ export function CourseEditDialog({
                 id="sessions"
                 type="number"
                 value={formData.number_of_sessions || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  if (isArchived) return
                   setFormData({
                     ...formData,
                     number_of_sessions: e.target.value ? parseInt(e.target.value) : undefined,
                   })
-                }
+                }}
                 placeholder="10"
+                disabled={isArchived}
               />
             </div>
 
@@ -490,13 +520,15 @@ export function CourseEditDialog({
                 id="ageMin"
                 type="number"
                 value={formData.target_age_min || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  if (isArchived) return
                   setFormData({
                     ...formData,
                     target_age_min: e.target.value ? parseInt(e.target.value) : undefined,
                   })
-                }
+                }}
                 placeholder="5"
+                disabled={isArchived}
               />
             </div>
 
@@ -506,13 +538,15 @@ export function CourseEditDialog({
                 id="ageMax"
                 type="number"
                 value={formData.target_age_max || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  if (isArchived) return
                   setFormData({
                     ...formData,
                     target_age_max: e.target.value ? parseInt(e.target.value) : undefined,
                   })
-                }
+                }}
                 placeholder="8"
+                disabled={isArchived}
               />
             </div>
           </div>
@@ -525,6 +559,7 @@ export function CourseEditDialog({
               value={targetGradesInput}
               onChange={(e) => handleTargetGradesChange(e.target.value)}
               placeholder="e.g., K-2; 3-5; 6 (use semicolon to separate multiple grades)"
+              disabled={isArchived}
             />
             <p className="text-xs text-muted-foreground">
               Enter grades separated by semicolons (;). Only grade-specific characters allowed (K, numbers, -, ;). Example: K-2; 3-5; 6
@@ -540,13 +575,15 @@ export function CourseEditDialog({
                 type="number"
                 step="0.01"
                 value={formData.base_price || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  if (isArchived) return
                   setFormData({
                     ...formData,
                     base_price: e.target.value ? parseFloat(e.target.value) : undefined,
                   })
-                }
+                }}
                 placeholder="299.99"
+                disabled={isArchived}
               />
             </div>
 
@@ -554,7 +591,11 @@ export function CourseEditDialog({
               <Label htmlFor="currency">Currency</Label>
               <Select
                 value={formData.currency || "USD"}
-                onValueChange={(value) => setFormData({ ...formData, currency: value })}
+                onValueChange={(value) => {
+                  if (isArchived) return
+                  setFormData({ ...formData, currency: value })
+                }}
+                disabled={isArchived}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -574,6 +615,7 @@ export function CourseEditDialog({
             <Select
               value={formData.status || "draft"}
               onValueChange={async (value: 'draft' | 'published' | 'suspended' | 'archived') => {
+                if (isArchived) return // 禁止编辑 archived 课程的状态
                 const currentStatus = course?.status || formData.status || 'draft'
                 
                 // 如果是从 published 改为 suspended 或 archived，需要检查
@@ -609,7 +651,7 @@ export function CourseEditDialog({
                 // 其他情况直接更新状态
                 setFormData({ ...formData, status: value })
               }}
-              disabled={isCheckingStatus}
+              disabled={isCheckingStatus || isArchived}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -645,9 +687,13 @@ export function CourseEditDialog({
             <Textarea
               id="outcomes"
               value={formData.outcomes || ""}
-              onChange={(e) => setFormData({ ...formData, outcomes: e.target.value })}
+              onChange={(e) => {
+                if (isArchived) return
+                setFormData({ ...formData, outcomes: e.target.value })
+              }}
               placeholder="What students will learn"
               rows={3}
+              disabled={isArchived}
             />
           </div>
 
@@ -657,9 +703,13 @@ export function CourseEditDialog({
             <Textarea
               id="prerequisites"
               value={formData.prerequisites || ""}
-              onChange={(e) => setFormData({ ...formData, prerequisites: e.target.value })}
+              onChange={(e) => {
+                if (isArchived) return
+                setFormData({ ...formData, prerequisites: e.target.value })
+              }}
               placeholder="e.g., No prior experience required"
               rows={2}
+              disabled={isArchived}
             />
           </div>
 
@@ -681,12 +731,14 @@ export function CourseEditDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !formData.name}>
+            <Button type="submit" disabled={isLoading || !formData.name || isArchived}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
+              ) : isArchived ? (
+                "Cannot Edit Archived Course"
               ) : course ? (
                 "Update Course"
               ) : (
