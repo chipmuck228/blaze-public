@@ -26,7 +26,8 @@ export const authConfig = {
       if (account?.provider === "google") {
         try {
           if (!user.email || !user.name) {
-            return false
+            console.error("Google sign in failed: Missing email or name", { email: user.email, name: user.name })
+            throw new Error("Missing email or name from Google account")
           }
 
           // 创建或更新用户
@@ -36,14 +37,28 @@ export const authConfig = {
             user.image || null
           )
 
+          if (!dbUser || !dbUser.id) {
+            console.error("Google sign in failed: Failed to create/update user in database", { email: user.email })
+            throw new Error("Failed to create/update user in database")
+          }
+
           // 更新 user 对象以包含数据库中的用户信息
           user.id = dbUser.id
           ;(user as any).role = dbUser.role || 'user'
           
+          console.log("Google sign in successful", { userId: dbUser.id, email: user.email })
           return true
-        } catch (error) {
-          console.error("Error creating/updating Google user:", error)
-          return false
+        } catch (error: any) {
+          // 记录详细错误信息
+          console.error("Error in Google signIn callback:", {
+            error: error?.message || error,
+            stack: error?.stack,
+            email: user?.email,
+            name: user?.name,
+            provider: account?.provider
+          })
+          // 抛出错误以便 NextAuth 可以处理
+          throw error
         }
       }
 

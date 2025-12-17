@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
+import { signIn, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,6 +20,7 @@ import { Mail, Lock, Chrome } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { update: updateSession } = useSession()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -60,22 +61,59 @@ export default function LoginPage() {
         redirect: false 
       })
       
+      console.log("Google sign in result:", result)
+      
       if (result?.error) {
         console.error("Google sign in error:", result.error)
-        setError(`Google login failed: ${result.error}. Please check server logs for more details.`)
+        // 提供更友好的错误信息
+        let errorMessage = "Google login failed. "
+        if (result.error === "OAuthSignin" || result.error === "OAuthCallback") {
+          errorMessage += "There was a problem with the authentication process. Please try again."
+        } else if (result.error === "OAuthCreateAccount") {
+          errorMessage += "Could not create your account. Please try again or contact support."
+        } else if (result.error === "EmailCreateAccount") {
+          errorMessage += "Could not create account with this email. Please try again."
+        } else if (result.error === "Callback") {
+          errorMessage += "There was a problem during authentication. Please try again."
+        } else {
+          errorMessage += `${result.error}. Please check server logs for more details.`
+        }
+        setError(errorMessage)
         setIsLoading(false)
-      } else if (result?.ok) {
-        // 登录成功，手动重定向
+      } else if (result?.ok || result === undefined || result === null) {
+        // 登录成功（包括 result 为 undefined/null 的情况，可能是 OAuth 回调已完成）
+        console.log("Google sign in successful (or callback completed), updating session and redirecting...")
+        
+        // 强制更新 session
+        try {
+          await updateSession()
+          console.log("Session updated successfully")
+        } catch (sessionError) {
+          console.error("Error updating session:", sessionError)
+          // 即使 session 更新失败，也尝试重定向，因为登录可能已经成功
+        }
+        
+        // 等待一小段时间确保 session 更新
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // 重定向到首页
         router.push("/")
         router.refresh()
-      } else {
+      } else if (result?.url) {
         // 如果 signIn 返回 URL，说明需要重定向到 Google
-        if (result?.url) {
-          window.location.href = result.url
-        } else {
-          setError("Unexpected response from Google login. Please try again.")
-          setIsLoading(false)
+        console.log("Redirecting to Google OAuth:", result.url)
+        window.location.href = result.url
+      } else {
+        // 其他情况：尝试更新 session 并重定向
+        console.log("Unexpected result format, attempting to update session and redirect...", result)
+        try {
+          await updateSession()
+          await new Promise(resolve => setTimeout(resolve, 300))
+        } catch (sessionError) {
+          console.error("Error updating session:", sessionError)
         }
+        router.push("/")
+        router.refresh()
       }
     } catch (error: any) {
       console.error("Google login exception:", error)

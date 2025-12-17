@@ -302,46 +302,86 @@ export async function createOrUpdateGoogleUser(
   name: string,
   image?: string | null
 ): Promise<User> {
-  // 检查用户是否已存在
-  const existingUser = await getUserByEmail(email)
+  try {
+    // 检查用户是否已存在
+    const existingUser = await getUserByEmail(email)
 
-  if (existingUser) {
-    // 用户已存在，更新信息（如头像）
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .update({
+    if (existingUser) {
+      // 用户已存在，更新信息（如头像、名称）
+      const updateData: any = {
         name,
         email_verified: true, // Google 登录的用户邮箱已验证
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', existingUser.id)
-      .select()
-      .single()
+      }
+      
+      // 如果提供了头像，也更新头像
+      if (image) {
+        updateData.image = image
+      }
 
-    if (error) {
-      throw new Error(`Failed to update user: ${error.message}`)
-    }
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update(updateData)
+        .eq('id', existingUser.id)
+        .select()
+        .single()
 
-    return data as User
-  } else {
-    // 用户不存在，创建新用户
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .insert({
+      if (error) {
+        console.error("Error updating Google user:", { error: error.message, email, userId: existingUser.id })
+        throw new Error(`Failed to update user: ${error.message}`)
+      }
+
+      if (!data) {
+        console.error("Error updating Google user: No data returned", { email, userId: existingUser.id })
+        throw new Error("Failed to update user: No data returned")
+      }
+
+      console.log("Google user updated successfully", { userId: data.id, email })
+      return data as User
+    } else {
+      // 用户不存在，创建新用户
+      const insertData: any = {
         name,
         email,
         email_verified: true, // Google 登录的用户邮箱已验证
         password_hash: null, // Google 用户没有密码
         role: 'user',
-      })
-      .select()
-      .single()
+      }
+      
+      // 如果提供了头像，也设置头像
+      if (image) {
+        insertData.image = image
+      }
 
-    if (error) {
-      throw new Error(`Failed to create user: ${error.message}`)
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .insert(insertData)
+        .select()
+        .single()
+
+      if (error) {
+        console.error("Error creating Google user:", { error: error.message, email })
+        throw new Error(`Failed to create user: ${error.message}`)
+      }
+
+      if (!data) {
+        console.error("Error creating Google user: No data returned", { email })
+        throw new Error("Failed to create user: No data returned")
+      }
+
+      console.log("Google user created successfully", { userId: data.id, email })
+      return data as User
     }
-
-    return data as User
+  } catch (error: any) {
+    // 记录详细错误信息以便调试
+    console.error("createOrUpdateGoogleUser error:", {
+      error: error?.message || error,
+      stack: error?.stack,
+      email,
+      name,
+      hasImage: !!image
+    })
+    throw error
   }
 }
 
@@ -1144,6 +1184,7 @@ export interface CourseAssignmentWithDetails extends CourseAssignment {
   series?: CourseSeries
   location?: CourseLocation
   subcategories?: CourseSubcategory[]
+  franchise?: { id: string; code: string; name: string } | null
 }
 
 export interface CourseLocation {
@@ -1837,6 +1878,17 @@ export async function getAllCourseAssignments(): Promise<CourseAssignmentWithDet
         : Promise.resolve({ data: null })
     ])
 
+    // 获取 franchise 信息（如果 series 有 franchise_id）
+    let franchise = null
+    if (series.data && (series.data as CourseSeries).franchise_id) {
+      const franchiseResult = await supabaseAdmin
+        .from('franchises')
+        .select('id, code, name')
+        .eq('id', (series.data as CourseSeries).franchise_id)
+        .single()
+      franchise = franchiseResult.data || null
+    }
+
     // 获取课程的标签
     const { data: tagData } = await supabaseAdmin
       .from('course_subcategory_tags')
@@ -1862,6 +1914,7 @@ export async function getAllCourseAssignments(): Promise<CourseAssignmentWithDet
       series: series.data as CourseSeries | undefined,
       location: location.data as CourseLocation | undefined,
       subcategories,
+      franchise: franchise as { id: string; code: string; name: string } | null,
     })
   }
 
@@ -1893,6 +1946,17 @@ export async function getCourseAssignmentsBySeries(seriesId: string): Promise<Co
         : Promise.resolve({ data: null })
     ])
 
+    // 获取 franchise 信息（如果 series 有 franchise_id）
+    let franchise = null
+    if (series.data && (series.data as CourseSeries).franchise_id) {
+      const franchiseResult = await supabaseAdmin
+        .from('franchises')
+        .select('id, code, name')
+        .eq('id', (series.data as CourseSeries).franchise_id)
+        .single()
+      franchise = franchiseResult.data || null
+    }
+
     const { data: tagData } = await supabaseAdmin
       .from('course_subcategory_tags')
       .select('subcategory_id')
@@ -1917,6 +1981,7 @@ export async function getCourseAssignmentsBySeries(seriesId: string): Promise<Co
       series: series.data as CourseSeries | undefined,
       location: location.data as CourseLocation | undefined,
       subcategories,
+      franchise: franchise as { id: string; code: string; name: string } | null,
     })
   }
 
@@ -2109,6 +2174,7 @@ export async function getCoachInstances(coachUserId: string): Promise<CourseInst
   }
 
   // 4. 获取完整的课程实例数据
+  // 注意：使用 select('*') 来避免字段名不匹配的问题
   const { data: instances, error: instancesError } = await supabaseAdmin
     .from('course_instances')
     .select(`
@@ -2136,19 +2202,8 @@ export async function getCoachInstances(coachUserId: string): Promise<CourseInst
           age_max,
           grade_level
         ),
-        category:course_categories(
-          id,
-          name,
-          display_order
-        ),
-        series:course_series(
-          id,
-          name,
-          category_id,
-          start_date,
-          end_date,
-          display_order
-        )
+        category:course_categories(*),
+        series:course_series(*)
       ),
       location:course_locations(
         id,
@@ -2164,10 +2219,11 @@ export async function getCoachInstances(coachUserId: string): Promise<CourseInst
     .order('start_date', { ascending: true })
 
   if (instancesError) {
+    console.error('Error fetching coach instances:', instancesError)
     throw new Error(`Failed to fetch instances: ${instancesError.message}`)
   }
 
-  return instances as CourseInstanceWithDetails[]
+  return (instances || []) as CourseInstanceWithDetails[]
 }
 
 // ==================== 课程注册相关类型定义 ====================

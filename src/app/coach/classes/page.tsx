@@ -162,7 +162,7 @@ export default function MyClassesPage() {
                   </Badge>
                 </div>
                 <CardDescription>
-                  {instance.assignment?.category?.name} &gt; {instance.assignment?.series?.name}
+                  {instance.assignment?.category?.display_name || instance.assignment?.category?.name} &gt; {instance.assignment?.series?.display_name || instance.assignment?.series?.name}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

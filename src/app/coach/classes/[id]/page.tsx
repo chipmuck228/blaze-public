@@ -130,7 +130,7 @@ export default function ClassDetailsPage() {
             {instance.assignment?.course?.name || "Unnamed Course"}
           </h1>
           <p className="text-muted-foreground mt-2">
-            {instance.assignment?.category?.name} &gt; {instance.assignment?.series?.name}
+            {instance.assignment?.category?.display_name || instance.assignment?.category?.name} &gt; {instance.assignment?.series?.display_name || instance.assignment?.series?.name}
           </p>
         </div>
         <div className="flex gap-2">

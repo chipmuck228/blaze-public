@@ -238,7 +238,23 @@ export const AllCourses = () => {
                     )
                   : program.courses
 
-                if (visibleCourses.length === 0) return null
+                // 如果搜索时 Program 名称匹配，即使没有课程也显示 Program
+                const programNameMatches = q && (
+                  program.display_name.toLowerCase().includes(q) ||
+                  program.name.toLowerCase().includes(q)
+                )
+
+                // 显示逻辑：
+                // 1. 如果没有搜索关键词，即使没有课程也显示 Program
+                // 2. 如果有搜索关键词，只有 Program 名称匹配或课程匹配时才显示
+                if (visibleCourses.length === 0) {
+                  // 没有可见课程时
+                  if (q && !programNameMatches) {
+                    // 有搜索关键词，但 Program 名称不匹配，则不显示
+                    return null
+                  }
+                  // 否则显示（没有搜索关键词，或 Program 名称匹配搜索）
+                }
 
                 return (
                   <div key={program.id} className="space-y-4">
@@ -271,52 +287,63 @@ export const AllCourses = () => {
                       </p>
                     )}
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {visibleCourses.map((course) => (
-                        <Card
-                          key={course.id}
-                          className="flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-                        >
-                          <CardHeader>
-                            <CardTitle className="text-lg leading-tight min-h-[3rem]">
-                              {course.title}
-                            </CardTitle>
-                            {course.gradeLevel && (
-                              <CardDescription className="mt-1">
-                                Grade level: {course.gradeLevel}
-                              </CardDescription>
-                            )}
-                          </CardHeader>
-                          <CardContent className="flex-1 flex flex-col justify-between">
-                            <div className="mt-2 flex justify-between items-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs px-2"
-                                asChild
-                              >
-                                <a
-                                  href={
-                                    course.slug
-                                      ? `/course-catalog/${encodeURIComponent(
-                                          course.slug
-                                        )}`
-                                      : `/course-catalog?id=${encodeURIComponent(
-                                          course.id
-                                        )}`
-                                  }
+                    {visibleCourses.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p>No courses available in this program.</p>
+                        {q && (
+                          <p className="text-sm mt-2">
+                            Try adjusting your search terms.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {visibleCourses.map((course) => (
+                          <Card
+                            key={course.id}
+                            className="flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                          >
+                            <CardHeader>
+                              <CardTitle className="text-lg leading-tight min-h-[3rem]">
+                                {course.title}
+                              </CardTitle>
+                              {course.gradeLevel && (
+                                <CardDescription className="mt-1">
+                                  Grade level: {course.gradeLevel}
+                                </CardDescription>
+                              )}
+                            </CardHeader>
+                            <CardContent className="flex-1 flex flex-col justify-between">
+                              <div className="mt-2 flex justify-between items-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs px-2"
+                                  asChild
                                 >
-                                  <span className="flex items-center gap-1">
-                                    <span>View Details</span>
-                                    <ArrowRight className="h-3 w-3" />
-                                  </span>
-                                </a>
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                                  <a
+                                    href={
+                                      course.slug
+                                        ? `/course-catalog/${encodeURIComponent(
+                                            course.slug
+                                          )}`
+                                        : `/course-catalog?id=${encodeURIComponent(
+                                            course.id
+                                          )}`
+                                    }
+                                  >
+                                    <span className="flex items-center gap-1">
+                                      <span>View Details</span>
+                                      <ArrowRight className="h-3 w-3" />
+                                    </span>
+                                  </a>
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}

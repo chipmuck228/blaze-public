@@ -46,7 +46,6 @@ interface BatchCreateInstanceDialogProps {
   onOpenChange: (open: boolean) => void
   assignment?: CourseAssignment
   assignments: CourseAssignment[]
-  locations: CourseLocation[]
   onSuccess: () => void
 }
 
@@ -65,12 +64,21 @@ export function BatchCreateInstanceDialog({
   onOpenChange,
   assignment: prefilledAssignment,
   assignments,
-  locations,
   onSuccess,
 }: BatchCreateInstanceDialogProps) {
   const [assignmentId, setAssignmentId] = useState<string>(prefilledAssignment?.id || "")
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([])
+  const [locations, setLocations] = useState<CourseLocation[]>([])
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false)
   const [startDate, setStartDate] = useState("")
+
+  // Fetch locations when dialog opens
+  useEffect(() => {
+    if (open) {
+      fetchLocations()
+    }
+  }, [open])
+
   const [endDate, setEndDate] = useState("")
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
@@ -83,13 +91,29 @@ export function BatchCreateInstanceDialog({
   const [error, setError] = useState<string | null>(null)
   const [previewCount, setPreviewCount] = useState(0)
 
+  const fetchLocations = async () => {
+    try {
+      setIsLoadingLocations(true)
+      const response = await fetch("/api/admin/locations")
+      if (response.ok) {
+        const data = await response.json()
+        setLocations(data || [])
+      } else {
+        setLocations([])
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error)
+      setLocations([])
+    } finally {
+      setIsLoadingLocations(false)
+    }
+  }
+
   // 当 prefilledAssignment 改变时，更新 assignmentId
   useEffect(() => {
     if (prefilledAssignment) {
       setAssignmentId(prefilledAssignment.id)
-      if (prefilledAssignment.location_id) {
-        setSelectedLocationIds([prefilledAssignment.location_id])
-      }
+      // 不再从 assignment 中获取 location_id，因为 assignment 不再有 location_id
     }
   }, [prefilledAssignment])
 

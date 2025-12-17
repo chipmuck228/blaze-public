@@ -186,7 +186,7 @@ export default function SchedulePage() {
                             {item.instance.assignment?.course?.name || "Unnamed Course"}
                           </h3>
                           <p className="text-sm text-muted-foreground mb-2">
-                            {item.instance.assignment?.category?.name} &gt; {item.instance.assignment?.series?.name}
+                            {item.instance.assignment?.category?.display_name || item.instance.assignment?.category?.name} &gt; {item.instance.assignment?.series?.display_name || item.instance.assignment?.series?.name}
                           </p>
                           {item.instance.location && (
                             <p className="text-sm text-muted-foreground flex items-center gap-1">

@@ -53,7 +53,7 @@ export async function GET(request: Request) {
           id,
           course:courses(name),
           category:course_categories(display_name),
-          series:course_series(display_name)
+          series:course_series(id, display_name, franchise_id)
         )
       `)
       .eq("is_active", true)

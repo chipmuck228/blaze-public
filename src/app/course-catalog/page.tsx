@@ -7,13 +7,14 @@ import { useEffect, useState, Suspense } from "react";
 import { CourseDetail } from "@/components/CourseDetail";
 import { Loader2 } from "lucide-react";
 
-function CourseDetailById() {
+function CourseCatalogContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const courseId = searchParams.get('id');
   const [course, setCourse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 如果有 ?id=xxx 参数，显示单个课程详情
   useEffect(() => {
     if (courseId) {
       fetch(`/api/courses/${courseId}`)
@@ -36,6 +37,8 @@ function CourseDetailById() {
     }
   }, [courseId, router]);
 
+  // 如果没有 ?id=xxx 参数，显示课程列表
+  // AllCourses 组件会自己读取 ?franchise=xxx 参数来决定显示哪个校区的课程
   if (!courseId) {
     return <AllCourses />;
   }
@@ -64,7 +67,7 @@ export default function CourseCatalogPage() {
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       }>
-        <CourseDetailById />
+        <CourseCatalogContent />
       </Suspense>
       <Footer />
     </>

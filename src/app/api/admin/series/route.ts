@@ -17,13 +17,33 @@ export async function GET(request: Request) {
 
     if (categoryId) {
       const series = await getCourseSeriesByCategory(categoryId, franchiseId || undefined)
-      return NextResponse.json(series, { status: 200 })
+      // 获取每个 series 的 franchise 和 category 信息
+      const seriesWithDetails = await Promise.all(
+        series.map(async (s) => {
+          const [franchiseResult, categoryResult] = await Promise.all([
+            s.franchise_id
+              ? supabaseAdmin.from("franchises").select("id, code, name").eq("id", s.franchise_id).single()
+              : Promise.resolve({ data: null }),
+            supabaseAdmin.from("course_categories").select("id, name, display_name").eq("id", s.category_id).single(),
+          ])
+          return {
+            ...s,
+            franchise: franchiseResult.data || null,
+            category: categoryResult.data || null,
+          }
+        })
+      )
+      return NextResponse.json(seriesWithDetails, { status: 200 })
     }
 
     // 获取所有系列（可选按 franchise 过滤）
     let query = supabaseAdmin
       .from("course_series")
-      .select("*")
+      .select(`
+        *,
+        franchise:franchises(id, code, name),
+        category:course_categories(id, name, display_name)
+      `)
       .eq("is_active", true)
       .order("display_order", { ascending: true })
 

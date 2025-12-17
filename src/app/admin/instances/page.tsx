@@ -67,7 +67,11 @@ interface CourseInstance {
     id: string
     course?: { name: string }
     category?: { display_name: string }
-    series?: { display_name: string }
+    series?: { 
+      id: string
+      display_name: string
+      franchise_id?: string | null
+    }
   }
   location?: { name: string }
 }
@@ -89,13 +93,27 @@ interface CourseAssignment {
   location_id?: string
   course?: { name: string }
   category?: { display_name: string }
-  series?: { display_name: string }
+  series?: { 
+    id: string
+    display_name: string
+    franchise_id?: string | null
+  }
   location?: { name: string }
+  franchise?: { id: string; code: string; name: string } | null
 }
 
 interface CourseLocation {
   id: string
   name: string
+  franchise_id?: string | null
+}
+
+interface Coach {
+  id: string
+  name: string
+  email: string
+  image?: string
+  role: string
 }
 
 const DAYS_OF_WEEK = [
@@ -114,6 +132,7 @@ function InstancesManagementPageContent() {
   const [filteredInstances, setFilteredInstances] = useState<CourseInstance[]>([])
   const [assignments, setAssignments] = useState<CourseAssignment[]>([])
   const [locations, setLocations] = useState<CourseLocation[]>([])
+  const [coaches, setCoaches] = useState<Coach[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [editingInstance, setEditingInstance] = useState<CourseInstance | null>(null)
@@ -125,6 +144,7 @@ function InstancesManagementPageContent() {
   const [prefilledAssignmentId, setPrefilledAssignmentId] = useState<string | null>(null)
   const [isBatchCreateDialogOpen, setIsBatchCreateDialogOpen] = useState(false)
   const [selectedAssignmentForBatch, setSelectedAssignmentForBatch] = useState<CourseAssignment | null>(null)
+  const [selectedAssignmentFranchiseId, setSelectedAssignmentFranchiseId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<Omit<CourseInstance, 'id' | 'created_at' | 'updated_at'>>({
     assignment_id: "",
@@ -149,6 +169,7 @@ function InstancesManagementPageContent() {
     fetchInstances()
     fetchAssignments()
     fetchLocations()
+    fetchCoaches()
     
     // 检查 URL 参数，如果是从 Assignment 页面跳转过来的，预填充 Assignment
     const assignmentId = searchParams.get("assignmentId")
@@ -229,6 +250,21 @@ function InstancesManagementPageContent() {
     }
   }
 
+  const fetchCoaches = async () => {
+    try {
+      const response = await fetch("/api/admin/users/coaches")
+      if (response.ok) {
+        const data = await response.json()
+        setCoaches(data)
+      } else {
+        setCoaches([])
+      }
+    } catch (error) {
+      console.error("Error fetching coaches:", error)
+      setCoaches([])
+    }
+  }
+
   const handleDelete = async (instanceId: string) => {
     if (!confirm("Are you sure you want to delete this instance?")) {
       return
@@ -253,6 +289,11 @@ function InstancesManagementPageContent() {
 
   const handleEdit = (instance: CourseInstance) => {
     setEditingInstance(instance)
+    // 查找 assignment 以获取 franchise_id
+    const assignment = assignments.find(a => a.id === instance.assignment_id) as CourseAssignment | undefined
+    const franchiseId = assignment?.series?.franchise_id || null
+    setSelectedAssignmentFranchiseId(franchiseId)
+    
     setFormData({
       assignment_id: instance.assignment_id,
       location_id: instance.location_id || "",
@@ -318,6 +359,7 @@ function InstancesManagementPageContent() {
   const handleAdd = () => {
     setEditingInstance(null)
     setPrefilledAssignmentId(null)
+    setSelectedAssignmentFranchiseId(null)
     setFormData({
       assignment_id: "",
       location_id: "",
@@ -341,17 +383,20 @@ function InstancesManagementPageContent() {
   }
 
   const handleAddFromAssignment = (assignmentId: string) => {
-    const assignment = assignments.find(a => a.id === assignmentId)
+    const assignment = assignments.find(a => a.id === assignmentId) as CourseAssignment | undefined
     if (!assignment) {
       console.error("Assignment not found:", assignmentId)
       return
     }
 
+    const franchiseId = assignment.series?.franchise_id || null
+    setSelectedAssignmentFranchiseId(franchiseId)
+
     setEditingInstance(null)
     setPrefilledAssignmentId(assignmentId)
     setFormData({
       assignment_id: assignmentId,
-      location_id: assignment.location_id || "", // 预填充 Assignment 的默认 location
+      location_id: "", // 不再从 assignment 预填充 location_id，因为 assignment 不再有 location_id
       start_date: "",
       end_date: "",
       start_time: "",
@@ -715,12 +760,21 @@ function InstancesManagementPageContent() {
               <Select
                 value={formData.assignment_id}
                 onValueChange={(value) => {
-                  const selectedAssignment = assignments.find(a => a.id === value)
+                  const selectedAssignment = assignments.find(a => a.id === value) as CourseAssignment | undefined
+                  const franchiseId = selectedAssignment?.series?.franchise_id || null
+                  
+                  // 更新 franchise_id 状态
+                  setSelectedAssignmentFranchiseId(franchiseId)
+                  
+                  // 检查当前选中的 location 是否属于该 franchise
+                  const currentLocation = locations.find(l => l.id === formData.location_id)
+                  const shouldClearLocation = currentLocation && currentLocation.franchise_id !== franchiseId
+                  
                   setFormData({ 
                     ...formData, 
                     assignment_id: value,
-                    // 如果选择了新的 assignment，更新 location_id（如果 assignment 有默认 location）
-                    location_id: selectedAssignment?.location_id || formData.location_id || ""
+                    // 如果当前 location 不属于该 franchise，清空 location_id
+                    location_id: shouldClearLocation ? "" : formData.location_id
                   })
                 }}
                 required
@@ -734,18 +788,23 @@ function InstancesManagementPageContent() {
                     const courseName = assignment.course?.name || "Unknown Course"
                     const categoryName = assignment.category?.display_name || "Unknown Category"
                     const seriesName = assignment.series?.display_name || "Unknown Series"
-                    const displayText = `${courseName} (${categoryName} > ${seriesName})`
+                    const franchiseName = assignment.franchise?.name || "No Franchise"
+                    
+                    // 构建显示信息
+                    const infoParts = [franchiseName, categoryName, seriesName].filter(Boolean)
+                    const displayText = `${courseName} (${infoParts.join(' > ')})`
                     
                     return (
                       <SelectItem 
                         key={assignment.id} 
                         value={assignment.id}
                         textValue={displayText}
+                        className="py-2.5"
                       >
                         <div className="flex flex-col gap-1">
                           <span className="font-medium text-sm leading-tight">{courseName}</span>
                           <span className="text-xs text-muted-foreground leading-tight">
-                            {categoryName} {'>'} {seriesName}
+                            {infoParts.join(' • ')}
                           </span>
                         </div>
                       </SelectItem>
@@ -765,19 +824,40 @@ function InstancesManagementPageContent() {
               <Select
                 value={formData.location_id || "__none__"}
                 onValueChange={(value) => setFormData({ ...formData, location_id: value === "__none__" ? "" : value })}
+                disabled={!formData.assignment_id}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a campus (optional)" />
+                  <SelectValue placeholder={formData.assignment_id ? "Select a campus (optional)" : "Select an assignment first"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
-                  {locations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    // 根据选中的 assignment 的 franchise_id 过滤 locations
+                    const filteredLocations = selectedAssignmentFranchiseId
+                      ? locations.filter(loc => loc.franchise_id === selectedAssignmentFranchiseId)
+                      : locations
+                    
+                    if (filteredLocations.length === 0 && selectedAssignmentFranchiseId) {
+                      return (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No campuses available for this franchise
+                        </div>
+                      )
+                    }
+                    
+                    return filteredLocations.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name}
+                      </SelectItem>
+                    ))
+                  })()}
                 </SelectContent>
               </Select>
+              {formData.assignment_id && selectedAssignmentFranchiseId && (
+                <p className="text-xs text-muted-foreground">
+                  Only showing campuses for this assignment's franchise
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1013,13 +1093,34 @@ function InstancesManagementPageContent() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="instructor_name">Instructor Name</Label>
-                <Input
-                  id="instructor_name"
-                  value={formData.instructor_name}
-                  onChange={(e) => setFormData({ ...formData, instructor_name: e.target.value })}
-                  placeholder="John Doe"
-                />
+                <Label htmlFor="instructor_id">Coach (Optional)</Label>
+                <Select
+                  value={formData.instructor_id || "__none__"}
+                  onValueChange={(value) => {
+                    if (value === "__none__") {
+                      setFormData({ ...formData, instructor_id: "", instructor_name: "" })
+                    } else {
+                      const selectedCoach = coaches.find(c => c.id === value)
+                      setFormData({ 
+                        ...formData, 
+                        instructor_id: value,
+                        instructor_name: selectedCoach?.name || ""
+                      })
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a coach (optional)" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    <SelectItem value="__none__">None</SelectItem>
+                    {coaches.map((coach) => (
+                      <SelectItem key={coach.id} value={coach.id}>
+                        {coach.name} {coach.email ? `(${coach.email})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -1081,7 +1182,6 @@ function InstancesManagementPageContent() {
         onOpenChange={setIsBatchCreateDialogOpen}
         assignment={selectedAssignmentForBatch || undefined}
         assignments={assignments}
-        locations={locations}
         onSuccess={() => {
           fetchInstances()
           setIsBatchCreateDialogOpen(false)

@@ -84,6 +84,19 @@ interface CourseSeries {
   id: string
   display_name: string
   category_id: string
+  franchise_id?: string | null
+  start_date?: string
+  end_date?: string
+  franchise?: {
+    id: string
+    code: string
+    name: string
+  } | null
+  category?: {
+    id: string
+    name: string
+    display_name: string
+  } | null
 }
 
 interface CourseLocation {
@@ -98,7 +111,6 @@ export default function AssignmentsManagementPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [categories, setCategories] = useState<CourseCategory[]>([])
   const [series, setSeries] = useState<CourseSeries[]>([])
-  const [locations, setLocations] = useState<CourseLocation[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [editingAssignment, setEditingAssignment] = useState<CourseAssignment | null>(null)
@@ -113,7 +125,6 @@ export default function AssignmentsManagementPage() {
     course_id: "",
     category_id: "",
     series_id: "",
-    location_id: "",
     display_order: 0,
     is_active: true,
   })
@@ -122,7 +133,6 @@ export default function AssignmentsManagementPage() {
     fetchAssignments()
     fetchCourses()
     fetchCategories()
-    fetchLocations()
     fetchInstanceCounts()
   }, [])
 
@@ -241,21 +251,6 @@ export default function AssignmentsManagementPage() {
     }
   }
 
-  const fetchLocations = async () => {
-    try {
-      const response = await fetch("/api/admin/locations")
-      if (response.ok) {
-        const data = await response.json()
-        setLocations(data)
-      } else {
-        // Locations API might not exist yet, set empty array
-        setLocations([])
-      }
-    } catch (error) {
-      console.error("Error fetching locations:", error)
-      setLocations([])
-    }
-  }
 
   const handleDelete = async (assignmentId: string) => {
     if (!confirm("Are you sure you want to delete this assignment? This will also delete all associated instances.")) {
@@ -285,7 +280,6 @@ export default function AssignmentsManagementPage() {
       course_id: assignment.course_id,
       category_id: assignment.category_id,
       series_id: assignment.series_id,
-      location_id: assignment.location_id || "",
       display_order: assignment.display_order,
       is_active: assignment.is_active,
     })
@@ -298,7 +292,6 @@ export default function AssignmentsManagementPage() {
       course_id: "",
       category_id: "",
       series_id: "",
-      location_id: "",
       display_order: 0,
       is_active: true,
     })
@@ -312,7 +305,6 @@ export default function AssignmentsManagementPage() {
     try {
       const submitData = {
         ...formData,
-        location_id: formData.location_id || undefined,
       }
 
       const url = editingAssignment
@@ -412,7 +404,6 @@ export default function AssignmentsManagementPage() {
                     <TableHead>Course</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Series</TableHead>
-                    <TableHead>Campus</TableHead>
                     <TableHead>Instances</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
@@ -444,7 +435,6 @@ export default function AssignmentsManagementPage() {
                         </TableCell>
                         <TableCell>{assignment.category?.display_name || "Unknown"}</TableCell>
                         <TableCell>{assignment.series?.display_name || "Unknown"}</TableCell>
-                        <TableCell>{assignment.location?.name || "N/A"}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">
@@ -513,7 +503,7 @@ export default function AssignmentsManagementPage() {
           <DialogHeader>
             <DialogTitle>{editingAssignment ? "Edit Assignment" : "Add New Assignment"}</DialogTitle>
             <DialogDescription>
-              {editingAssignment ? "Update assignment information" : "Assign a course to a category, series, and optionally a campus"}
+              {editingAssignment ? "Update assignment information" : "Assign a published course to a category and program. The campus will be selected when creating instances."}
             </DialogDescription>
           </DialogHeader>
 
@@ -594,7 +584,7 @@ export default function AssignmentsManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="series_id">Series *</Label>
+              <Label htmlFor="series_id">Program (Series) *</Label>
               <Select
                 value={formData.series_id}
                 onValueChange={(value) => setFormData({ ...formData, series_id: value })}
@@ -602,36 +592,38 @@ export default function AssignmentsManagementPage() {
                 disabled={!formData.category_id}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={formData.category_id ? "Select a series" : "Select a category first"} />
+                  <SelectValue placeholder={formData.category_id ? "Select a program" : "Select a category first"} />
                 </SelectTrigger>
-                <SelectContent>
-                  {series.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.display_name}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[400px]">
+                  {series.map((s) => {
+                    // 构建显示信息
+                    const franchiseText = s.franchise ? s.franchise.name : "No Franchise"
+                    const categoryText = s.category ? s.category.display_name : "Unknown Category"
+                    const dateRange = s.start_date && s.end_date
+                      ? `${new Date(s.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} - ${new Date(s.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                      : null
+                    
+                    return (
+                      <SelectItem 
+                        key={s.id} 
+                        value={s.id}
+                        textValue={`${s.display_name} - ${franchiseText} - ${categoryText}`}
+                        className="py-2.5"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-sm leading-tight">{s.display_name}</span>
+                          <span className="text-xs text-muted-foreground leading-tight">
+                            {[franchiseText, categoryText, dateRange].filter(Boolean).join(" • ")}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location_id">Campus (Optional)</Label>
-              <Select
-                value={formData.location_id || "__none__"}
-                onValueChange={(value) => setFormData({ ...formData, location_id: value === "__none__" ? "" : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a campus (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {locations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="text-xs text-muted-foreground">
+                Select a program to assign the course to. The campus will be selected when creating instances.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -673,7 +665,6 @@ export default function AssignmentsManagementPage() {
         onOpenChange={setIsBatchCreateDialogOpen}
         assignment={selectedAssignmentForBatch || undefined}
         assignments={assignments}
-        locations={locations}
         onSuccess={handleBatchCreateSuccess}
       />
     </div>
