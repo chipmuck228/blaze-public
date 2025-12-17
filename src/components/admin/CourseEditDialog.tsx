@@ -675,9 +675,13 @@ export function CourseEditDialog({
             <Textarea
               id="audience"
               value={formData.target_audience || ""}
-              onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
+              onChange={(e) => {
+                if (isArchived) return
+                setFormData({ ...formData, target_audience: e.target.value })
+              }}
               placeholder="e.g., Elementary school students interested in robotics"
               rows={2}
+              disabled={isArchived}
             />
           </div>
 
@@ -719,11 +723,13 @@ export function CourseEditDialog({
             <Textarea
               id="policy"
               value={formData.cancellation_policy || ""}
-              onChange={(e) =>
+              onChange={(e) => {
+                if (isArchived) return
                 setFormData({ ...formData, cancellation_policy: e.target.value })
-              }
+              }}
               placeholder="Refund policy details"
               rows={2}
+              disabled={isArchived}
             />
           </div>
 
