@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const franchiseCode = searchParams.get("franchise")
 
     // 如果指定了 franchise，则解析为 franchise_id
-    let baseQuery = supabaseAdmin.from("course_enrollments")
+    let franchiseId: string | null = null
     if (franchiseCode) {
       const franchise = await getFranchiseByCode(franchiseCode)
       if (!franchise) {
@@ -25,75 +25,57 @@ export async function GET(request: Request) {
           { status: 400 }
         )
       }
-      baseQuery = baseQuery.eq("franchise_id", franchise.id)
+      franchiseId = franchise.id
+    }
+
+    // 构建基础查询
+    const buildBaseQuery = () => {
+      let query = supabaseAdmin
+        .from("course_enrollments")
+        .select("id", { count: "exact", head: true })
+      
+      if (franchiseId) {
+        query = query.eq("franchise_id", franchiseId)
+      }
+      
+      return query
     }
 
     // 获取总数
-    const { count: total } = await baseQuery
-      .select("id", { count: "exact", head: true })
+    const { count: total } = await buildBaseQuery()
 
     // 按状态统计
     const statusCounts = await Promise.all([
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "enrolled"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "reserved"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "cart"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "waitlisted"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "cancelled"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "expired"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("status", "completed"),
+      buildBaseQuery().eq("status", "enrolled"),
+      buildBaseQuery().eq("status", "reserved"),
+      buildBaseQuery().eq("status", "cart"),
+      buildBaseQuery().eq("status", "waitlisted"),
+      buildBaseQuery().eq("status", "cancelled"),
+      buildBaseQuery().eq("status", "expired"),
+      buildBaseQuery().eq("status", "completed"),
     ])
 
     // 按支付状态统计
     const paymentStatusCounts = await Promise.all([
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("payment_status", "paid"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("payment_status", "pending"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("payment_status", "unpaid"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("payment_status", "refunded"),
-      baseQuery
-        .clone()
-        .select("id", { count: "exact", head: true })
-        .eq("payment_status", "failed"),
+      buildBaseQuery().eq("payment_status", "paid"),
+      buildBaseQuery().eq("payment_status", "pending"),
+      buildBaseQuery().eq("payment_status", "unpaid"),
+      buildBaseQuery().eq("payment_status", "refunded"),
+      buildBaseQuery().eq("payment_status", "failed"),
     ])
 
     // 计算总收入（已支付的注册）
-    const { data: paidEnrollments } = await supabaseAdmin
+    let revenueQuery = supabaseAdmin
       .from("course_enrollments")
       .select("amount_paid")
       .eq("payment_status", "paid")
       .not("amount_paid", "is", null)
+    
+    if (franchiseId) {
+      revenueQuery = revenueQuery.eq("franchise_id", franchiseId)
+    }
+    
+    const { data: paidEnrollments } = await revenueQuery
 
     const totalRevenue = paidEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid) || 0), 0) || 0
 
@@ -102,12 +84,18 @@ export async function GET(request: Request) {
     thisMonth.setDate(1)
     thisMonth.setHours(0, 0, 0, 0)
 
-    const { data: thisMonthEnrollments } = await supabaseAdmin
+    let thisMonthQuery = supabaseAdmin
       .from("course_enrollments")
       .select("amount_paid")
       .eq("payment_status", "paid")
       .not("amount_paid", "is", null)
       .gte("enrolled_at", thisMonth.toISOString())
+    
+    if (franchiseId) {
+      thisMonthQuery = thisMonthQuery.eq("franchise_id", franchiseId)
+    }
+    
+    const { data: thisMonthEnrollments } = await thisMonthQuery
 
     const thisMonthRevenue = thisMonthEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid) || 0), 0) || 0
 
