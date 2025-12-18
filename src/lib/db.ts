@@ -2807,7 +2807,7 @@ export async function getCoursePrerequisiteGroups(courseId: string): Promise<Pre
 // 创建先修课程组
 export async function createPrerequisiteGroup(
   courseId: string,
-  group: Omit<PrerequisiteGroup, 'id' | 'created_at' | 'updated_at' | 'prerequisites'>,
+  group: Omit<PrerequisiteGroup, 'id' | 'course_id' | 'created_at' | 'updated_at' | 'prerequisites'>,
   prerequisiteIds: string[]
 ): Promise<PrerequisiteGroup> {
   // 创建组
