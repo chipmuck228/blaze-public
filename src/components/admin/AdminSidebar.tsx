@@ -100,6 +100,11 @@ const courseMenuItems = [
     href: "/admin/instances",
     icon: Calendar,
   },
+  {
+    title: "Learning Paths",
+    href: "/admin/learning-paths",
+    icon: FolderTree,
+  },
 ]
 
 export function AdminSidebar() {

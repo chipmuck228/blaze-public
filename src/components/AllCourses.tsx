@@ -1,11 +1,13 @@
 'use client'
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Search, Filter, ArrowRight, Sparkles } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Search, Filter, ArrowRight, Sparkles, MapPin, X } from "lucide-react";
+import Image from "next/image";
 
 interface Course {
   id: string;
@@ -14,6 +16,7 @@ interface Course {
   gradeLevel: string;
   slug?: string;
   featured?: boolean;
+  poster_url?: string | null;
 }
 
 interface ProgramCourse {
@@ -58,7 +61,14 @@ const getTypeColor = (type: Course['type']) => {
   }
 };
 
+interface Franchise {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export const AllCourses = () => {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -67,12 +77,54 @@ export const AllCourses = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
+  const [franchises, setFranchises] = useState<Franchise[]>([]);
+  const [isLoadingFranchises, setIsLoadingFranchises] = useState(true);
   const searchParams = useSearchParams();
   const franchise = searchParams.get("franchise");
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // 获取所有 franchises
+  useEffect(() => {
+    const fetchFranchises = async () => {
+      try {
+        setIsLoadingFranchises(true);
+        const res = await fetch("/api/public/franchises");
+        if (!res.ok) {
+          throw new Error("Failed to load franchises");
+        }
+        const data = await res.json();
+        setFranchises(data || []);
+      } catch (err: any) {
+        console.error("Error fetching franchises:", err);
+      } finally {
+        setIsLoadingFranchises(false);
+      }
+    };
+
+    fetchFranchises();
+  }, []);
+
+  // Phase 2: 用户偏好记忆 - 从 localStorage 读取并应用用户上次选择的 location
+  useEffect(() => {
+    if (mounted && !franchise && franchises.length > 0) {
+      // 只有在没有 URL 参数时才应用偏好
+      const preferredLocation = localStorage.getItem('preferred_location');
+      if (preferredLocation) {
+        // 验证该 location 是否仍然有效
+        const isValidLocation = franchises.some(f => f.code === preferredLocation);
+        if (isValidLocation) {
+          // 使用 router.replace 避免添加到历史记录
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("franchise", preferredLocation);
+          router.replace(`/course-catalog?${params.toString()}`);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, franchise, franchises.length]);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -140,6 +192,21 @@ export const AllCourses = () => {
 
   const hasActiveFilters = searchQuery || selectedType || selectedGrade;
 
+  // Location 筛选器变化处理
+  const handleLocationChange = (locationCode: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (locationCode === "all" || !locationCode) {
+      params.delete("franchise");
+      // Phase 2: 清除用户偏好
+      localStorage.removeItem('preferred_location');
+    } else {
+      params.set("franchise", locationCode);
+      // Phase 2: 保存用户偏好
+      localStorage.setItem('preferred_location', locationCode);
+    }
+    router.push(`/course-catalog?${params.toString()}`);
+  };
+
   const franchiseLabel = useMemo(() => {
     if (!franchise) return null;
     const code = franchise.toLowerCase();
@@ -181,10 +248,12 @@ export const AllCourses = () => {
 
   // Franchise 模式：按 Program/Series → Courses 视图展示
   if (franchise) {
+    const selectedFranchise = franchises.find(f => f.code === franchise);
+    
     return (
       <div className="min-h-screen">
         <section className="container mx-auto px-4 py-12 md:py-20">
-          <div className="max-w-4xl mx-auto text-center mb-12">
+          <div className="max-w-4xl mx-auto text-center mb-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
               Programs at {franchiseLabel}
             </h1>
@@ -194,6 +263,22 @@ export const AllCourses = () => {
             <p className="text-lg text-muted-foreground max-w-3xl mx-auto mt-6">
               Browse programs (series) and courses currently offered at our {franchiseLabel} campus.
             </p>
+          </div>
+
+          {/* Location Badge and Change Button */}
+          <div className="max-w-6xl mx-auto mb-8 flex items-center justify-center gap-3">
+            <Badge variant="secondary" className="px-4 py-2 text-sm">
+              <MapPin className="h-4 w-4 mr-2" />
+              {selectedFranchise?.name || franchiseLabel} Campus
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleLocationChange("all")}
+              className="text-sm"
+            >
+              Change Location
+            </Button>
           </div>
 
           <div className="max-w-6xl mx-auto mb-8">
@@ -358,19 +443,58 @@ export const AllCourses = () => {
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-12 md:py-20">
-        <div className="max-w-4xl mx-auto text-center mb-12">
+        <div className="max-w-4xl mx-auto text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            {franchiseLabel ? `Programs at ${franchiseLabel}` : "Course Catalog"}
+            Course Catalog
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground mb-2">
             Robotics | Programming | STEM
           </p>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto mt-6">
-            {franchiseLabel
-              ? `Browse robotics and programming programs currently offered at our ${franchiseLabel} campus.`
-              : "Browse all available robotics and programming courses across our campuses."}
+            Browse all available robotics and programming courses across our campuses.
           </p>
         </div>
+
+        {/* Location Selection Banner */}
+        {!franchise && (
+          <div className="max-w-6xl mx-auto mb-8">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="font-semibold text-base mb-1">
+                      Find courses near you
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Select your location to see available classes and schedules
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {!isLoadingFranchises && franchises.length > 0 && (
+                    <Select
+                      value={franchise || "all"}
+                      onValueChange={handleLocationChange}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Locations</SelectItem>
+                        {franchises.map((f) => (
+                          <SelectItem key={f.id} value={f.code}>
+                            {f.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search and Filter Section */}
         <div className="max-w-6xl mx-auto mb-12">
@@ -384,6 +508,32 @@ export const AllCourses = () => {
                 {error}
               </div>
             ) : null}
+            
+            {/* Location Filter (when viewing all courses) */}
+            {!franchise && !isLoadingFranchises && franchises.length > 0 && (
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium whitespace-nowrap">
+                  Location:
+                </label>
+                <Select
+                  value={franchise || "all"}
+                  onValueChange={handleLocationChange}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All Locations" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Locations</SelectItem>
+                    {franchises.map((f) => (
+                      <SelectItem key={f.id} value={f.code}>
+                        {f.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -472,10 +622,21 @@ export const AllCourses = () => {
                 {courses.map((course) => (
                   <Card
                     key={course.id}
-                    className={`flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1 ${
+                    className={`flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1 overflow-hidden ${
                       course.featured ? 'ring-2 ring-primary/20' : ''
                     }`}
                   >
+                    {course.poster_url && (
+                      <div className="relative w-full h-48">
+                        <Image
+                          src={course.poster_url}
+                          alt={course.title}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        />
+                      </div>
+                    )}
                     <CardHeader>
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <Badge

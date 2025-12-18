@@ -53,6 +53,10 @@ interface RouteProps {
       label: "Programs",
     },
     {
+      href: "/learning-paths",
+      label: "Learning Paths",
+    },
+    {
       href: "#about",
       label: "About",
     },

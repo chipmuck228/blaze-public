@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -44,6 +44,7 @@ interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
+  poster_url?: string | null
   status: 'draft' | 'published' | 'suspended' | 'archived'
   created_at: string
   updated_at: string
@@ -61,25 +62,7 @@ export default function CoursesManagementPage() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchCourses()
-  }, [])
-
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = courses.filter(
-        (course) =>
-          course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          course.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          course.slug?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      setFilteredCourses(filtered)
-    } else {
-      setFilteredCourses(courses)
-    }
-  }, [searchQuery, courses])
-
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -98,7 +81,25 @@ export default function CoursesManagementPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchCourses()
+  }, [fetchCourses])
+
+  useEffect(() => {
+    if (searchQuery) {
+      const filtered = courses.filter(
+        (course) =>
+          course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          course.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          course.slug?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      setFilteredCourses(filtered)
+    } else {
+      setFilteredCourses(courses)
+    }
+  }, [searchQuery, courses])
 
   const handleDelete = async (courseId: string) => {
     // 检查课程状态：只有 draft 状态的课程可以删除
@@ -149,11 +150,11 @@ export default function CoursesManagementPage() {
     setIsEditDialogOpen(true)
   }
 
-  const handleCourseUpdated = () => {
+  const handleCourseUpdated = useCallback(() => {
     fetchCourses()
     setIsEditDialogOpen(false)
     setEditingCourse(null)
-  }
+  }, [fetchCourses])
 
   const getCourseTags = (course: Course): string => {
     if (course.tags && course.tags.length > 0) {

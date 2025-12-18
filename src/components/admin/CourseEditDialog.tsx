@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,9 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload, X, Image as ImageIcon } from "lucide-react"
+import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CoursePrerequisitesManager } from "./CoursePrerequisitesManager"
 
 interface Course {
   id?: string
@@ -39,6 +42,7 @@ interface Course {
   target_grades?: string[]
   base_price?: number
   currency?: string
+  poster_url?: string | null
   status?: 'draft' | 'published' | 'suspended' | 'archived'
   tags?: Array<{ id: string; name: string; display_name: string }>
 }
@@ -67,6 +71,8 @@ export function CourseEditDialog({
   const [selectedSubcategoryIds, setSelectedSubcategoryIds] = useState<string[]>([])
   const [targetGradesInput, setTargetGradesInput] = useState<string>("")
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
+  const [posterUrl, setPosterUrl] = useState<string | null>(null)
+  const [isUploadingPoster, setIsUploadingPoster] = useState(false)
   const [statusChangeCheck, setStatusChangeCheck] = useState<{
     showDialog: boolean
     newStatus: 'draft' | 'published' | 'suspended' | 'archived' | null
@@ -99,41 +105,20 @@ export function CourseEditDialog({
     target_grades: [],
     base_price: undefined,
     currency: "USD",
+    poster_url: null,
     status: "draft",
   })
 
-  useEffect(() => {
-    if (open) {
-      fetchSubcategories()
-      if (course) {
-        setFormData({
-          id: course.id,
-          name: course.name,
-          slug: course.slug || "",
-          description: course.description || "",
-          target_audience: course.target_audience || "",
-          outcomes: course.outcomes || "",
-          prerequisites: course.prerequisites || "",
-          cancellation_policy: course.cancellation_policy || "",
-          number_of_sessions: course.number_of_sessions,
-          target_age_min: course.target_age_min,
-          target_age_max: course.target_age_max,
-          target_grades: course.target_grades || [],
-          base_price: course.base_price,
-          currency: course.currency || "USD",
-          status: course.status || "draft",
-        })
-        setSelectedSubcategoryIds(course.tags?.map(t => t.id) || [])
-        setTargetGradesInput(course.target_grades?.join("; ") || "")
-        setSlugManuallyEdited(!!course.slug) // If course has slug, consider it manually edited
-      } else {
-        resetForm()
-        setSlugManuallyEdited(false) // New course, allow auto-generation
-      }
-    }
-  }, [open, course])
+  // 使用 useRef 来存储已初始化的 course.id 和 course 对象，避免重复初始化
+  const initializedCourseIdRef = useRef<string | null>(null)
+  const courseRef = useRef<Course | null>(null)
 
-  const fetchSubcategories = async () => {
+  // 更新 courseRef 当 course 改变时
+  useEffect(() => {
+    courseRef.current = course
+  }, [course])
+
+  const fetchSubcategories = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/subcategories")
       if (response.ok) {
@@ -143,9 +128,9 @@ export function CourseEditDialog({
     } catch (error) {
       console.error("Error fetching subcategories:", error)
     }
-  }
+  }, [])
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       name: "",
       slug: "",
@@ -160,12 +145,65 @@ export function CourseEditDialog({
       target_grades: [],
       base_price: undefined,
       currency: "USD",
+      poster_url: null,
       status: "draft",
     })
+    setPosterUrl(null)
     setSelectedSubcategoryIds([])
     setTargetGradesInput("")
     setSlugManuallyEdited(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!open) {
+      // 对话框关闭时，重置初始化标志
+      initializedCourseIdRef.current = null
+      courseRef.current = null
+      return
+    }
+    
+    const currentCourseId = course?.id || null
+    
+    // 如果已经初始化过且 course.id 没有改变，跳过
+    if (initializedCourseIdRef.current === currentCourseId) {
+      return
+    }
+    
+    // 标记为已初始化
+    initializedCourseIdRef.current = currentCourseId
+    
+    fetchSubcategories()
+    
+    // 使用 courseRef.current 来获取最新的 course 对象
+    const currentCourse = courseRef.current
+    if (currentCourse) {
+      setFormData({
+        id: currentCourse.id,
+        name: currentCourse.name,
+        slug: currentCourse.slug || "",
+        description: currentCourse.description || "",
+        target_audience: currentCourse.target_audience || "",
+        outcomes: currentCourse.outcomes || "",
+        prerequisites: currentCourse.prerequisites || "",
+        cancellation_policy: currentCourse.cancellation_policy || "",
+        number_of_sessions: currentCourse.number_of_sessions,
+        target_age_min: currentCourse.target_age_min,
+        target_age_max: currentCourse.target_age_max,
+        target_grades: currentCourse.target_grades || [],
+        base_price: currentCourse.base_price,
+        currency: currentCourse.currency || "USD",
+        poster_url: currentCourse.poster_url || null,
+        status: currentCourse.status || "draft",
+      })
+      setPosterUrl(currentCourse.poster_url || null)
+      setSelectedSubcategoryIds(currentCourse.tags?.map(t => t.id) || [])
+      setTargetGradesInput(currentCourse.target_grades?.join("; ") || "")
+      setSlugManuallyEdited(!!currentCourse.slug) // If course has slug, consider it manually edited
+    } else {
+      resetForm()
+      setSlugManuallyEdited(false) // New course, allow auto-generation
+    }
+  }, [open, course?.id, fetchSubcategories, resetForm]) // 添加 fetchSubcategories 和 resetForm 到依赖数组
 
   const toggleSubcategory = (subcategoryId: string) => {
     setSelectedSubcategoryIds((prev) =>
@@ -251,6 +289,7 @@ export function CourseEditDialog({
     try {
       const submitData = {
         ...formData,
+        poster_url: posterUrl,
         target_grades: parseGrades(targetGradesInput),
         subcategory_ids: selectedSubcategoryIds,
       }
@@ -303,6 +342,58 @@ export function CourseEditDialog({
       activeInstances: 0,
       activeEnrollments: 0,
     })
+  }
+
+  const handlePosterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // 验证文件类型
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if (!allowedTypes.includes(file.type)) {
+      alert("Invalid file type. Only JPEG, PNG, and WebP are allowed.")
+      e.target.value = "" // 清空文件输入
+      return
+    }
+
+    // 验证文件大小（最大 5MB）
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      alert("File size exceeds 5MB limit.")
+      e.target.value = "" // 清空文件输入
+      return
+    }
+
+    setIsUploadingPoster(true)
+    try {
+      const uploadFormData = new FormData()
+      uploadFormData.append("file", file)
+
+      const response = await fetch("/api/admin/courses/upload", {
+        method: "POST",
+        body: uploadFormData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to upload poster")
+      }
+
+      const data = await response.json()
+      setPosterUrl(data.url)
+      setFormData((prev) => ({ ...prev, poster_url: data.url }))
+    } catch (error: any) {
+      console.error("Error uploading poster:", error)
+      alert(error.message || "Failed to upload poster")
+    } finally {
+      setIsUploadingPoster(false)
+      e.target.value = "" // 清空文件输入，允许重复上传同一文件
+    }
+  }
+
+  const handleRemovePoster = () => {
+    setPosterUrl(null)
+    setFormData({ ...formData, poster_url: null })
   }
 
   return (
@@ -382,7 +473,14 @@ export function CourseEditDialog({
           )}
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <Tabs defaultValue="basic" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="basic">Basic Information</TabsTrigger>
+            <TabsTrigger value="prerequisites">Prerequisites</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="basic" className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
           {/* Course Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Course Name *</Label>
@@ -430,6 +528,86 @@ export function CourseEditDialog({
             <p className="text-xs text-muted-foreground">
               Automatically generated from course name and first target grade. You can manually edit if needed.
             </p>
+          </div>
+
+          {/* Course Poster Upload */}
+          <div className="space-y-2">
+            <Label htmlFor="poster">Course Poster</Label>
+            <div className="space-y-3">
+              {posterUrl ? (
+                <div className="relative group">
+                  <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
+                    <Image
+                      src={posterUrl}
+                      alt="Course poster"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={handleRemovePoster}
+                    disabled={isArchived || isUploadingPoster}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                  <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-2">
+                    No poster uploaded
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Input
+                  id="poster"
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handlePosterUpload}
+                  disabled={isArchived || isUploadingPoster}
+                  className="hidden"
+                />
+                <Label
+                  htmlFor="poster"
+                  className={`flex items-center gap-2 px-4 py-2 border border-border rounded-md cursor-pointer hover:bg-accent transition-colors ${
+                    isArchived || isUploadingPoster ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {isUploadingPoster ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      <span>{posterUrl ? "Replace Poster" : "Upload Poster"}</span>
+                    </>
+                  )}
+                </Label>
+                {posterUrl && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemovePoster}
+                    disabled={isArchived || isUploadingPoster}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Recommended: 1200x800px, max 5MB. Formats: JPEG, PNG, WebP
+              </p>
+            </div>
           </div>
 
           {/* Subcategory Tags (Multi-select) */}
@@ -753,6 +931,15 @@ export function CourseEditDialog({
             </Button>
           </DialogFooter>
         </form>
+          </TabsContent>
+
+          <TabsContent value="prerequisites" className="space-y-4">
+            <CoursePrerequisitesManager
+              courseId={course?.id || null}
+              disabled={isArchived}
+            />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
     </>

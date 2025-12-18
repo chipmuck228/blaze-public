@@ -111,6 +111,7 @@ export async function POST(request: Request) {
       target_grades,
       base_price,
       currency,
+      poster_url,
       subcategory_ids, // 子类标签ID数组
     } = body
 
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
       target_grades,
       base_price,
       currency: currency || "USD",
+      poster_url: poster_url || null,
       status: 'draft',  // 新创建的课程默认为 draft 状态
     })
 

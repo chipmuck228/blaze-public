@@ -152,6 +152,7 @@ export async function GET(request: Request) {
         gradeLevel: gradeLevel || 'All',
         description: course.description || undefined,
         slug: course.slug || undefined,
+        poster_url: course.poster_url || undefined,
       }
     })
     

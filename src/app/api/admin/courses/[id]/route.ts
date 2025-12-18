@@ -66,6 +66,7 @@ export async function PUT(
       target_grades,
       base_price,
       currency,
+      poster_url,
       status,  // 使用 status 替代 is_active
       subcategory_ids, // 子类标签ID数组
     } = body
@@ -99,6 +100,7 @@ export async function PUT(
       target_grades,
       base_price,
       currency,
+      poster_url: poster_url !== undefined ? poster_url : undefined, // 允许设置为 null
       status,  // 使用 status 替代 is_active
     })
 

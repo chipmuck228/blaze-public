@@ -1160,10 +1160,69 @@ export interface Course {
   age_min?: number  // 数据库字段
   age_max?: number  // 数据库字段
   grade_level?: string  // 数据库字段
+  poster_url?: string | null  // 课程招贴画 URL（存储在 Vercel Blob）
   status: 'draft' | 'published' | 'suspended' | 'archived'  // 课程状态
   is_active?: boolean  // 保留向后兼容，映射自 status
   created_at: string
   updated_at: string
+}
+
+export interface CoursePrerequisite {
+  id: string
+  course_id: string
+  prerequisite_course_id: string
+  requirement_type: 'required' | 'recommended' | 'optional'
+  is_mandatory: boolean
+  display_order: number
+  notes?: string | null
+  created_at: string
+  updated_at: string
+  prerequisite_course?: Course // 关联的先修课程详情
+  group_id?: string | null // 所属的组ID（如果属于组）
+}
+
+export interface PrerequisiteGroup {
+  id: string
+  course_id: string
+  group_type: 'and' | 'or' | 'custom'
+  min_required: number
+  display_order: number
+  description?: string | null
+  created_at: string
+  updated_at: string
+  prerequisites?: CoursePrerequisite[] // 组内的先修课程
+}
+
+export interface UserCourseCompletion {
+  id: string
+  user_id: string
+  course_id: string
+  instance_id?: string | null
+  completion_date: string
+  grade?: string | null
+  certificate_url?: string | null
+  notes?: string | null
+  verified_by?: string | null
+  verified_at?: string | null
+  created_at: string
+  updated_at: string
+  course?: Course // 关联的课程详情
+}
+
+export interface UserLearningPathProgress {
+  id: string
+  user_id: string
+  path_id: string
+  current_stage: number
+  completed_courses_count: number
+  total_courses_count: number
+  started_at: string
+  last_activity_at?: string | null
+  completed_at?: string | null
+  is_completed: boolean
+  created_at: string
+  updated_at: string
+  path?: LearningPath // 关联的学习路径详情
 }
 
 export interface CourseAssignment {
@@ -1258,10 +1317,49 @@ export interface Franchise {
   is_active: boolean
 }
 
+// 学习路径相关接口
+export interface LearningPath {
+  id: string
+  name: string
+  slug?: string
+  description?: string
+  category_id?: string | null
+  target_audience?: string
+  estimated_duration_weeks?: number
+  difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
+  is_active: boolean
+  display_order: number
+  created_at: string
+  updated_at: string
+  category?: CourseCategory // 关联的课程大类
+  courses?: LearningPathCourse[] // 路径中的课程
+}
+
+export interface LearningPathCourse {
+  id: string
+  path_id: string
+  course_id: string
+  stage: number
+  stage_name?: string | null
+  is_required: boolean
+  is_parallel: boolean
+  display_order: number
+  estimated_weeks?: number | null
+  notes?: string | null
+  created_at: string
+  updated_at: string
+  course?: Course // 关联的课程详情
+}
+
+export interface LearningPathWithDetails extends LearningPath {
+  courses: LearningPathCourse[]
+}
+
 // 完整的课程信息（包含关联数据）
 export interface CourseWithDetails extends Course {
   subcategories?: CourseSubcategory[]
   assignments?: CourseAssignmentWithDetails[]
+  prerequisites_list?: CoursePrerequisite[] // 结构化的先修课程列表
 }
 
 // ==================== 课程相关数据库操作函数 ====================
@@ -1446,10 +1544,38 @@ export async function getCourseWithDetails(courseId: string): Promise<CourseWith
     }
   }
 
+  // 获取先修课程（只获取 required 和 recommended 类型，用于公开显示）
+  let prerequisites_list: CoursePrerequisite[] = []
+  try {
+    const { data: prerequisitesData } = await supabaseAdmin
+      .from('course_prerequisites')
+      .select(`
+        *,
+        prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+      `)
+      .eq('course_id', courseId)
+      .in('requirement_type', ['required', 'recommended'])
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (prerequisitesData) {
+      prerequisites_list = prerequisitesData.map((item: any) => ({
+        ...item,
+        prerequisite_course: Array.isArray(item.prerequisite_course)
+          ? item.prerequisite_course[0]
+          : item.prerequisite_course,
+      })) as CoursePrerequisite[]
+    }
+  } catch (error) {
+    console.error('Error fetching prerequisites:', error)
+    // 如果获取先修课程失败，不影响其他数据
+  }
+
   return {
     ...course,
     subcategories,
     assignments: assignmentsWithDetails,
+    prerequisites_list,
   } as CourseWithDetails
 }
 
@@ -1553,10 +1679,38 @@ export async function getCourseWithDetailsBySlug(slug: string): Promise<CourseWi
     }
   }
 
+  // 获取先修课程（只获取 required 和 recommended 类型，用于公开显示）
+  let prerequisites_list: CoursePrerequisite[] = []
+  try {
+    const { data: prerequisitesData } = await supabaseAdmin
+      .from('course_prerequisites')
+      .select(`
+        *,
+        prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+      `)
+      .eq('course_id', course.id)
+      .in('requirement_type', ['required', 'recommended'])
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (prerequisitesData) {
+      prerequisites_list = prerequisitesData.map((item: any) => ({
+        ...item,
+        prerequisite_course: Array.isArray(item.prerequisite_course)
+          ? item.prerequisite_course[0]
+          : item.prerequisite_course,
+      })) as CoursePrerequisite[]
+    }
+  } catch (error) {
+    console.error('Error fetching prerequisites:', error)
+    // 如果获取先修课程失败，不影响其他数据
+  }
+
   return {
     ...course,
     subcategories,
     assignments: assignmentsWithDetails,
+    prerequisites_list,
   } as CourseWithDetails
 }
 
@@ -1789,6 +1943,923 @@ export async function deleteCourse(courseId: string): Promise<boolean> {
 
   if (error) {
     throw new Error(`Failed to delete course: ${error.message}`)
+  }
+
+  return true
+}
+
+// ==================== Course Prerequisites 操作 ====================
+
+// 获取课程的所有先修课程
+export async function getCoursePrerequisites(courseId: string): Promise<CoursePrerequisite[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_prerequisites')
+    .select(`
+      *,
+      prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+    `)
+    .eq('course_id', courseId)
+    .order('display_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch course prerequisites: ${error.message}`)
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    prerequisite_course: Array.isArray(item.prerequisite_course) 
+      ? item.prerequisite_course[0] as Course | undefined
+      : item.prerequisite_course as Course | undefined,
+  })) as CoursePrerequisite[]
+}
+
+// 获取需要某个课程作为先修的所有课程（反向查询）
+export async function getCoursesRequiringPrerequisite(prerequisiteCourseId: string): Promise<Course[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_prerequisites')
+    .select('course:courses!course_prerequisites_course_id_fkey(*)')
+    .eq('prerequisite_course_id', prerequisiteCourseId)
+
+  if (error) {
+    throw new Error(`Failed to fetch courses requiring prerequisite: ${error.message}`)
+  }
+
+  return (data || [])
+    .map((item: any) => {
+      const course = Array.isArray(item.course) ? item.course[0] : item.course
+      return course as Course | null
+    })
+    .filter((course): course is Course => course !== null && course !== undefined)
+}
+
+// 创建先修课程关系
+export async function createCoursePrerequisite(
+  courseId: string,
+  prerequisiteCourseId: string,
+  options?: {
+    requirement_type?: 'required' | 'recommended' | 'optional'
+    is_mandatory?: boolean
+    display_order?: number
+    notes?: string
+  }
+): Promise<CoursePrerequisite> {
+  // 检查是否自引用
+  if (courseId === prerequisiteCourseId) {
+    throw new Error('Course cannot have itself as a prerequisite')
+  }
+
+  // 检查是否已存在
+  const { data: existing } = await supabaseAdmin
+    .from('course_prerequisites')
+    .select('id')
+    .eq('course_id', courseId)
+    .eq('prerequisite_course_id', prerequisiteCourseId)
+    .single()
+
+  if (existing) {
+    throw new Error('Prerequisite relationship already exists')
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('course_prerequisites')
+    .insert({
+      course_id: courseId,
+      prerequisite_course_id: prerequisiteCourseId,
+      requirement_type: options?.requirement_type || 'required',
+      is_mandatory: options?.is_mandatory !== undefined ? options.is_mandatory : true,
+      display_order: options?.display_order || 0,
+      notes: options?.notes || null,
+    })
+    .select(`
+      *,
+      prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+    `)
+    .single()
+
+  if (error) {
+    // 检查是否是循环依赖错误
+    if (error.message.includes('Circular dependency')) {
+      throw new Error('Circular dependency detected. Cannot add this prerequisite.')
+    }
+    throw new Error(`Failed to create course prerequisite: ${error.message}`)
+  }
+
+  return {
+    ...data,
+    prerequisite_course: data.prerequisite_course as Course | undefined,
+  } as CoursePrerequisite
+}
+
+// 更新先修课程关系
+export async function updateCoursePrerequisite(
+  prerequisiteId: string,
+  updates: {
+    requirement_type?: 'required' | 'recommended' | 'optional'
+    is_mandatory?: boolean
+    display_order?: number
+    notes?: string
+  }
+): Promise<CoursePrerequisite> {
+  const { data, error } = await supabaseAdmin
+    .from('course_prerequisites')
+    .update(updates)
+    .eq('id', prerequisiteId)
+    .select(`
+      *,
+      prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+    `)
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to update course prerequisite: ${error.message}`)
+  }
+
+  return {
+    ...data,
+    prerequisite_course: data.prerequisite_course as Course | undefined,
+  } as CoursePrerequisite
+}
+
+// 删除先修课程关系
+export async function deleteCoursePrerequisite(prerequisiteId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('course_prerequisites')
+    .delete()
+    .eq('id', prerequisiteId)
+
+  if (error) {
+    throw new Error(`Failed to delete course prerequisite: ${error.message}`)
+  }
+
+  return true
+}
+
+// 批量删除课程的所有先修课程
+export async function deleteAllCoursePrerequisites(courseId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('course_prerequisites')
+    .delete()
+    .eq('course_id', courseId)
+
+  if (error) {
+    throw new Error(`Failed to delete course prerequisites: ${error.message}`)
+  }
+
+  return true
+}
+
+// 获取用户已完成的课程ID（优先使用 user_course_completions，回退到 enrollments）
+export async function getUserCompletedCourseIds(userId: string): Promise<Set<string>> {
+  const completedCourseIds = new Set<string>()
+
+  // 首先尝试从 user_course_completions 获取（更精确）
+  const { data: completions } = await supabaseAdmin
+    .from('user_course_completions')
+    .select('course_id')
+    .eq('user_id', userId)
+
+  if (completions && completions.length > 0) {
+    completions.forEach((c: any) => {
+      if (c.course_id) completedCourseIds.add(c.course_id)
+    })
+    return completedCourseIds
+  }
+
+  // 回退到使用 enrollments（向后兼容）
+  const { data: completedEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      instance_id,
+      course_instances!inner(
+        assignment_id,
+        course_assignments!inner(
+          course_id
+        )
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+
+  if (completedEnrollments) {
+    for (const enrollment of completedEnrollments) {
+      const instance = enrollment.course_instances as any
+      if (instance?.course_assignments?.course_id) {
+        completedCourseIds.add(instance.course_assignments.course_id)
+      }
+    }
+  }
+
+  return completedCourseIds
+}
+
+// 检查用户是否满足课程的先修条件（支持组逻辑）
+export async function checkUserPrerequisites(
+  userId: string,
+  courseId: string
+): Promise<{
+  canEnroll: boolean
+  missingPrerequisites: Course[]
+  recommendations: Course[]
+  groupRequirements?: Array<{
+    groupId: string
+    groupType: string
+    satisfied: boolean
+    required: number
+    completed: number
+    missing: Course[]
+  }>
+}> {
+  // 获取课程的所有先修课程
+  const prerequisites = await getCoursePrerequisites(courseId)
+
+  if (prerequisites.length === 0) {
+    return {
+      canEnroll: true,
+      missingPrerequisites: [],
+      recommendations: [],
+    }
+  }
+
+  // 获取用户已完成的课程
+  const completedCourseIds = await getUserCompletedCourseIds(userId)
+
+  // 检查是否有先修课程组
+  const { data: groups } = await supabaseAdmin
+    .from('prerequisite_groups')
+    .select(`
+      *,
+      items:prerequisite_group_items(
+        prerequisite:course_prerequisites(
+          *,
+          prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+        )
+      )
+    `)
+    .eq('course_id', courseId)
+    .order('display_order', { ascending: true })
+
+  // 如果有组，使用组逻辑验证
+  if (groups && groups.length > 0) {
+    const groupRequirements: Array<{
+      groupId: string
+      groupType: string
+      satisfied: boolean
+      required: number
+      completed: number
+      missing: Course[]
+    }> = []
+
+    let allGroupsSatisfied = true
+
+    for (const group of groups) {
+      const groupItems = group.items || []
+      const groupPrerequisites = groupItems.map((item: any) => item.prerequisite).filter(Boolean)
+      
+      const completedInGroup = groupPrerequisites.filter((p: any) =>
+        p.prerequisite_course_id && completedCourseIds.has(p.prerequisite_course_id)
+      )
+
+      let satisfied = false
+      if (group.group_type === 'and') {
+        satisfied = completedInGroup.length === groupPrerequisites.length
+      } else if (group.group_type === 'or') {
+        satisfied = completedInGroup.length >= group.min_required
+      }
+
+      if (!satisfied) {
+        allGroupsSatisfied = false
+      }
+
+      const missing = groupPrerequisites
+        .filter((p: any) => !completedCourseIds.has(p.prerequisite_course_id))
+        .map((p: any) => p.prerequisite_course)
+        .filter(Boolean)
+
+      groupRequirements.push({
+        groupId: group.id,
+        groupType: group.group_type,
+        satisfied,
+        required: group.group_type === 'or' ? group.min_required : groupPrerequisites.length,
+        completed: completedInGroup.length,
+        missing,
+      })
+    }
+
+    // 检查不在组中的必填先修课程
+    const prerequisitesInGroups = new Set<string>()
+    groups.forEach((group: any) => {
+      (group.items || []).forEach((item: any) => {
+        if (item.prerequisite?.id) {
+          prerequisitesInGroups.add(item.prerequisite.id)
+        }
+      })
+    })
+
+    const standalonePrerequisites = prerequisites.filter(
+      p => !prerequisitesInGroups.has(p.id) && p.requirement_type === 'required' && p.is_mandatory
+    )
+
+    const missingStandalone = standalonePrerequisites.filter(
+      p => !completedCourseIds.has(p.prerequisite_course_id)
+    )
+
+    const recommendations = prerequisites
+      .filter(p => p.requirement_type === 'recommended')
+      .map(p => p.prerequisite_course!)
+      .filter(Boolean)
+
+    return {
+      canEnroll: allGroupsSatisfied && missingStandalone.length === 0,
+      missingPrerequisites: [
+        ...groupRequirements.filter(gr => !gr.satisfied).flatMap(gr => gr.missing),
+        ...missingStandalone.map(p => p.prerequisite_course!).filter(Boolean),
+      ],
+      recommendations,
+      groupRequirements,
+    }
+  }
+
+  // 没有组，使用简单逻辑（向后兼容）
+  const requiredPrerequisites = prerequisites.filter(
+    p => p.requirement_type === 'required' && p.is_mandatory
+  )
+
+  const missingRequired = requiredPrerequisites.filter(
+    p => !completedCourseIds.has(p.prerequisite_course_id)
+  )
+
+  const recommendations = prerequisites
+    .filter(p => p.requirement_type === 'recommended')
+    .map(p => p.prerequisite_course!)
+    .filter(Boolean)
+
+  return {
+    canEnroll: missingRequired.length === 0,
+    missingPrerequisites: missingRequired.map(p => p.prerequisite_course!).filter(Boolean),
+    recommendations,
+  }
+}
+
+// ==================== Learning Paths 操作 ====================
+
+// 获取所有学习路径
+export async function getAllLearningPaths(
+  filters?: {
+    category_id?: string
+    is_active?: boolean
+    difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
+  }
+): Promise<LearningPathWithDetails[]> {
+  let query = supabaseAdmin
+    .from('learning_paths')
+    .select(`
+      *,
+      category:course_categories(*)
+    `)
+    .order('display_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (filters?.category_id) {
+    query = query.eq('category_id', filters.category_id)
+  }
+  if (filters?.is_active !== undefined) {
+    query = query.eq('is_active', filters.is_active)
+  }
+  if (filters?.difficulty_level) {
+    query = query.eq('difficulty_level', filters.difficulty_level)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(`Failed to fetch learning paths: ${error.message}`)
+  }
+
+  // 获取每个路径的课程
+  const pathsWithCourses: LearningPathWithDetails[] = []
+  if (data) {
+    for (const path of data) {
+      const { data: coursesData } = await supabaseAdmin
+        .from('learning_path_courses')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('path_id', path.id)
+        .order('stage', { ascending: true })
+        .order('display_order', { ascending: true })
+
+      const courses = (coursesData || []).map((item: any) => ({
+        ...item,
+        course: Array.isArray(item.course) ? item.course[0] : item.course,
+      })) as LearningPathCourse[]
+
+      pathsWithCourses.push({
+        ...path,
+        category: Array.isArray(path.category) ? path.category[0] : path.category,
+        courses,
+      } as LearningPathWithDetails)
+    }
+  }
+
+  return pathsWithCourses
+}
+
+// 根据 ID 获取学习路径
+export async function getLearningPathById(pathId: string): Promise<LearningPathWithDetails | null> {
+  const { data: path, error: pathError } = await supabaseAdmin
+    .from('learning_paths')
+    .select(`
+      *,
+      category:course_categories(*)
+    `)
+    .eq('id', pathId)
+    .single()
+
+  if (pathError || !path) {
+    return null
+  }
+
+  // 获取路径中的课程
+  const { data: coursesData } = await supabaseAdmin
+    .from('learning_path_courses')
+    .select(`
+      *,
+      course:courses(*)
+    `)
+    .eq('path_id', pathId)
+    .order('stage', { ascending: true })
+    .order('display_order', { ascending: true })
+
+  const courses = (coursesData || []).map((item: any) => ({
+    ...item,
+    course: Array.isArray(item.course) ? item.course[0] : item.course,
+  })) as LearningPathCourse[]
+
+  return {
+    ...path,
+    category: Array.isArray(path.category) ? path.category[0] : path.category,
+    courses,
+  } as LearningPathWithDetails
+}
+
+// 根据 slug 获取学习路径
+export async function getLearningPathBySlug(slug: string): Promise<LearningPathWithDetails | null> {
+  const { data: path, error: pathError } = await supabaseAdmin
+    .from('learning_paths')
+    .select(`
+      *,
+      category:course_categories(*)
+    `)
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
+
+  if (pathError || !path) {
+    return null
+  }
+
+  // 获取路径中的课程
+  const { data: coursesData } = await supabaseAdmin
+    .from('learning_path_courses')
+    .select(`
+      *,
+      course:courses(*)
+    `)
+    .eq('path_id', path.id)
+    .order('stage', { ascending: true })
+    .order('display_order', { ascending: true })
+
+  const courses = (coursesData || []).map((item: any) => ({
+    ...item,
+    course: Array.isArray(item.course) ? item.course[0] : item.course,
+  })) as LearningPathCourse[]
+
+  return {
+    ...path,
+    category: Array.isArray(path.category) ? path.category[0] : path.category,
+    courses,
+  } as LearningPathWithDetails
+}
+
+// 创建学习路径
+export async function createLearningPath(
+  path: Omit<LearningPath, 'id' | 'created_at' | 'updated_at' | 'category' | 'courses'>,
+  courses?: Array<Omit<LearningPathCourse, 'id' | 'path_id' | 'created_at' | 'updated_at' | 'course'>>
+): Promise<LearningPathWithDetails> {
+  // 创建路径
+  const { data: pathData, error: pathError } = await supabaseAdmin
+    .from('learning_paths')
+    .insert({
+      name: path.name,
+      slug: path.slug || null,
+      description: path.description || null,
+      category_id: path.category_id || null,
+      target_audience: path.target_audience || null,
+      estimated_duration_weeks: path.estimated_duration_weeks || null,
+      difficulty_level: path.difficulty_level || null,
+      is_active: path.is_active !== undefined ? path.is_active : true,
+      display_order: path.display_order || 0,
+    })
+    .select()
+    .single()
+
+  if (pathError || !pathData) {
+    throw new Error(`Failed to create learning path: ${pathError?.message || 'Unknown error'}`)
+  }
+
+  // 如果有课程，创建路径课程关联
+  if (courses && courses.length > 0) {
+    const pathCourses = courses.map(course => ({
+      path_id: pathData.id,
+      course_id: course.course_id,
+      stage: course.stage,
+      stage_name: course.stage_name || null,
+      is_required: course.is_required !== undefined ? course.is_required : true,
+      is_parallel: course.is_parallel !== undefined ? course.is_parallel : false,
+      display_order: course.display_order || 0,
+      estimated_weeks: course.estimated_weeks || null,
+      notes: course.notes || null,
+    }))
+
+    const { error: coursesError } = await supabaseAdmin
+      .from('learning_path_courses')
+      .insert(pathCourses)
+
+    if (coursesError) {
+      // 如果创建课程失败，删除已创建的路径
+      await supabaseAdmin.from('learning_paths').delete().eq('id', pathData.id)
+      throw new Error(`Failed to create path courses: ${coursesError.message}`)
+    }
+  }
+
+  // 返回完整路径（包含课程）
+  const fullPath = await getLearningPathById(pathData.id)
+  if (!fullPath) {
+    throw new Error('Failed to fetch created learning path')
+  }
+
+  return fullPath
+}
+
+// 更新学习路径
+export async function updateLearningPath(
+  pathId: string,
+  updates: Partial<Omit<LearningPath, 'id' | 'created_at' | 'updated_at' | 'category' | 'courses'>>,
+  courses?: Array<Omit<LearningPathCourse, 'id' | 'path_id' | 'created_at' | 'updated_at' | 'course'>>
+): Promise<LearningPathWithDetails> {
+  // 更新路径基本信息
+  const updateData: any = {}
+  if (updates.name !== undefined) updateData.name = updates.name
+  if (updates.slug !== undefined) updateData.slug = updates.slug
+  if (updates.description !== undefined) updateData.description = updates.description
+  if (updates.category_id !== undefined) updateData.category_id = updates.category_id
+  if (updates.target_audience !== undefined) updateData.target_audience = updates.target_audience
+  if (updates.estimated_duration_weeks !== undefined) updateData.estimated_duration_weeks = updates.estimated_duration_weeks
+  if (updates.difficulty_level !== undefined) updateData.difficulty_level = updates.difficulty_level
+  if (updates.is_active !== undefined) updateData.is_active = updates.is_active
+  if (updates.display_order !== undefined) updateData.display_order = updates.display_order
+
+  if (Object.keys(updateData).length > 0) {
+    const { error: pathError } = await supabaseAdmin
+      .from('learning_paths')
+      .update(updateData)
+      .eq('id', pathId)
+
+    if (pathError) {
+      throw new Error(`Failed to update learning path: ${pathError.message}`)
+    }
+  }
+
+  // 如果提供了课程列表，更新路径课程
+  if (courses !== undefined) {
+    // 删除现有课程关联
+    const { error: deleteError } = await supabaseAdmin
+      .from('learning_path_courses')
+      .delete()
+      .eq('path_id', pathId)
+
+    if (deleteError) {
+      throw new Error(`Failed to delete existing path courses: ${deleteError.message}`)
+    }
+
+    // 创建新的课程关联
+    if (courses.length > 0) {
+      const pathCourses = courses.map(course => ({
+        path_id: pathId,
+        course_id: course.course_id,
+        stage: course.stage,
+        stage_name: course.stage_name || null,
+        is_required: course.is_required !== undefined ? course.is_required : true,
+        is_parallel: course.is_parallel !== undefined ? course.is_parallel : false,
+        display_order: course.display_order || 0,
+        estimated_weeks: course.estimated_weeks || null,
+        notes: course.notes || null,
+      }))
+
+      const { error: coursesError } = await supabaseAdmin
+        .from('learning_path_courses')
+        .insert(pathCourses)
+
+      if (coursesError) {
+        throw new Error(`Failed to create path courses: ${coursesError.message}`)
+      }
+    }
+  }
+
+  // 返回更新后的完整路径
+  const fullPath = await getLearningPathById(pathId)
+  if (!fullPath) {
+    throw new Error('Failed to fetch updated learning path')
+  }
+
+  return fullPath
+}
+
+// 删除学习路径
+export async function deleteLearningPath(pathId: string): Promise<boolean> {
+  // 由于有 CASCADE 删除，只需要删除路径即可
+  const { error } = await supabaseAdmin
+    .from('learning_paths')
+    .delete()
+    .eq('id', pathId)
+
+  if (error) {
+    throw new Error(`Failed to delete learning path: ${error.message}`)
+  }
+
+  return true
+}
+
+// ==================== User Course Completions 操作 ====================
+
+// 获取用户已完成的课程
+export async function getUserCourseCompletions(userId: string): Promise<UserCourseCompletion[]> {
+  const { data, error } = await supabaseAdmin
+    .from('user_course_completions')
+    .select(`
+      *,
+      course:courses(*)
+    `)
+    .eq('user_id', userId)
+    .order('completion_date', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to fetch user course completions: ${error.message}`)
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    course: Array.isArray(item.course) ? item.course[0] : item.course,
+  })) as UserCourseCompletion[]
+}
+
+// 创建课程完成记录
+export async function createUserCourseCompletion(
+  userId: string,
+  courseId: string,
+  options?: {
+    instance_id?: string
+    completion_date?: string
+    grade?: string
+    certificate_url?: string
+    notes?: string
+    verified_by?: string
+  }
+): Promise<UserCourseCompletion> {
+  const { data, error } = await supabaseAdmin
+    .from('user_course_completions')
+    .insert({
+      user_id: userId,
+      course_id: courseId,
+      instance_id: options?.instance_id || null,
+      completion_date: options?.completion_date || new Date().toISOString().split('T')[0],
+      grade: options?.grade || null,
+      certificate_url: options?.certificate_url || null,
+      notes: options?.notes || null,
+      verified_by: options?.verified_by || null,
+      verified_at: options?.verified_by ? new Date().toISOString() : null,
+    })
+    .select(`
+      *,
+      course:courses(*)
+    `)
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to create course completion: ${error.message}`)
+  }
+
+  return {
+    ...data,
+    course: Array.isArray(data.course) ? data.course[0] : data.course,
+  } as UserCourseCompletion
+}
+
+// 删除课程完成记录
+export async function deleteUserCourseCompletion(completionId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('user_course_completions')
+    .delete()
+    .eq('id', completionId)
+
+  if (error) {
+    throw new Error(`Failed to delete course completion: ${error.message}`)
+  }
+
+  return true
+}
+
+// ==================== User Learning Path Progress 操作 ====================
+
+// 获取用户的学习路径进度
+export async function getUserLearningPathProgress(
+  userId: string,
+  pathId?: string
+): Promise<UserLearningPathProgress[]> {
+  let query = supabaseAdmin
+    .from('user_learning_path_progress')
+    .select(`
+      *,
+      path:learning_paths(*)
+    `)
+    .eq('user_id', userId)
+    .order('last_activity_at', { ascending: false })
+
+  if (pathId) {
+    query = query.eq('path_id', pathId)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(`Failed to fetch learning path progress: ${error.message}`)
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    path: Array.isArray(item.path) ? item.path[0] : item.path,
+  })) as UserLearningPathProgress[]
+}
+
+// 计算学习路径进度（实时计算，不依赖数据库）
+export async function calculateLearningPathProgress(
+  userId: string,
+  pathId: string
+): Promise<{
+  progress: number
+  currentStage: number
+  completedStages: number
+  totalStages: number
+  nextCourses: Course[]
+}> {
+  const path = await getLearningPathById(pathId)
+  if (!path || !path.courses) {
+    throw new Error('Learning path not found')
+  }
+
+  const completedCourseIds = await getUserCompletedCourseIds(userId)
+
+  // 计算总体进度
+  const requiredCourses = path.courses.filter(pc => pc.is_required)
+  const completedRequired = requiredCourses.filter(
+    pc => pc.course_id && completedCourseIds.has(pc.course_id)
+  )
+  const progress = requiredCourses.length > 0
+    ? Math.round((completedRequired.length / requiredCourses.length) * 100)
+    : 0
+
+  // 计算当前阶段
+  const stages = [...new Set(path.courses.map(pc => pc.stage))].sort()
+  let currentStage = 1
+  for (const stage of stages) {
+    const stageCourses = path.courses.filter(
+      pc => pc.stage === stage && pc.is_required
+    )
+    const allCompleted = stageCourses.every(
+      pc => pc.course_id && completedCourseIds.has(pc.course_id)
+    )
+    if (allCompleted) {
+      currentStage = stage + 1
+    } else {
+      break
+    }
+  }
+
+  // 获取下一阶段的课程（检查先修条件）
+  const nextStageCourses = path.courses.filter(
+    pc => pc.stage === currentStage && pc.is_required
+  )
+
+  const nextCourses: Course[] = []
+  for (const pathCourse of nextStageCourses) {
+    if (pathCourse.course_id && !completedCourseIds.has(pathCourse.course_id)) {
+      const check = await checkUserPrerequisites(userId, pathCourse.course_id)
+      if (check.canEnroll && pathCourse.course) {
+        nextCourses.push(pathCourse.course)
+      }
+    }
+  }
+
+  return {
+    progress,
+    currentStage,
+    completedStages: currentStage - 1,
+    totalStages: stages.length,
+    nextCourses: nextCourses.slice(0, 5), // 只返回前 5 个
+  }
+}
+
+// ==================== Prerequisite Groups 操作 ====================
+
+// 获取课程的先修课程组
+export async function getCoursePrerequisiteGroups(courseId: string): Promise<PrerequisiteGroup[]> {
+  const { data: groups, error } = await supabaseAdmin
+    .from('prerequisite_groups')
+    .select(`
+      *,
+      items:prerequisite_group_items(
+        prerequisite:course_prerequisites(
+          *,
+          prerequisite_course:courses!course_prerequisites_prerequisite_course_id_fkey(*)
+        )
+      )
+    `)
+    .eq('course_id', courseId)
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch prerequisite groups: ${error.message}`)
+  }
+
+  return (groups || []).map((group: any) => ({
+    ...group,
+    prerequisites: (group.items || []).map((item: any) => ({
+      ...item.prerequisite,
+      prerequisite_course: Array.isArray(item.prerequisite?.prerequisite_course)
+        ? item.prerequisite.prerequisite_course[0]
+        : item.prerequisite?.prerequisite_course,
+    })).filter(Boolean),
+  })) as PrerequisiteGroup[]
+}
+
+// 创建先修课程组
+export async function createPrerequisiteGroup(
+  courseId: string,
+  group: Omit<PrerequisiteGroup, 'id' | 'created_at' | 'updated_at' | 'prerequisites'>,
+  prerequisiteIds: string[]
+): Promise<PrerequisiteGroup> {
+  // 创建组
+  const { data: groupData, error: groupError } = await supabaseAdmin
+    .from('prerequisite_groups')
+    .insert({
+      course_id: courseId,
+      group_type: group.group_type,
+      min_required: group.min_required,
+      display_order: group.display_order || 0,
+      description: group.description || null,
+    })
+    .select()
+    .single()
+
+  if (groupError || !groupData) {
+    throw new Error(`Failed to create prerequisite group: ${groupError?.message || 'Unknown error'}`)
+  }
+
+  // 添加组项
+  if (prerequisiteIds.length > 0) {
+    const items = prerequisiteIds.map((prereqId, idx) => ({
+      group_id: groupData.id,
+      prerequisite_id: prereqId,
+      display_order: idx,
+    }))
+
+    const { error: itemsError } = await supabaseAdmin
+      .from('prerequisite_group_items')
+      .insert(items)
+
+    if (itemsError) {
+      // 如果创建组项失败，删除已创建的组
+      await supabaseAdmin.from('prerequisite_groups').delete().eq('id', groupData.id)
+      throw new Error(`Failed to create group items: ${itemsError.message}`)
+    }
+  }
+
+  // 返回完整的组
+  const fullGroup = await getCoursePrerequisiteGroups(courseId)
+  return fullGroup.find(g => g.id === groupData.id)!
+}
+
+// 删除先修课程组
+export async function deletePrerequisiteGroup(groupId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('prerequisite_groups')
+    .delete()
+    .eq('id', groupId)
+
+  if (error) {
+    throw new Error(`Failed to delete prerequisite group: ${error.message}`)
   }
 
   return true

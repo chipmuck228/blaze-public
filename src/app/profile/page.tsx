@@ -26,6 +26,7 @@ import {
   Loader2
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UserAnalytics } from "@/components/UserAnalytics"
 
 interface UserProfile {
   id: string
@@ -237,9 +238,10 @@ export default function ProfilePage() {
           </div>
 
           <Tabs defaultValue="personal" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="personal">Personal Info</TabsTrigger>
               <TabsTrigger value="enrollments">My Courses</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="payment">Payment</TabsTrigger>
             </TabsList>
 
@@ -464,6 +466,21 @@ export default function ProfilePage() {
                       })}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Analytics Tab */}
+            <TabsContent value="analytics" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Learning Analytics</CardTitle>
+                  <CardDescription>
+                    Track your learning progress and statistics
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <UserAnalytics />
                 </CardContent>
               </Card>
             </TabsContent>

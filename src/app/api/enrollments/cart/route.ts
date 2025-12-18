@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { addToCart, getUserCart } from "@/lib/db"
+import { addToCart, getUserCart, checkUserPrerequisites } from "@/lib/db"
+import { supabaseAdmin } from "@/lib/supabase"
 
 // GET: 获取用户的注册清单
 export async function GET() {
@@ -62,6 +63,48 @@ export async function POST(request: Request) {
         { error: "instance_id is required" },
         { status: 400 }
       )
+    }
+
+    // 获取实例关联的课程ID，检查先修条件
+    try {
+      const { data: instance } = await supabaseAdmin
+        .from('course_instances')
+        .select(`
+          assignment_id,
+          assignment:course_assignments(
+            course_id
+          )
+        `)
+        .eq('id', instance_id)
+        .single()
+
+      if (instance?.assignment) {
+        // assignment 可能是数组或单个对象，需要处理
+        const assignment = Array.isArray(instance.assignment) 
+          ? instance.assignment[0] 
+          : instance.assignment
+        const courseId = (assignment as any)?.course_id
+
+        if (courseId) {
+          const prerequisiteCheck = await checkUserPrerequisites(session.user.id, courseId)
+          
+          if (!prerequisiteCheck.canEnroll) {
+            const missingCourses = prerequisiteCheck.missingPrerequisites || []
+            const courseNames = missingCourses.map((c: any) => c.name).join(', ')
+            return NextResponse.json(
+              {
+                error: `You need to complete the following prerequisite courses first: ${courseNames}`,
+                code: "PREREQUISITES_NOT_MET",
+                missingPrerequisites: missingCourses,
+              },
+              { status: 403 }
+            )
+          }
+        }
+      }
+    } catch (prereqError: any) {
+      // 如果检查先修条件失败，记录错误但继续（保守处理）
+      console.error('Error checking prerequisites:', prereqError)
     }
 
     try {

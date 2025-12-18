@@ -152,6 +152,7 @@ export async function GET(request: Request) {
           title: course.name,
           gradeLevel: (course as any).grade_level || (course as any).target_grades || "",
           slug: course.slug || undefined,
+          poster_url: (course as any).poster_url || undefined,
         })
         console.log(`[Programs API] Added course "${course.name}" (${course.id}) to series "${seriesEntry.display_name}"`)
       }

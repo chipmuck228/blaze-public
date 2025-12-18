@@ -1,10 +1,13 @@
 'use client'
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, AlertCircle } from "lucide-react";
 import { CourseWithDetails } from "@/lib/db";
 
 interface CourseDetailProps {
@@ -27,7 +30,95 @@ const getTypeColor = (type?: string) => {
   return 'bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20';
 };
 
+interface Franchise {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export const CourseDetail = ({ course }: CourseDetailProps) => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [franchises, setFranchises] = useState<Franchise[]>([]);
+  const [isLoadingFranchises, setIsLoadingFranchises] = useState(true);
+  const [selectedFranchise, setSelectedFranchise] = useState<string | null>(null);
+  const [instances, setInstances] = useState<any[]>([]);
+  const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+
+  // 从 URL 参数获取 franchise
+  useEffect(() => {
+    const franchiseParam = searchParams.get('franchise');
+    if (franchiseParam) {
+      setSelectedFranchise(franchiseParam);
+    } else {
+      // Phase 2: 尝试从 localStorage 读取用户偏好
+      const preferredLocation = localStorage.getItem('preferred_location');
+      if (preferredLocation) {
+        setSelectedFranchise(preferredLocation);
+      }
+    }
+  }, [searchParams]);
+
+  // 获取所有 franchises
+  useEffect(() => {
+    const fetchFranchises = async () => {
+      try {
+        setIsLoadingFranchises(true);
+        const res = await fetch("/api/public/franchises");
+        if (!res.ok) {
+          throw new Error("Failed to load franchises");
+        }
+        const data = await res.json();
+        setFranchises(data || []);
+      } catch (err: any) {
+        console.error("Error fetching franchises:", err);
+      } finally {
+        setIsLoadingFranchises(false);
+      }
+    };
+
+    fetchFranchises();
+  }, []);
+
+  // 获取课程实例
+  useEffect(() => {
+    const fetchInstances = async () => {
+      if (!course.id) return;
+      
+      setIsLoadingInstances(true);
+      try {
+        const params = new URLSearchParams();
+        if (selectedFranchise) {
+          params.set('franchise', selectedFranchise);
+        }
+        const res = await fetch(`/api/courses/${course.id}/instances?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error("Failed to load instances");
+        }
+        const data = await res.json();
+        setInstances(data || []);
+      } catch (err: any) {
+        console.error("Error fetching instances:", err);
+        setInstances([]);
+      } finally {
+        setIsLoadingInstances(false);
+      }
+    };
+
+    fetchInstances();
+  }, [course.id, selectedFranchise]);
+
+  // Location 选择处理
+  const handleLocationChange = (locationCode: string) => {
+    if (locationCode === "all" || !locationCode) {
+      setSelectedFranchise(null);
+      localStorage.removeItem('preferred_location');
+    } else {
+      setSelectedFranchise(locationCode);
+      localStorage.setItem('preferred_location', locationCode);
+    }
+  };
+
   // 获取第一个 subcategory 作为类型标识
   const courseType = course.subcategories?.[0]?.display_name || course.subcategories?.[0]?.name || 'Course';
   
@@ -209,18 +300,68 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
           </div>
 
           {/* Prerequisites */}
-          {course.prerequisites && (
+          {(course.prerequisites_list && course.prerequisites_list.length > 0) || course.prerequisites ? (
             <Card className="mb-12">
               <CardHeader>
                 <CardTitle className="text-xl">Prerequisites</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground leading-relaxed">
-                  {course.prerequisites}
-                </p>
+              <CardContent className="space-y-4">
+                {/* 结构化先修课程列表 */}
+                {course.prerequisites_list && course.prerequisites_list.length > 0 && (
+                  <div className="space-y-3">
+                    {course.prerequisites_list.filter(p => p.requirement_type === 'required').length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2">Required:</h4>
+                        <div className="space-y-2">
+                          {course.prerequisites_list
+                            .filter(p => p.requirement_type === 'required')
+                            .map((prerequisite) => (
+                              <div key={prerequisite.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                                <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+                                <Link
+                                  href={`/course-catalog/${prerequisite.prerequisite_course?.slug || prerequisite.prerequisite_course_id}`}
+                                  className="text-sm hover:text-primary transition-colors"
+                                >
+                                  {prerequisite.prerequisite_course?.name || 'Unknown Course'}
+                                </Link>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    {course.prerequisites_list.filter(p => p.requirement_type === 'recommended').length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2">Recommended:</h4>
+                        <div className="space-y-2">
+                          {course.prerequisites_list
+                            .filter(p => p.requirement_type === 'recommended')
+                            .map((prerequisite) => (
+                              <div key={prerequisite.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                                <CheckCircle2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <Link
+                                  href={`/course-catalog/${prerequisite.prerequisite_course?.slug || prerequisite.prerequisite_course_id}`}
+                                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                  {prerequisite.prerequisite_course?.name || 'Unknown Course'}
+                                </Link>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* 文本描述（作为补充） */}
+                {course.prerequisites && (
+                  <div className="pt-2 border-t">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {course.prerequisites}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Available Sessions */}
           {course.assignments && course.assignments.length > 0 && (

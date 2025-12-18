@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Separator } from "./ui/separator";
 import { ArrowRight, Loader2, BookOpen, Users, Clock, DollarSign, Calendar, CheckCircle2, MapPin, ShoppingCart } from "lucide-react";
+import Image from "next/image";
 
 interface Course {
   id: string;
@@ -30,6 +31,7 @@ interface Course {
   gradeLevel: string;
   description?: string;
   slug?: string;
+  poster_url?: string | null;
 }
 
 interface CourseDetails {
@@ -40,6 +42,15 @@ interface CourseDetails {
   target_audience?: string;
   learning_outcomes?: string;
   prerequisites?: string;
+  prerequisites_list?: Array<{
+    id: string;
+    requirement_type: 'required' | 'recommended' | 'optional';
+    prerequisite_course?: {
+      id: string;
+      name: string;
+      slug?: string;
+    };
+  }>;
   cancellation_policy?: string;
   base_price?: number;
   duration_hours?: number;
@@ -322,7 +333,18 @@ export const Courses = () => {
         <>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {courses.map((course) => (
-              <Card key={course.id} className="flex flex-col hover:shadow-lg transition-shadow">
+              <Card key={course.id} className="flex flex-col hover:shadow-lg transition-shadow overflow-hidden">
+                {course.poster_url && (
+                  <div className="relative w-full h-48">
+                    <Image
+                      src={course.poster_url}
+                      alt={course.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                  </div>
+                )}
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     {course.type && (
@@ -592,16 +614,46 @@ export const Courses = () => {
                     )}
 
                     {/* Prerequisites */}
-                    {courseDetails.prerequisites && (
+                    {(courseDetails.prerequisites_list && courseDetails.prerequisites_list.length > 0) || courseDetails.prerequisites ? (
                       <div>
                         <h3 className="font-semibold mb-3 text-base">Prerequisites</h3>
-                        <div className="p-4 rounded-lg bg-muted/50 border">
-                          <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
-                            {courseDetails.prerequisites}
-                          </p>
+                        <div className="p-4 rounded-lg bg-muted/50 border space-y-3">
+                          {/* 结构化先修课程列表 */}
+                          {courseDetails.prerequisites_list && courseDetails.prerequisites_list.length > 0 && (
+                            <div className="space-y-2">
+                              {courseDetails.prerequisites_list
+                                .filter((p: any) => p.requirement_type === 'required')
+                                .map((prerequisite: any) => (
+                                  <div key={prerequisite.id} className="flex items-center gap-2 text-sm">
+                                    <span className="text-primary">•</span>
+                                    <span className="font-medium">
+                                      {prerequisite.prerequisite_course?.name || 'Unknown Course'}
+                                    </span>
+                                    <Badge variant="outline" className="text-xs">Required</Badge>
+                                  </div>
+                                ))}
+                              {courseDetails.prerequisites_list
+                                .filter((p: any) => p.requirement_type === 'recommended')
+                                .map((prerequisite: any) => (
+                                  <div key={prerequisite.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <span>•</span>
+                                    <span>{prerequisite.prerequisite_course?.name || 'Unknown Course'}</span>
+                                    <Badge variant="secondary" className="text-xs">Recommended</Badge>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                          {/* 文本描述（作为补充） */}
+                          {courseDetails.prerequisites && (
+                            <div className="pt-2 border-t">
+                              <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
+                                {courseDetails.prerequisites}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Cancellation Policy */}
                     {courseDetails.cancellation_policy && (

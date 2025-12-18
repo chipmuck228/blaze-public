@@ -34,6 +34,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 
@@ -253,7 +260,6 @@ export default function CategoriesManagementPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Display Name</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead>Order</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -267,7 +273,6 @@ export default function CategoriesManagementPage() {
                       <TableCell className="max-w-[300px] truncate">
                         {category.description || "N/A"}
                       </TableCell>
-                      <TableCell>{category.display_order}</TableCell>
                       <TableCell>
                         <Badge variant={category.is_active ? "default" : "secondary"}>
                           {category.is_active ? "Active" : "Inactive"}
@@ -349,16 +354,21 @@ export default function CategoriesManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="display_order">Display Order</Label>
-              <Input
-                id="display_order"
-                type="number"
-                value={formData.display_order}
-                onChange={(e) =>
-                  setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })
+              <Label htmlFor="status">Status *</Label>
+              <Select
+                value={formData.is_active ? "active" : "inactive"}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, is_active: value === "active" })
                 }
-                placeholder="0"
-              />
+              >
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <DialogFooter>
