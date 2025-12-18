@@ -67,83 +67,77 @@ const testimonials: TestimonialProps[] = [
   },
 ];
 
-// 复制 testimonials 数组以创建无缝滚动效果
+// 复制 testimonials 数组以创建无缝滚动效果（复制2次确保有足够内容形成无缝循环）
 const duplicatedTestimonials = [...testimonials, ...testimonials];
 
 export const Testimonials = () => {
   const [isPaused, setIsPaused] = useState(false);
-  const topRowRef = useRef<HTMLDivElement>(null);
-  const bottomRowRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const topRow = topRowRef.current;
-    const bottomRow = bottomRowRef.current;
+    const row = rowRef.current;
     
-    if (!topRow || !bottomRow) return;
+    if (!row) return;
 
-    let topAnimation: Animation | null = null;
-    let bottomAnimation: Animation | null = null;
+    let animation: Animation | null = null;
 
-    const createAnimation = (element: HTMLDivElement, reverse: boolean = false) => {
-      const width = element.scrollWidth / 2; // 因为我们复制了内容，所以是总宽度的一半
-      
-      if (reverse) {
-        // 第二行：从右向左滚动
-        // 从 translateX(width) 开始（右边），滚动到 translateX(0)（正常位置）
-        // 这样看起来像是从右边出现然后向左移动
-        return element.animate(
-          [
-            { transform: `translateX(${width}px)` },
-            { transform: 'translateX(0)' }
-          ],
-          {
-            duration: 30000,
-            iterations: Infinity,
-            easing: 'linear',
-          }
-        );
-      } else {
-        // 第一行：从左向右滚动
-        // 从 translateX(0) 开始，滚动到 translateX(-width)
-        return element.animate(
-          [
-            { transform: 'translateX(0)' },
-            { transform: `translateX(-${width}px)` }
-          ],
-          {
-            duration: 30000,
-            iterations: Infinity,
-            easing: 'linear',
-          }
-        );
+    // 等待元素完全渲染后再启动动画
+    const initAnimation = () => {
+      // 确保元素已经渲染并可以获取正确的宽度
+      // 由于我们复制了内容2次，scrollWidth 是原始内容的2倍
+      // 我们需要移动原始内容的宽度（1/2），这样当第一份移出时，第二份正好进入
+      const originalWidth = row.scrollWidth / 2;
+
+      // 验证宽度是否有效
+      if (originalWidth <= 0) {
+        console.warn('Testimonials: Invalid scroll width, retrying...');
+        // 如果宽度无效，稍后重试
+        setTimeout(initAnimation, 100);
+        return;
       }
-    };
 
-    topAnimation = createAnimation(topRow, false);
-    bottomAnimation = createAnimation(bottomRow, true);
+      // 从左向右滚动
+      // 内容向左移动（负方向），视觉上是从左向右
+      // 从 translateX(0) 到 translateX(-originalWidth)
+      // 当第一份内容移出左边时，第二份内容正好在原来的位置，形成无缝循环
+      animation = row.animate(
+        [
+          { transform: 'translateX(0)' },
+          { transform: `translateX(-${originalWidth}px)` }
+        ],
+        {
+          duration: 30000,
+          iterations: Infinity,
+          easing: 'linear',
+        }
+      );
+    };
 
     // 鼠标悬停时暂停/恢复动画
     const handleMouseEnter = () => {
       setIsPaused(true);
-      topAnimation?.pause();
-      bottomAnimation?.pause();
+      animation?.pause();
     };
 
     const handleMouseLeave = () => {
       setIsPaused(false);
-      topAnimation?.play();
-      bottomAnimation?.play();
+      animation?.play();
     };
 
-    const container = topRow.parentElement;
+    const container = row.parentElement;
     if (container) {
       container.addEventListener('mouseenter', handleMouseEnter);
       container.addEventListener('mouseleave', handleMouseLeave);
     }
 
+    // 使用 requestAnimationFrame 确保 DOM 已完全渲染
+    requestAnimationFrame(() => {
+      // 再等待一帧确保宽度计算准确
+      requestAnimationFrame(initAnimation);
+    });
+
     return () => {
-      topAnimation?.cancel();
-      bottomAnimation?.cancel();
+      animation?.cancel();
       if (container) {
         container.removeEventListener('mouseenter', handleMouseEnter);
         container.removeEventListener('mouseleave', handleMouseLeave);
@@ -154,7 +148,7 @@ export const Testimonials = () => {
   return (
     <section
       id="testimonials"
-      className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-24 sm:py-32"
+      className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-1 sm:py-24"
     >
       <div className="text-center mb-12">
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
@@ -175,11 +169,11 @@ export const Testimonials = () => {
         {/* 渐变遮罩 - 右侧 */}
         <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none" />
 
-        {/* 第一行 - 从左到右滚动 */}
-        <div className="flex gap-4 mb-4 will-change-transform" ref={topRowRef}>
+        {/* 滚动行 - 从左到右滚动 */}
+        <div className="flex gap-4 will-change-transform" ref={rowRef}>
           {duplicatedTestimonials.map((testimonial, index) => (
             <Card
-              key={`top-${index}`}
+              key={`testimonial-${index}`}
               className="flex-shrink-0 w-[350px] md:w-[400px]"
             >
               <CardHeader className="flex flex-row items-center gap-4 pb-2">
@@ -209,46 +203,6 @@ export const Testimonials = () => {
           ))}
         </div>
 
-        {/* 第二行 - 从右到左滚动（反向） */}
-        <div 
-          className="flex gap-4 will-change-transform" 
-          ref={bottomRowRef}
-          style={{ 
-            // 初始位置：从右边开始（会在动画中覆盖）
-            transform: 'translateX(0)'
-          }}
-        >
-          {duplicatedTestimonials.map((testimonial, index) => (
-            <Card
-              key={`bottom-${index}`}
-              className="flex-shrink-0 w-[350px] md:w-[400px]"
-            >
-              <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                <Avatar>
-                  <AvatarImage
-                    alt={testimonial.name}
-                    src={testimonial.image}
-                  />
-                  <AvatarFallback>
-                    {testimonial.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()
-                      .slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col">
-                  <CardTitle className="text-base font-semibold">{testimonial.name}</CardTitle>
-                  <CardDescription className="text-sm">{testimonial.userName}</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {testimonial.comment}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       </div>
     </section>
   );

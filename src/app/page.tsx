@@ -169,7 +169,7 @@ export default function Home() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
                 {/* Left Section - Text Description */}
                 <div className="space-y-4">
-                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-foreground">
+                  <h2 className="text-4xl md:text-4xl lg:text-5xl font-bold leading-tight text-foreground">
                     Our Locations
                   </h2>
                   <p className="text-base md:text-lg text-muted-foreground leading-relaxed max-w-xl">
@@ -204,9 +204,9 @@ export default function Home() {
                           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Campus
                           </div>
-                          <h3 className="text-2xl md:text-3xl font-bold group-hover:text-primary transition-colors">
+                          <h4 className="text-xl md:text-2xl font-bold group-hover:text-primary transition-colors">
                             {fr.name}
-                          </h3>
+                          </h4>
                           <p className="text-sm text-muted-foreground leading-relaxed mt-2">
                             {baseDescription}
                             {campusSuffix}

@@ -74,23 +74,15 @@ export const Advantages = () => {
   };
 
   return (
-    <section id="advantages" className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-24 sm:py-32">
-      <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">
-        Our{" "}
-        <span 
-          className="inline bg-clip-text text-transparent"
-          style={{
-            backgroundImage: 'linear-gradient(to bottom, hsl(var(--primary) / 0.6), hsl(var(--primary)))',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
-          Advantages
-        </span>
-      </h2>
-      <p className="text-xl text-muted-foreground text-center mb-12">
+    <section id="advantages" className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 md:py-24">
+      <div className="text-center mb-12 md:mb-16">
+      <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+          Our Advantages
+        </h2>
+        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
         Discover what makes Blaze Robotics Academy unique
       </p>
+      </div>
 
       <div className="max-w-4xl mx-auto">
         {/* Carousel Container */}
