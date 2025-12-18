@@ -33,6 +33,9 @@ export async function GET() {
           score: 0, 
           completedCourses: 0, 
           totalCourses: 0,
+          completionRate: 0,
+          isCompleted: false,
+          canStart: false,
           reasons: [],
         }
       }
@@ -121,7 +124,7 @@ export async function GET() {
         // 然后按分数排序
         if (b.score !== a.score) return b.score - a.score
         // 最后按完成度排序
-        return b.completionRate - a.completionRate
+        return (b.completionRate ?? 0) - (a.completionRate ?? 0)
       })
       .slice(0, 10) // 只返回前 10 个推荐
 
