@@ -27,37 +27,9 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 import { LearningPathEditDialog } from "@/components/admin/LearningPathEditDialog"
+import { LearningPathWithDetails } from "@/lib/db"
 
-interface LearningPath {
-  id: string
-  name: string
-  slug?: string
-  description?: string
-  category_id?: string | null
-  target_audience?: string
-  estimated_duration_weeks?: number
-  difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
-  is_active: boolean
-  display_order: number
-  created_at: string
-  updated_at: string
-  category?: {
-    id: string
-    name: string
-    display_name: string
-  }
-  courses?: Array<{
-    id: string
-    course_id: string
-    stage: number
-    stage_name?: string | null
-    is_required: boolean
-    course?: {
-      id: string
-      name: string
-    }
-  }>
-}
+type LearningPath = LearningPathWithDetails
 
 export default function LearningPathsManagementPage() {
   const [paths, setPaths] = useState<LearningPath[]>([])

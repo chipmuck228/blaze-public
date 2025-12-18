@@ -15,31 +15,9 @@ import {
   SelectValue,
 } from "./ui/select"
 
-interface LearningPath {
-  id: string
-  name: string
-  slug?: string
-  description?: string
-  category?: {
-    id: string
-    name: string
-    display_name: string
-  }
-  target_audience?: string
-  estimated_duration_weeks?: number
-  difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
-  courses?: Array<{
-    id: string
-    course_id: string
-    stage: number
-    stage_name?: string | null
-    is_required: boolean
-    course?: {
-      id: string
-      name: string
-    }
-  }>
-}
+import { LearningPathWithDetails } from "@/lib/db"
+
+type LearningPath = LearningPathWithDetails
 
 export function LearningPathsList() {
   const [paths, setPaths] = useState<LearningPath[]>([])

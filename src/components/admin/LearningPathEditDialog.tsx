@@ -24,30 +24,12 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, Plus, X, GripVertical } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
+import { LearningPathWithDetails, LearningPathCourse } from "@/lib/db"
 
-interface LearningPath {
-  id?: string
-  name: string
-  slug?: string
-  description?: string
-  category_id?: string | null
-  target_audience?: string
-  estimated_duration_weeks?: number
-  difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
-  is_active: boolean
-  display_order: number
-  courses?: Array<{
-    id: string
-    course_id: string
-    stage: number
-    stage_name?: string | null
-    is_required: boolean
-    is_parallel: boolean
-    display_order: number
-    estimated_weeks?: number | null
-    notes?: string | null
-  }>
-}
+type LearningPath = Partial<Pick<LearningPathWithDetails, 'id' | 'created_at' | 'updated_at'>> & 
+  Omit<LearningPathWithDetails, 'id' | 'created_at' | 'updated_at' | 'courses'> & {
+    courses?: LearningPathCourse[]
+  }
 
 interface Course {
   id: string
@@ -89,7 +71,7 @@ export function LearningPathEditDialog({
     notes?: string | null
   }>>([])
 
-  const [formData, setFormData] = useState<Omit<LearningPath, 'id' | 'courses'>>({
+  const [formData, setFormData] = useState<Omit<LearningPath, 'id' | 'courses' | 'created_at' | 'updated_at'>>({
     name: "",
     slug: "",
     description: "",
