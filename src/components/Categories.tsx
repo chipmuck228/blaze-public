@@ -194,7 +194,7 @@ export const Categories = () => {
 
       {/* Call to Action */}
       <div className="mt-12 md:mt-16 text-center">
-        <Button asChild size="lg" className="text-lg px-8 py-6 h-auto shadow-lg hover:shadow-xl transition-shadow">
+        <Button asChild variant={"default"}>
           <Link href="/course-catalog">
             View All Programs
             <ArrowRight className="ml-2 h-5 w-5" />
