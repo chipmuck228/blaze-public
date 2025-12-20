@@ -49,6 +49,53 @@ export function AIChatDialog({
 
   const isLoading = status === 'streaming' || status === 'submitted'
 
+  // 将技术性错误转换为用户友好的消息
+  const getFriendlyErrorMessage = (error: Error | undefined): string => {
+    if (!error) return 'Sorry, something went wrong. Please try again.'
+
+    const errorMessage = error.message.toLowerCase()
+
+    // 网络连接错误
+    if (
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('fetch') ||
+      errorMessage.includes('connection')
+    ) {
+      return "I'm having trouble connecting right now. Please check your internet connection and try again in a moment."
+    }
+
+    // API 错误
+    if (
+      errorMessage.includes('api') ||
+      errorMessage.includes('unauthorized') ||
+      errorMessage.includes('forbidden')
+    ) {
+      return "I'm temporarily unavailable. Please try again in a few moments, or contact our campus directly for immediate assistance."
+    }
+
+    // 服务器错误
+    if (
+      errorMessage.includes('server') ||
+      errorMessage.includes('500') ||
+      errorMessage.includes('internal')
+    ) {
+      return "I'm experiencing some technical difficulties. Please try again in a moment, or feel free to contact our campus directly."
+    }
+
+    // 配额/限制错误
+    if (
+      errorMessage.includes('quota') ||
+      errorMessage.includes('limit') ||
+      errorMessage.includes('rate limit')
+    ) {
+      return "I'm currently processing many requests. Please try again in a moment."
+    }
+
+    // 默认友好消息
+    return "I encountered an issue processing your request. Please try again, or contact our campus directly for assistance."
+  }
+
   // 自动滚动到最新消息
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -107,9 +154,9 @@ export function AIChatDialog({
 
   // 展开状态：显示完整对话框
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] flex flex-col bg-background border rounded-lg shadow-2xl">
+    <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] flex flex-col bg-background border rounded-lg shadow-2xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-4 border-b shrink-0">
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           <h3 className="font-semibold">AI Assistant - {franchiseName}</h3>
@@ -137,8 +184,8 @@ export function AIChatDialog({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="p-4 space-y-4">
           {messages.map((message) => {
             const isUser = (message.role as string) === 'user'
             return (
@@ -185,7 +232,7 @@ export function AIChatDialog({
             <div className="flex justify-start">
               <div className="bg-destructive/10 text-destructive rounded-lg px-4 py-2">
                 <p className="text-sm">
-                  {error instanceof Error ? error.message : 'Sorry, something went wrong. Please try again.'}
+                  {getFriendlyErrorMessage(error)}
                 </p>
               </div>
             </div>
@@ -195,7 +242,7 @@ export function AIChatDialog({
       </ScrollArea>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t">
+      <form onSubmit={handleSubmit} className="p-4 border-t shrink-0">
         <div className="flex gap-2">
           <Input
             value={input}

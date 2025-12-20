@@ -115,17 +115,26 @@ Important guidelines:
     console.error('Error in AI chat API:', error)
     
     // 提供更友好的错误信息
-    let errorMessage = 'Internal server error'
+    let errorMessage = "I'm experiencing some technical difficulties. Please try again in a moment, or feel free to contact our campus directly."
     let statusCode = 500
 
-    if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
-      errorMessage = 'Connection timeout. Please check your network connection or configure a proxy if needed.'
+    const errorMsg = error.message?.toLowerCase() || ''
+
+    if (errorMsg.includes('timeout') || errorMsg.includes('connect timeout')) {
+      errorMessage = "I'm having trouble connecting right now. Please check your internet connection and try again in a moment."
       statusCode = 504
-    } else if (error.message?.includes('connect') || error.message?.includes('ECONNREFUSED')) {
-      errorMessage = 'Cannot connect to AI service. Please check your network connection or configure a proxy.'
+    } else if (errorMsg.includes('connect') || errorMsg.includes('econnrefused') || errorMsg.includes('network')) {
+      errorMessage = "I'm temporarily unavailable. Please try again in a few moments, or contact our campus directly for immediate assistance."
       statusCode = 503
-    } else if (error.message) {
-      errorMessage = error.message
+    } else if (errorMsg.includes('quota') || errorMsg.includes('rate limit') || errorMsg.includes('limit')) {
+      errorMessage = "I'm currently processing many requests. Please try again in a moment."
+      statusCode = 429
+    } else if (errorMsg.includes('unauthorized') || errorMsg.includes('forbidden')) {
+      errorMessage = "I'm temporarily unavailable. Please try again in a few moments, or contact our campus directly for immediate assistance."
+      statusCode = 403
+    } else if (errorMsg.includes('not found') || errorMsg.includes('404')) {
+      errorMessage = "I couldn't find the information you're looking for. Please try rephrasing your question or contact our campus directly."
+      statusCode = 404
     }
 
     return new Response(
