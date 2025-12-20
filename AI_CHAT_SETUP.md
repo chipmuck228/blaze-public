@@ -13,7 +13,14 @@ AI 客服功能已集成到 location 页面。用户可以通过点击 "Contact 
 ```env
 # Google Gemini API Key (必需)
 GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_api_key_here
+
+# 代理配置（如果需要，解决连接超时问题）
+# HTTP_PROXY=http://127.0.0.1:7890
+# HTTPS_PROXY=http://127.0.0.1:7890
+# NO_PROXY=localhost,127.0.0.1
 ```
+
+**注意**: 如果遇到连接超时错误，请参考 `GEMINI_NETWORK_FIX.md` 配置代理。
 
 ### 获取 Google Gemini API Key
 
@@ -116,7 +123,25 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_api_key_here
 
 ### 常见问题
 
-1. **"Failed to fetch" 错误**：
+1. **连接超时错误 (Connect Timeout Error)**：
+   - **原因**: 网络环境无法访问 Google Gemini API 服务器
+   - **解决方案**:
+     - **方案 1**: 使用系统级 VPN（推荐）
+       - 确保 VPN 是系统级的，而不是仅浏览器扩展
+       - 重启开发服务器
+     - **方案 2**: 配置代理
+       - 在 `.env.local` 中添加：
+         ```env
+         HTTP_PROXY=http://127.0.0.1:7890
+         HTTPS_PROXY=http://127.0.0.1:7890
+         NO_PROXY=localhost,127.0.0.1
+         ```
+       - 将端口替换为您的实际代理端口（常见：Clash 7890, V2Ray 1080）
+       - 重启开发服务器
+     - **方案 3**: 检查防火墙设置
+       - 确保允许访问 `generativelanguage.googleapis.com`
+
+2. **"Failed to fetch" 错误**：
    - 检查 `GOOGLE_GENERATIVE_AI_API_KEY` 是否正确设置
    - 检查网络连接
    - 检查 API 配额是否用完

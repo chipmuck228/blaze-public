@@ -6,6 +6,16 @@ import { getFranchiseDetailsByCode, getFranchiseLocations } from '@/lib/db'
 // Note: Using nodejs runtime because db functions may not be compatible with edge
 // export const runtime = 'edge'
 
+// 配置 Google SDK（支持代理和超时）
+// Node.js 会自动使用 HTTP_PROXY 和 HTTPS_PROXY 环境变量
+// 如果配置了代理，会在控制台显示
+if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+  console.log('[AI Chat] Proxy configured:', {
+    http: process.env.HTTP_PROXY,
+    https: process.env.HTTPS_PROXY,
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { messages, franchiseCode } = await req.json()
@@ -106,10 +116,28 @@ Important guidelines:
     return result.toTextStreamResponse()
   } catch (error: any) {
     console.error('Error in AI chat API:', error)
+    
+    // 提供更友好的错误信息
+    let errorMessage = 'Internal server error'
+    let statusCode = 500
+
+    if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+      errorMessage = 'Connection timeout. Please check your network connection or configure a proxy if needed.'
+      statusCode = 504
+    } else if (error.message?.includes('connect') || error.message?.includes('ECONNREFUSED')) {
+      errorMessage = 'Cannot connect to AI service. Please check your network connection or configure a proxy.'
+      statusCode = 503
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }),
       {
-        status: 500,
+        status: statusCode,
         headers: { 'Content-Type': 'application/json' },
       }
     )
