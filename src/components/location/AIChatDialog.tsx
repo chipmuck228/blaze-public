@@ -1,17 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { X, Send, Loader2, MessageCircle, Minimize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-}
 
 interface AIChatDialogProps {
   franchiseCode: string
@@ -27,18 +23,31 @@ export function AIChatDialog({
   onOpenChange,
 }: AIChatDialogProps) {
   const [isMinimized, setIsMinimized] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `Hello! I'm the AI assistant for ${franchiseName} campus. How can I help you today? I can answer questions about our location, contact information, and general information about Blaze Robotics Academy.`,
-    },
-  ])
   const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const { messages, sendMessage, status, error } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/ai/chat',
+      body: {
+        franchiseCode,
+      },
+    }),
+    messages: [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: `Hello! I'm the AI assistant for ${franchiseName} campus. How can I help you today? I can answer questions about our location, contact information, and general information about Blaze Robotics Academy.`,
+          },
+        ],
+      },
+    ],
+  })
+
+  const isLoading = status === 'streaming' || status === 'submitted'
 
   // 自动滚动到最新消息
   useEffect(() => {
@@ -53,149 +62,12 @@ export function AIChatDialog({
   }
 
   // 处理提交
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault()
-      if (!input.trim() || isLoading) return
-
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: input.trim(),
-      }
-
-      // 添加用户消息
-      setMessages((prev) => [...prev, userMessage])
-      setInput('')
-      setIsLoading(true)
-      setError(null)
-
-      // 取消之前的请求
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-
-      // 创建新的 AbortController
-      const abortController = new AbortController()
-      abortControllerRef.current = abortController
-
-      try {
-        const response = await fetch('/api/ai/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [...messages, userMessage].map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-            franchiseCode,
-          }),
-          signal: abortController.signal,
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || 'Failed to get response')
-        }
-
-        if (!response.body) {
-          throw new Error('No response body')
-        }
-
-        // 创建助手消息
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: '',
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-
-        // 读取流式响应 (SSE 格式)
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || '' // 保留最后一个不完整的行
-
-          for (const line of lines) {
-            if (line.startsWith('0:')) {
-              // 文本流格式: 0:content
-              const content = line.slice(2)
-              if (content) {
-                setMessages((prev) => {
-                  const newMessages = [...prev]
-                  const lastMessage = newMessages[newMessages.length - 1]
-                  if (lastMessage && lastMessage.role === 'assistant') {
-                    lastMessage.content += content
-                  }
-                  return newMessages
-                })
-              }
-            } else if (line.startsWith('data: ')) {
-              // SSE 格式: data: {...}
-              try {
-                const data = JSON.parse(line.slice(6))
-                if (data.text) {
-                  setMessages((prev) => {
-                    const newMessages = [...prev]
-                    const lastMessage = newMessages[newMessages.length - 1]
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      lastMessage.content = data.text
-                    }
-                    return newMessages
-                  })
-                }
-              } catch {
-                // 忽略 JSON 解析错误
-              }
-            }
-          }
-        }
-
-        // 处理剩余的 buffer
-        if (buffer.trim()) {
-          if (buffer.startsWith('0:')) {
-            const content = buffer.slice(2)
-            if (content) {
-              setMessages((prev) => {
-                const newMessages = [...prev]
-                const lastMessage = newMessages[newMessages.length - 1]
-                if (lastMessage && lastMessage.role === 'assistant') {
-                  lastMessage.content += content
-                }
-                return newMessages
-              })
-            }
-          }
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
-          return // 请求被取消，不需要处理
-        }
-        console.error('Error sending message:', err)
-        setError(err.message || 'Failed to send message')
-        // 移除最后添加的助手消息（如果有错误）
-        setMessages((prev) => {
-          if (prev[prev.length - 1]?.role === 'assistant' && !prev[prev.length - 1].content) {
-            return prev.slice(0, -1)
-          }
-          return prev
-        })
-      } finally {
-        setIsLoading(false)
-        abortControllerRef.current = null
-      }
-    },
-    [input, messages, franchiseCode, isLoading]
-  )
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+    sendMessage({ text: input.trim() })
+    setInput('')
+  }
 
   // 处理最小化
   const handleMinimize = () => {
@@ -267,26 +139,38 @@ export function AIChatDialog({
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                'flex',
-                message.role === 'user' ? 'justify-end' : 'justify-start'
-              )}
-            >
+          {messages.map((message) => {
+            const isUser = (message.role as string) === 'user'
+            return (
               <div
+                key={message.id}
                 className={cn(
-                  'max-w-[80%] rounded-lg px-4 py-2',
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-foreground'
+                  'flex',
+                  isUser ? 'justify-end' : 'justify-start'
                 )}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                <div
+                  className={cn(
+                    'max-w-[80%] rounded-lg px-4 py-2',
+                    isUser
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-foreground'
+                  )}
+                >
+                  {message.parts.map((part, i) => {
+                    if (part.type === 'text') {
+                      return (
+                        <p key={`${message.id}-${i}`} className="text-sm whitespace-pre-wrap">
+                          {part.text}
+                        </p>
+                      )
+                    }
+                    return null
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           {isLoading && (
             <div className="flex justify-start">
               <div className="bg-muted rounded-lg px-4 py-2">
@@ -300,7 +184,9 @@ export function AIChatDialog({
           {error && (
             <div className="flex justify-start">
               <div className="bg-destructive/10 text-destructive rounded-lg px-4 py-2">
-                <p className="text-sm">Sorry, something went wrong. Please try again.</p>
+                <p className="text-sm">
+                  {error instanceof Error ? error.message : 'Sorry, something went wrong. Please try again.'}
+                </p>
               </div>
             </div>
           )}

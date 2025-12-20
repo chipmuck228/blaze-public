@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { streamText } from 'ai'
+import { streamText, UIMessage, convertToModelMessages } from 'ai'
 import { google } from '@ai-sdk/google'
 import { getFranchiseDetailsByCode, getFranchiseLocations } from '@/lib/db'
 
@@ -18,7 +18,7 @@ if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, franchiseCode } = await req.json()
+    const { messages, franchiseCode }: { messages: UIMessage[]; franchiseCode: string } = await req.json()
 
     if (!franchiseCode) {
       return new Response('franchiseCode is required', { status: 400 })
@@ -105,15 +105,12 @@ Important guidelines:
     const result = await streamText({
       model: google('gemini-2.5-flash'),
       system: systemPrompt,
-      messages: messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content,
-      })),
+      messages: convertToModelMessages(messages),
       temperature: 0.7,
     })
 
-    // Use toTextStreamResponse for useChat hook compatibility
-    return result.toTextStreamResponse()
+    // 返回 UIMessage 流式响应，与 @ai-sdk/react 的 useChat hook 兼容
+    return result.toUIMessageStreamResponse()
   } catch (error: any) {
     console.error('Error in AI chat API:', error)
     
