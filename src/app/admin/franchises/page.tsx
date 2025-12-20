@@ -34,8 +34,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, FileText } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FranchiseContentEditDialog } from "@/components/admin/FranchiseContentEditDialog"
+import type { FranchiseBrandingConfig } from "@/lib/db"
 
 interface Franchise {
   id: string
@@ -43,6 +45,7 @@ interface Franchise {
   name: string
   primary_domain?: string | null
   timezone?: string | null
+  branding_config?: FranchiseBrandingConfig | null
   is_active: boolean
 }
 
@@ -53,6 +56,8 @@ export default function FranchisesManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [editingFranchise, setEditingFranchise] = useState<Franchise | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [contentEditingFranchise, setContentEditingFranchise] = useState<Franchise | null>(null)
+  const [isContentEditDialogOpen, setIsContentEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -92,8 +97,20 @@ export default function FranchisesManagementPage() {
         throw new Error("Failed to fetch franchises")
       }
       const data = await response.json()
-      setFranchises(data || [])
-      setFilteredFranchises(data || [])
+      // 解析 branding_config JSONB（如果存在）
+      const franchisesWithParsedConfig = (data || []).map((f: any) => {
+        if (f.branding_config && typeof f.branding_config === 'string') {
+          try {
+            f.branding_config = JSON.parse(f.branding_config)
+          } catch (e) {
+            console.error('Failed to parse branding_config:', e)
+            f.branding_config = null
+          }
+        }
+        return f
+      })
+      setFranchises(franchisesWithParsedConfig)
+      setFilteredFranchises(franchisesWithParsedConfig)
     } catch (err: any) {
       console.error("Error fetching franchises:", err)
       setError(err.message || "Failed to load franchises")
@@ -146,6 +163,31 @@ export default function FranchisesManagementPage() {
       is_active: true,
     })
     setIsEditDialogOpen(true)
+  }
+
+  const handleEditContent = (franchise: Franchise) => {
+    setContentEditingFranchise(franchise)
+    setIsContentEditDialogOpen(true)
+  }
+
+  const handleSaveBrandingConfig = async (config: FranchiseBrandingConfig) => {
+    if (!contentEditingFranchise) return
+
+    const response = await fetch(`/api/admin/franchises/${contentEditingFranchise.id}/branding-config`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ branding_config: config }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || "Failed to save branding config")
+    }
+
+    // 刷新列表
+    fetchFranchises()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -288,6 +330,10 @@ export default function FranchisesManagementPage() {
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditContent(franchise)}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Edit Content
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => handleDelete(franchise.id)}
@@ -401,6 +447,19 @@ export default function FranchisesManagementPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Content Edit Dialog */}
+      {contentEditingFranchise && (
+        <FranchiseContentEditDialog
+          franchiseId={contentEditingFranchise.id}
+          franchiseCode={contentEditingFranchise.code}
+          franchiseName={contentEditingFranchise.name}
+          brandingConfig={contentEditingFranchise.branding_config}
+          open={isContentEditDialogOpen}
+          onOpenChange={setIsContentEditDialogOpen}
+          onSave={handleSaveBrandingConfig}
+        />
+      )}
     </div>
   )
 }

@@ -16,7 +16,7 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
       .from("franchises")
-      .select("id, code, name, primary_domain, timezone, is_active")
+      .select("id, code, name, primary_domain, timezone, branding_config, is_active")
       .eq("id", id)
       .single()
 
@@ -47,7 +47,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { code, name, primary_domain, timezone, is_active } = body
+    const { code, name, primary_domain, timezone, branding_config, is_active } = body
 
     if (!code || !name) {
       return NextResponse.json(
@@ -58,17 +58,24 @@ export async function PUT(
 
     const normalizedCode = String(code).trim().toLowerCase()
 
+    const updateData: any = {
+      code: normalizedCode,
+      name,
+      primary_domain: primary_domain || null,
+      timezone: timezone || null,
+      is_active: is_active !== undefined ? is_active : true,
+    }
+
+    // 如果提供了 branding_config，则更新它
+    if (branding_config !== undefined) {
+      updateData.branding_config = branding_config
+    }
+
     const { data, error } = await supabaseAdmin
       .from("franchises")
-      .update({
-        code: normalizedCode,
-        name,
-        primary_domain: primary_domain || null,
-        timezone: timezone || null,
-        is_active: is_active !== undefined ? is_active : true,
-      })
+      .update(updateData)
       .eq("id", id)
-      .select("id, code, name, primary_domain, timezone, is_active")
+      .select("id, code, name, primary_domain, timezone, branding_config, is_active")
       .single()
 
     if (error) {

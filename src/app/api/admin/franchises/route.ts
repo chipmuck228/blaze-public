@@ -12,7 +12,7 @@ export async function GET() {
 
     const { data, error } = await supabaseAdmin
       .from("franchises")
-      .select("id, code, name, primary_domain, timezone, is_active")
+      .select("id, code, name, primary_domain, timezone, branding_config, is_active")
       .order("name", { ascending: true })
 
     if (error) {

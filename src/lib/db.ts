@@ -1253,8 +1253,12 @@ export interface CourseLocation {
   city?: string
   state?: string
   zip_code?: string
+  description?: string | null
   phone?: string
   email?: string
+  parking_info?: string | null
+  check_in_info?: string | null
+  amenities?: Record<string, any> | null
   franchise_id?: string | null
   is_active: boolean
   created_at: string
@@ -1308,12 +1312,62 @@ export interface CourseInstanceException {
 }
 
 // Franchise / multi-tenant
+export interface FranchiseBrandingConfig {
+  hero?: {
+    title?: string
+    subtitle?: string
+    description?: string
+  }
+  contact?: {
+    email?: string | null
+    phone?: string | null
+    address?: {
+      street?: string
+      city?: string
+      state?: string
+      zip?: string
+    } | null
+    businessHours?: {
+      monday?: string
+      tuesday?: string
+      wednesday?: string
+      thursday?: string
+      friday?: string
+      saturday?: string
+      sunday?: string
+    }
+  }
+  social?: {
+    facebook?: string | null
+    instagram?: string | null
+    twitter?: string | null
+    youtube?: string | null
+  }
+  highlights?: {
+    programs?: string
+    schedule?: string
+    focus?: string
+  }
+  branding?: {
+    logoUrl?: string | null
+    primaryColor?: string | null
+    secondaryColor?: string | null
+    accentColor?: string | null
+  }
+  seo?: {
+    title?: string
+    description?: string
+    keywords?: string
+  }
+}
+
 export interface Franchise {
   id: string
   code: string
   name: string
   primary_domain?: string | null
   timezone?: string | null
+  branding_config?: FranchiseBrandingConfig | null
   is_active: boolean
 }
 
@@ -1467,6 +1521,117 @@ export async function getFranchiseByCode(code: string): Promise<Franchise | null
   }
 
   return data as Franchise
+}
+
+// 根据 franchise code 获取 franchise 详细信息（包含 branding_config）
+export async function getFranchiseDetailsByCode(code: string): Promise<Franchise | null> {
+  const franchise = await getFranchiseByCode(code)
+  if (!franchise) return null
+
+  // 解析 branding_config JSONB
+  // Supabase 可能返回字符串或对象，需要处理两种情况
+  if (franchise.branding_config !== null && franchise.branding_config !== undefined) {
+    const originalType = typeof franchise.branding_config
+    const isArray = Array.isArray(franchise.branding_config)
+    
+    if (originalType === 'string') {
+      try {
+        const parsed = JSON.parse(franchise.branding_config as string) as FranchiseBrandingConfig
+        franchise.branding_config = parsed
+      } catch (e) {
+        console.error('Failed to parse branding_config:', e)
+        franchise.branding_config = null
+      }
+    }
+    // 如果已经是对象，直接使用（Supabase 客户端库可能已经解析了）
+    // 确保类型正确，并且不是数组（JSONB 可能是数组）
+    else if (originalType === 'object' && !isArray) {
+      // 已经是对象，直接使用
+      // 不需要做任何转换，Supabase 已经解析了 JSONB
+      franchise.branding_config = franchise.branding_config as FranchiseBrandingConfig
+    } else {
+      // 其他情况（如数组），设为 null
+      console.warn('Unexpected branding_config type:', originalType, 'isArray:', isArray)
+      franchise.branding_config = null
+    }
+  }
+
+  // 调试：检查解析后的 branding_config
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[getFranchiseDetailsByCode]', {
+      code: franchise.code,
+      hasBrandingConfig: !!franchise.branding_config,
+      brandingConfigType: typeof franchise.branding_config,
+      heroTitle: franchise.branding_config?.hero?.title,
+      heroDescription: franchise.branding_config?.hero?.description,
+    })
+  }
+
+  return franchise
+}
+
+// 获取 franchise 的所有 active locations
+export async function getFranchiseLocations(franchiseId: string): Promise<CourseLocation[]> {
+  const { data, error } = await supabaseAdmin
+    .from('course_locations')
+    .select('*')
+    .eq('franchise_id', franchiseId)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch franchise locations: ${error.message}`)
+  }
+
+  return (data || []) as CourseLocation[]
+}
+
+// 获取 franchise 的特色课程（通过 active instances）
+export async function getFranchiseFeaturedCourses(
+  franchiseId: string,
+  limit: number = 6
+): Promise<Course[]> {
+  // 获取该 franchise 的 active instances，关联到 courses
+  const { data: instances, error: instancesError } = await supabaseAdmin
+    .from('course_instances')
+    .select(`
+      assignment_id,
+      assignment:course_assignments!inner(
+        course_id,
+        course:courses!inner(*)
+      )
+    `)
+    .eq('franchise_id', franchiseId)
+    .eq('is_active', true)
+    .limit(100) // 限制实例数量，避免查询过大
+
+  if (instancesError) {
+    throw new Error(`Failed to fetch franchise instances: ${instancesError.message}`)
+  }
+
+  // 提取唯一的 courses
+  const courseMap = new Map<string, Course>()
+  
+  for (const instance of instances || []) {
+    const assignment = Array.isArray(instance.assignment) 
+      ? instance.assignment[0] 
+      : instance.assignment
+    
+    if (assignment && typeof assignment === 'object' && 'course' in assignment) {
+      const course = (assignment as any).course
+      if (course && typeof course === 'object' && 'id' in course) {
+        // 只包含已发布的课程
+        if (course.status === 'published' && !courseMap.has(course.id)) {
+          courseMap.set(course.id, course as Course)
+        }
+      }
+    }
+  }
+
+  // 转换为数组并限制数量
+  const courses = Array.from(courseMap.values()).slice(0, limit)
+  
+  return courses
 }
 
 // 根据slug获取课程（只返回已发布的课程，公开 API 使用）
@@ -3263,7 +3428,7 @@ export async function getCoachInstances(coachUserId: string): Promise<CourseInst
           name,
           description,
           target_audience,
-          learning_outcomes,
+          outcomes,
           cancellation_policy,
           prerequisites,
           base_price,
@@ -4012,7 +4177,7 @@ export async function getCoachInstanceById(
           name,
           description,
           target_audience,
-          learning_outcomes,
+          outcomes,
           cancellation_policy,
           prerequisites,
           base_price,

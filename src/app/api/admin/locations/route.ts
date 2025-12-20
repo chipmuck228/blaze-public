@@ -31,7 +31,20 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, address, city, state, zip_code, phone, email, franchise_id } = body
+    const { 
+      name, 
+      address, 
+      city, 
+      state, 
+      zip_code, 
+      description,
+      phone, 
+      email, 
+      parking_info,
+      check_in_info,
+      amenities,
+      franchise_id 
+    } = body
 
     if (!name) {
       return NextResponse.json(
@@ -44,12 +57,16 @@ export async function POST(request: Request) {
       .from("course_locations")
       .insert({
         name,
-        address,
-        city,
-        state,
-        zip_code,
-        phone,
-        email,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zip_code: zip_code || null,
+        description: description || null,
+        phone: phone || null,
+        email: email || null,
+        parking_info: parking_info || null,
+        check_in_info: check_in_info || null,
+        amenities: amenities || null,
         franchise_id: franchise_id || null,
         is_active: true,
       })

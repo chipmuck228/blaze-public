@@ -47,18 +47,36 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, address, city, state, zip_code, phone, email, is_active, franchise_id } = body
+    const { 
+      name, 
+      address, 
+      city, 
+      state, 
+      zip_code, 
+      description,
+      phone, 
+      email, 
+      parking_info,
+      check_in_info,
+      amenities,
+      is_active, 
+      franchise_id 
+    } = body
 
     const { data, error } = await supabaseAdmin
       .from("course_locations")
       .update({
         name,
-        address,
-        city,
-        state,
-        zip_code,
-        phone,
-        email,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zip_code: zip_code || null,
+        description: description || null,
+        phone: phone || null,
+        email: email || null,
+        parking_info: parking_info || null,
+        check_in_info: check_in_info || null,
+        amenities: amenities || null,
         franchise_id: franchise_id || null,
         is_active: is_active !== undefined ? is_active : true,
         updated_at: new Date().toISOString(),

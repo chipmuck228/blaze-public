@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Card,
   CardContent,
@@ -50,8 +51,12 @@ interface CourseLocation {
   city?: string
   state?: string
   zip_code?: string
+  description?: string | null
   phone?: string
   email?: string
+  parking_info?: string | null
+  check_in_info?: string | null
+  amenities?: Record<string, any> | null
   franchise_id?: string | null
   is_active: boolean
   created_at: string
@@ -83,8 +88,12 @@ export default function LocationsManagementPage() {
     city: "",
     state: "",
     zip_code: "",
+    description: "",
     phone: "",
     email: "",
+    parking_info: "",
+    check_in_info: "",
+    amenities: null,
     franchise_id: undefined,
     is_active: true,
   })
@@ -176,8 +185,12 @@ export default function LocationsManagementPage() {
       city: location.city || "",
       state: location.state || "",
       zip_code: location.zip_code || "",
+      description: location.description || "",
       phone: location.phone || "",
       email: location.email || "",
+      parking_info: location.parking_info || "",
+      check_in_info: location.check_in_info || "",
+      amenities: location.amenities || null,
       franchise_id: location.franchise_id || undefined,
       is_active: location.is_active,
     })
@@ -192,8 +205,12 @@ export default function LocationsManagementPage() {
       city: "",
       state: "",
       zip_code: "",
+      description: "",
       phone: "",
       email: "",
+      parking_info: "",
+      check_in_info: "",
+      amenities: null,
       franchise_id: undefined,
       is_active: true,
     })
@@ -211,8 +228,12 @@ export default function LocationsManagementPage() {
         city: formData.city || undefined,
         state: formData.state || undefined,
         zip_code: formData.zip_code || undefined,
+        description: formData.description || undefined,
         phone: formData.phone || undefined,
         email: formData.email || undefined,
+        parking_info: formData.parking_info || undefined,
+        check_in_info: formData.check_in_info || undefined,
+        amenities: formData.amenities || undefined,
         franchise_id: formData.franchise_id || undefined,
       }
 
@@ -497,6 +518,39 @@ export default function LocationsManagementPage() {
                   placeholder="e.g., info@example.com"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Campus description and overview"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="parking_info">Parking Information</Label>
+              <Textarea
+                id="parking_info"
+                value={formData.parking_info || ''}
+                onChange={(e) => setFormData({ ...formData, parking_info: e.target.value })}
+                placeholder="Parking information and instructions"
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="check_in_info">Check-in Information</Label>
+              <Textarea
+                id="check_in_info"
+                value={formData.check_in_info || ''}
+                onChange={(e) => setFormData({ ...formData, check_in_info: e.target.value })}
+                placeholder="Check-in procedures and information"
+                rows={2}
+              />
             </div>
 
             <DialogFooter>
