@@ -103,7 +103,7 @@ Important guidelines:
 
     // 调用 AI SDK (使用 Gemini 模型)
     const result = await streamText({
-      model: google('gemini-1.5-pro'),
+      model: google('gemini-2.5-flash'),
       system: systemPrompt,
       messages: messages.map((msg: any) => ({
         role: msg.role,
