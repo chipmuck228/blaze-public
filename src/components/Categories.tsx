@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
-import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles } from "lucide-react"
+import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy } from "lucide-react"
 import Link from "next/link"
 
 interface Category {
@@ -17,9 +17,10 @@ interface Category {
 }
 
 const categoryIcons: Record<string, React.ReactNode> = {
-  courses: <BookOpen className="h-8 w-8" />,
-  camps: <GraduationCap className="h-8 w-8" />,
-  workshops: <Sparkles className="h-8 w-8" />,
+  courses: <BookOpen className="h-8 w-8 stroke-1" />,
+  camps: <GraduationCap className="h-8 w-8 stroke-1" />,
+  workshops: <Sparkles className="h-8 w-8 stroke-1" />,
+  competition: <Trophy className="h-8 w-8 stroke-1" />,
 }
 
 const categoryColors: Record<string, { bg: string; text: string; border: string; hover: string }> = {
@@ -41,6 +42,12 @@ const categoryColors: Record<string, { bg: string; text: string; border: string;
     border: 'border-purple-200 dark:border-purple-800',
     hover: 'hover:bg-purple-100 dark:hover:bg-purple-950/40',
   },
+  competition: {
+    bg: 'bg-red-50 dark:bg-red-950/20',
+    text: 'text-red-700 dark:text-red-300',
+    border: 'border-red-200 dark:border-red-800',
+    hover: 'hover:bg-red-100 dark:hover:bg-red-950/40',
+  },
 }
 
 const getCategoryStyle = (categoryName: string) => {
@@ -51,6 +58,8 @@ const getCategoryStyle = (categoryName: string) => {
     return categoryColors.camps
   } else if (normalizedName.includes('workshop')) {
     return categoryColors.workshops
+  } else if (normalizedName.includes('competition')) {
+    return categoryColors.competition
   }
   // Default style
   return {
@@ -69,6 +78,8 @@ const getCategoryIcon = (categoryName: string) => {
     return categoryIcons.camps
   } else if (normalizedName.includes('workshop')) {
     return categoryIcons.workshops
+  } else if (normalizedName.includes('competition')) {
+    return categoryIcons.competition
   }
   return <BookOpen className="h-8 w-8" />
 }
@@ -135,7 +146,7 @@ export const Categories = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
         {categories.map((category) => {
           const styles = getCategoryStyle(category.name)
           const icon = getCategoryIcon(category.name)
@@ -143,7 +154,7 @@ export const Categories = () => {
           return (
             <Card
               key={category.id}
-              className={`group relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${styles.bg} ${styles.border} border-2`}
+              className={`group relative overflow-hidden transition-all duration-300 shadow-md hover:shadow-2xl hover:-translate-y-1 ${styles.bg} ${styles.border} border-0`}
             >
               {/* Decorative background pattern */}
               <div className="absolute top-0 right-0 w-40 h-40 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -153,7 +164,7 @@ export const Categories = () => {
               </div>
               
               <CardHeader className="relative z-10 pb-4">
-                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl ${styles.bg} ${styles.border} border-2 mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm`}>
+                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl ${styles.bg} ${styles.border} border-0 mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm`}>
                   <div className={styles.text}>
                     {icon}
                   </div>

@@ -3,11 +3,19 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, AlertCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, AlertCircle, Loader2, ShoppingCart } from "lucide-react";
 import { CourseWithDetails } from "@/lib/db";
 
 interface CourseDetailProps {
@@ -39,11 +47,22 @@ interface Franchise {
 export const CourseDetail = ({ course }: CourseDetailProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const [franchises, setFranchises] = useState<Franchise[]>([]);
   const [isLoadingFranchises, setIsLoadingFranchises] = useState(true);
   const [selectedFranchise, setSelectedFranchise] = useState<string | null>(null);
   const [instances, setInstances] = useState<any[]>([]);
   const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+  const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [enrollmentStatus, setEnrollmentStatus] = useState<{
+    canEnroll: boolean;
+    reason?: string;
+    alreadyEnrolled?: boolean;
+    prerequisitesNotMet?: boolean;
+    missingPrerequisites?: any[];
+  } | null>(null);
 
   // 从 URL 参数获取 franchise
   useEffect(() => {
@@ -96,6 +115,18 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
           throw new Error("Failed to load instances");
         }
         const data = await res.json();
+        console.log('[CourseDetail] Fetched instances:', {
+          courseId: course.id,
+          franchise: selectedFranchise,
+          instancesCount: data?.length || 0,
+          instances: data?.map((inst: any) => ({
+            id: inst.id,
+            start_date: inst.start_date,
+            max_students: inst.max_students,
+            available_capacity: inst.available_capacity,
+            is_full: inst.is_full,
+          })),
+        });
         setInstances(data || []);
       } catch (err: any) {
         console.error("Error fetching instances:", err);
@@ -108,6 +139,38 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
     fetchInstances();
   }, [course.id, selectedFranchise]);
 
+  // 检查用户是否可以注册（先修条件和已注册状态）
+  useEffect(() => {
+    const checkEnrollmentStatus = async () => {
+      if (!session?.user || !course.id) {
+        setEnrollmentStatus(null);
+        return;
+      }
+
+      try {
+        // 检查先修条件
+        const canEnrollRes = await fetch(`/api/user/courses/${course.id}/can-enroll`);
+        if (canEnrollRes.ok) {
+          const canEnrollData = await canEnrollRes.json();
+          setEnrollmentStatus({
+            canEnroll: canEnrollData.canEnroll,
+            prerequisitesNotMet: !canEnrollData.canEnroll,
+            missingPrerequisites: canEnrollData.missingPrerequisites || [],
+            reason: !canEnrollData.canEnroll 
+              ? `Missing prerequisites: ${(canEnrollData.missingPrerequisites || []).map((c: any) => c.name).join(', ')}`
+              : undefined,
+          });
+        }
+      } catch (err) {
+        console.error("Error checking enrollment status:", err);
+        // 如果检查失败，允许继续（保守处理）
+        setEnrollmentStatus({ canEnroll: true });
+      }
+    };
+
+    checkEnrollmentStatus();
+  }, [session?.user, course.id]);
+
   // Location 选择处理
   const handleLocationChange = (locationCode: string) => {
     if (locationCode === "all" || !locationCode) {
@@ -117,6 +180,128 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
       setSelectedFranchise(locationCode);
       localStorage.setItem('preferred_location', locationCode);
     }
+  };
+
+  // 处理注册按钮点击
+  const handleEnrollClick = () => {
+    if (!session?.user) {
+      router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+
+    // 如果没有实例，提示用户
+    if (instances.length === 0) {
+      alert('No available instances for this course at the selected location.');
+      return;
+    }
+
+    // 如果只有一个实例，直接添加到购物车
+    if (instances.length === 1) {
+      handleAddToCart(instances[0].id);
+      return;
+    }
+
+    // 如果有多个实例，打开选择对话框
+    setIsEnrollDialogOpen(true);
+  };
+
+  // 添加到购物车
+  const handleAddToCart = async (instanceId?: string) => {
+    const targetInstanceId = instanceId || selectedInstanceId;
+    
+    if (!targetInstanceId) {
+      alert('Please select a course instance');
+      return;
+    }
+
+    setIsAddingToCart(true);
+    try {
+      const response = await fetch('/api/enrollments/cart', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instance_id: targetInstanceId,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIsEnrollDialogOpen(false);
+        setSelectedInstanceId(null);
+        
+        // 询问用户是否立即结账
+        if (confirm('Added to cart successfully! Would you like to proceed to checkout?')) {
+          router.push('/enrollments/cart');
+        }
+      } else {
+        const error = await response.json();
+        if (error.code === 'CAPACITY_FULL' && error.suggestion === 'waitlist') {
+          // 询问是否加入等待列表
+          if (confirm('This course is full. Would you like to join the waitlist?')) {
+            handleJoinWaitlist(targetInstanceId);
+          }
+        } else if (error.code === 'PREREQUISITES_NOT_MET') {
+          alert(error.error || 'You need to complete prerequisite courses first.');
+        } else if (error.code === 'ALREADY_ENROLLED') {
+          alert(error.error || 'You already have an active enrollment for this course.');
+        } else {
+          alert(error.error || 'Failed to add to cart');
+        }
+      }
+    } catch (err) {
+      console.error('Error adding to cart:', err);
+      alert('Failed to add to cart');
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+
+  // 加入等待列表
+  const handleJoinWaitlist = async (instanceId: string) => {
+    try {
+      const response = await fetch('/api/enrollments/waitlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instance_id: instanceId,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Added to waitlist successfully!');
+        setIsEnrollDialogOpen(false);
+        setSelectedInstanceId(null);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to join waitlist');
+      }
+    } catch (err) {
+      console.error('Error joining waitlist:', err);
+      alert('Failed to join waitlist');
+    }
+  };
+
+  // 格式化日期
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  // 格式化时间
+  const formatTime = (timeString: string) => {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
   };
 
   // 获取第一个 subcategory 作为类型标识
@@ -363,30 +548,86 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
             </Card>
           ) : null}
 
-          {/* Available Sessions */}
-          {course.assignments && course.assignments.length > 0 && (
+          {/* Available Instances */}
+          {instances.length > 0 && (
             <Card className="mb-12">
               <CardHeader>
                 <CardTitle className="text-xl">Available Sessions</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {selectedFranchise 
+                    ? `Showing sessions for ${franchises.find(f => f.code === selectedFranchise)?.name || selectedFranchise}`
+                    : 'Showing all available sessions'}
+                </p>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {course.assignments.map((assignment: any) => (
-                    <div key={assignment.id} className="p-4 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors">
-                      {assignment.category && assignment.series && (
-                        <p className="font-semibold text-sm mb-2">
-                          {assignment.category.display_name || assignment.category.name} &gt; {assignment.series.display_name || assignment.series.name}
-                        </p>
-                      )}
-                      {assignment.location && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="h-4 w-4" />
-                          <span>{assignment.location.name}</span>
+                {isLoadingInstances ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : instances.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">
+                    No available sessions at the selected location.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {instances.map((instance: any) => (
+                      <div 
+                        key={instance.id} 
+                        className={`p-4 rounded-lg border transition-colors ${
+                          instance.is_full 
+                            ? 'bg-muted/30 opacity-60' 
+                            : 'bg-muted/30 hover:bg-muted/50 cursor-pointer'
+                        }`}
+                        onClick={() => !instance.is_full && setSelectedInstanceId(instance.id)}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            {instance.assignment?.category && instance.assignment?.series && (
+                              <p className="font-semibold text-sm mb-2">
+                                {instance.assignment.category.display_name || instance.assignment.category.name} &gt; {instance.assignment.series.display_name || instance.assignment.series.name}
+                              </p>
+                            )}
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                              {instance.location && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{instance.location.name}</span>
+                                </div>
+                              )}
+                              {instance.start_date && (
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4" />
+                                  <span>Starts: {formatDate(instance.start_date)}</span>
+                                </div>
+                              )}
+                              {instance.class_time && (
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4" />
+                                  <span>Time: {formatTime(instance.class_time)}</span>
+                                </div>
+                              )}
+                              {instance.available_capacity !== undefined && (
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" />
+                                  <span>
+                                    {instance.is_full 
+                                      ? 'Full' 
+                                      : `${instance.available_capacity} spots available`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {instance.is_full && (
+                            <Badge variant="destructive" className="shrink-0">
+                              Full
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -413,10 +654,57 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
               Join us for this exciting robotics adventure and take your skills to the next level!
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button variant="destructive" size="lg" asChild>
-                <a href="https://www.blazeroboticsacademy.org/winter2026" target="_blank" rel="noreferrer noopener">
-                  Enroll Now
-                </a>
+              <Button 
+                variant="destructive" 
+                size="lg" 
+                onClick={handleEnrollClick}
+                disabled={
+                  isLoadingInstances || 
+                  instances.length === 0 || 
+                  isAddingToCart ||
+                  (session?.user && enrollmentStatus && !enrollmentStatus.canEnroll) ||
+                  instances.every(inst => inst.is_full)
+                }
+                title={
+                  !session?.user 
+                    ? "Please login to enroll"
+                    : isLoadingInstances
+                    ? "Loading available sessions..."
+                    : instances.length === 0
+                    ? "No available sessions for this course"
+                    : instances.every(inst => inst.is_full)
+                    ? "All sessions are full. Please join the waitlist."
+                    : enrollmentStatus && !enrollmentStatus.canEnroll
+                    ? enrollmentStatus.reason || "Prerequisites not met"
+                    : undefined
+                }
+              >
+                {isAddingToCart ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : !session?.user ? (
+                  <>
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    Login to Enroll
+                  </>
+                ) : instances.every(inst => inst.is_full) ? (
+                  <>
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                    All Sessions Full
+                  </>
+                ) : enrollmentStatus && !enrollmentStatus.canEnroll ? (
+                  <>
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                    Prerequisites Required
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    Enroll Now
+                  </>
+                )}
               </Button>
               <Button size="lg" variant="outline" asChild>
                 <Link href="/#courses">
@@ -426,6 +714,131 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
               </Button>
             </div>
           </div>
+
+          {/* Enroll Dialog - 选择实例 */}
+          <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Select a Session</DialogTitle>
+                <DialogDescription>
+                  Choose a session to enroll in. Please review the details before proceeding.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 mt-4">
+                {instances.map((instance: any) => (
+                  <div
+                    key={instance.id}
+                    className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+                      selectedInstanceId === instance.id
+                        ? 'border-primary bg-primary/5'
+                        : instance.is_full
+                        ? 'border-muted bg-muted/30 opacity-60 cursor-not-allowed'
+                        : 'border-border hover:border-primary hover:bg-muted/50'
+                    }`}
+                    onClick={() => !instance.is_full && setSelectedInstanceId(instance.id)}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        {instance.assignment?.category && instance.assignment?.series && (
+                          <p className="font-semibold text-sm mb-2">
+                            {instance.assignment.category.display_name || instance.assignment.category.name} &gt; {instance.assignment.series.display_name || instance.assignment.series.name}
+                          </p>
+                        )}
+                        <div className="space-y-1 text-sm text-muted-foreground">
+                          {instance.location && (
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4" />
+                              <span>{instance.location.name}</span>
+                            </div>
+                          )}
+                          {instance.start_date && (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              <span>Starts: {formatDate(instance.start_date)}</span>
+                            </div>
+                          )}
+                          {instance.class_time && (
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              <span>Time: {formatTime(instance.class_time)}</span>
+                            </div>
+                          )}
+                          {instance.available_capacity !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              <span>
+                                {instance.is_full 
+                                  ? 'Full' 
+                                  : `${instance.available_capacity} spots available`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {selectedInstanceId === instance.id && (
+                          <CheckCircle2 className="h-5 w-5 text-primary" />
+                        )}
+                        {instance.is_full && (
+                          <Badge variant="destructive" className="shrink-0">
+                            Full
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEnrollDialogOpen(false);
+                    setSelectedInstanceId(null);
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => handleAddToCart()}
+                  disabled={
+                    !selectedInstanceId || 
+                    isAddingToCart ||
+                    (selectedInstanceId && instances.find(i => i.id === selectedInstanceId)?.is_full) ||
+                    (session?.user && enrollmentStatus && !enrollmentStatus.canEnroll)
+                  }
+                  className="flex-1"
+                  title={
+                    !selectedInstanceId
+                      ? "Please select a session"
+                      : selectedInstanceId && instances.find(i => i.id === selectedInstanceId)?.is_full
+                      ? "This session is full. Please join the waitlist."
+                      : enrollmentStatus && !enrollmentStatus.canEnroll
+                      ? enrollmentStatus.reason || "Prerequisites not met"
+                      : undefined
+                  }
+                >
+                  {isAddingToCart ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : selectedInstanceId && instances.find(i => i.id === selectedInstanceId)?.is_full ? (
+                    <>
+                      <AlertCircle className="mr-2 h-4 w-4" />
+                      Session Full
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="mr-2 h-4 w-4" />
+                      Add to Cart
+                    </>
+                  )}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </section>
     </div>

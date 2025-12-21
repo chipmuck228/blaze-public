@@ -31,7 +31,6 @@ import {
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Menu, LogOut, User, Settings, ShoppingCart } from "lucide-react";
@@ -135,30 +134,28 @@ interface RouteProps {
 
     return (
       <header
-        className="sticky border-b top-0 z-40 w-full backdrop-blur-sm"
-        style={{
-          backgroundColor: "hsl(var(--background))",
-          borderBottomColor: "hsl(var(--border))",
-        }}
+        className="sticky border-b top-0 z-40 w-full mx-auto bg-white dark:border-b-slate-700 dark:bg-background"
+        
       >
         <NavigationMenu className="mx-auto">
-          <NavigationMenuList className="container mx-auto h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between max-w-7xl">
+          <NavigationMenuList className="container h-14 px-4 w-screen flex justify-between">
             {/* Left: logo + desktop menu */}
-            <div className="flex items-center gap-4">
-              <NavigationMenuItem className="font-bold flex items-center gap-3">
+            
+              <NavigationMenuItem className="font-bold flex items-center gap-2">
                 <a
                   rel="noreferrer noopener"
                   href="/"
-                  className="ml-2 font-bold text-xl flex"
+                  className="ml-2 font-bold text-xl flex items-center"
                 >
                   <BlazeLogoIcon />
                 </a>
                 {currentLocationLabel && (
-                  <span className="hidden sm:inline-flex text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  <span className="hidden sm:inline-flex items-center text-xs font-medium px-2 py-2 rounded-full bg-muted text-muted-foreground">
                     {currentLocationLabel} Campus
                   </span>
                 )}
               </NavigationMenuItem>
+
 
               {/* desktop menu */}
               <nav className="hidden md:flex gap-2">
@@ -178,10 +175,173 @@ interface RouteProps {
                   </Button>
                 ))}
               </nav>
-            </div>
+            
 
             {/* Right: cart, user menu, mode toggle, and mobile menu */}
             <div className="flex items-center gap-2">
+              {/* Mobile: hamburger menu */}
+              <div className="flex md:hidden items-center gap-2">
+                {status === "loading" ? (
+                  <div className="h-9 w-9 flex items-center justify-center">
+                    <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : session ? (
+                  <>
+                    {/* Shopping Cart Icon for mobile */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative h-9 w-9"
+                      asChild
+                    >
+                      <Link href="/enrollments/cart">
+                        <ShoppingCart className="h-5 w-5" />
+                        {cartCount > 0 && (
+                          <Badge
+                            variant="destructive"
+                            className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                          >
+                            {cartCount > 9 ? "9+" : cartCount}
+                          </Badge>
+                        )}
+                      </Link>
+                    </Button>
+                  </>
+                ) : null}
+                <ModeToggle />
+
+                <Sheet open={isOpen} onOpenChange={setIsOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <Menu className="h-5 w-5" />
+                      <span className="sr-only">Menu</span>
+                    </Button>
+                  </SheetTrigger>
+
+                  <SheetContent side="left" className="w-[300px] sm:w-[400px]">
+                    <SheetHeader>
+                      <SheetTitle className="font-bold text-xl">
+                        Blaze Robotics
+                      </SheetTitle>
+                    </SheetHeader>
+                    <nav className="flex flex-col gap-2 mt-6">
+                      {routeList.map(({ href, label }: RouteProps) => (
+                        <Button
+                          key={label}
+                          variant="ghost"
+                          className="w-full justify-start"
+                          asChild
+                        >
+                          <a
+                            rel="noreferrer noopener"
+                            href={getHref(href)}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            {label}
+                          </a>
+                        </Button>
+                      ))}
+                      <div className="border-t pt-4 mt-2">
+                        {status === "loading" ? (
+                          <div className="w-full h-9 flex items-center justify-center">
+                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : session ? (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2 p-3 rounded-md bg-muted">
+                              <Avatar className="h-10 w-10">
+                                <AvatarImage
+                                  src={session.user?.image || undefined}
+                                />
+                                <AvatarFallback>
+                                  {getUserInitials(session.user?.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {session.user?.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {session.user?.email}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start"
+                              asChild
+                            >
+                              <Link
+                                href="/profile"
+                                onClick={() => setIsOpen(false)}
+                              >
+                                <User className="mr-2 h-4 w-4" />
+                                Profile
+                              </Link>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start"
+                              asChild
+                            >
+                              <Link
+                                href="/settings"
+                                onClick={() => setIsOpen(false)}
+                              >
+                                <Settings className="mr-2 h-4 w-4" />
+                                Settings
+                              </Link>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start"
+                              asChild
+                            >
+                              <Link
+                                href="/enrollments/cart"
+                                onClick={() => setIsOpen(false)}
+                              >
+                                <ShoppingCart className="mr-2 h-4 w-4" />
+                                Shopping Cart
+                                {cartCount > 0 && (
+                                  <Badge variant="destructive" className="ml-2">
+                                    {cartCount > 9 ? "9+" : cartCount}
+                                  </Badge>
+                                )}
+                              </Link>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-destructive hover:text-destructive"
+                              onClick={() => {
+                                handleSignOut()
+                                setIsOpen(false)
+                              }}
+                            >
+                              <LogOut className="mr-2 h-4 w-4" />
+                              Sign Out
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="default"
+                            className="w-full"
+                            asChild
+                          >
+                            <Link
+                              href="/login"
+                              onClick={() => setIsOpen(false)}
+                            >
+                              Sign In / Sign Up
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                    </nav>
+                  </SheetContent>
+                </Sheet>
+              </div>
+
               {/* desktop: cart + user + theme */}
               <div className="hidden md:flex gap-2 items-center">
                 {status === "loading" ? (
@@ -209,6 +369,7 @@ interface RouteProps {
                         )}
                       </Link>
                     </Button>
+                <ModeToggle />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -269,116 +430,7 @@ interface RouteProps {
                     <Link href="/login">Sign In / Sign Up</Link>
                   </Button>
                 )}
-                <ModeToggle />
               </div>
-
-              {/* mobile: theme + hamburger menu */}
-              <span className="flex md:hidden items-center gap-2">
-                <ModeToggle />
-
-                <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                  <SheetTrigger className="px-2">
-                    <Menu
-                      className="flex md:hidden h-5 w-5"
-                      onClick={() => setIsOpen(true)}
-                    >
-                    </Menu>
-                  </SheetTrigger>
-
-                  <SheetContent side={"left"}>
-                    <SheetHeader>
-                      <SheetTitle className="font-bold text-xl">
-                        Blaze Robotics
-                      </SheetTitle>
-                    </SheetHeader>
-                    <nav className="flex flex-col justify-center items-center gap-2 mt-4">
-                      {routeList.map(({ href, label }: RouteProps) => (
-                        <Button
-                          key={label}
-                          variant="ghost"
-                          asChild
-                        >
-                          <a
-                            rel="noreferrer noopener"
-                            href={getHref(href)}
-                            onClick={() => setIsOpen(false)}
-                          >
-                            {label}
-                          </a>
-                        </Button>
-                      ))}
-                      {status === "loading" ? (
-                        <div className="w-full mt-2 h-9 flex items-center justify-center">
-                          <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                        </div>
-                      ) : session ? (
-                        <div className="w-full mt-2 flex flex-col gap-2">
-                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage
-                                src={session.user?.image || undefined}
-                              />
-                              <AvatarFallback>
-                                {getUserInitials(session.user?.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {session.user?.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {session.user?.email}
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            className="w-full"
-                            asChild
-                          >
-                            <Link
-                              href="/enrollments/cart"
-                              onClick={() => setIsOpen(false)}
-                            >
-                              <ShoppingCart className="mr-2 h-4 w-4" />
-                              Shopping Cart
-                              {cartCount > 0 && (
-                                <Badge variant="destructive" className="ml-2">
-                                  {cartCount}
-                                </Badge>
-                              )}
-                            </Link>
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => {
-                              handleSignOut()
-                              setIsOpen(false)
-                            }}
-                          >
-                            <LogOut className="mr-2 h-4 w-4" />
-                            Sign Out
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="default"
-                          className="w-full mt-2"
-                          asChild
-                        >
-                          <Link
-                            href="/login"
-                            onClick={() => setIsOpen(false)}
-                          >
-                            Sign In / Sign Up
-                          </Link>
-                        </Button>
-                      )}
-                    </nav>
-                  </SheetContent>
-                </Sheet>
-              </span>
             </div>
           </NavigationMenuList>
         </NavigationMenu>

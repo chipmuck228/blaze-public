@@ -52,6 +52,8 @@ export interface User {
   password_set_at?: string | null
   must_change_password?: boolean
   last_password_change?: string | null
+  // Stripe 相关字段
+  stripe_customer_id?: string | null
 }
 
 export interface PasswordResetToken {
@@ -1922,6 +1924,22 @@ export async function getCourseInstances(courseId: string): Promise<CourseInstan
     throw new Error(`Failed to fetch course instances: ${error.message}`)
   }
 
+  // 调试日志：记录查询结果
+  if (process.env.NODE_ENV === 'development' && data) {
+    console.log(`[getCourseInstances ${courseId}] Found instances:`, {
+      course_id: courseId,
+      assignment_ids: assignmentIds,
+      instances_count: data.length,
+      instances: data.map((inst: any) => ({
+        id: inst.id,
+        assignment_id: inst.assignment_id,
+        franchise_id: inst.franchise_id,
+        start_date: inst.start_date,
+        is_active: inst.is_active,
+      })),
+    })
+  }
+
   return data as CourseInstance[]
 }
 
@@ -3485,6 +3503,14 @@ export interface CourseEnrollment {
   amount_paid?: number
   currency: string
   payment_transaction_id?: string
+  // Stripe 相关字段
+  stripe_checkout_session_id?: string
+  stripe_payment_intent_id?: string
+  stripe_customer_id?: string
+  stripe_refund_id?: string
+  refund_amount?: number
+  refund_reason?: string
+  refunded_at?: string
   notes?: string
   metadata?: Record<string, any>
   created_at: string
@@ -3538,7 +3564,7 @@ export async function getInstanceAvailableCapacity(instanceId: string): Promise<
       return 0
     }
 
-    const maxStudents = instance.data.max_students || 0
+    const maxStudents = instance.data.max_students ?? 0
     
     // 统计各种状态的注册数量
     const [enrolled, reserved, cart] = await Promise.all([
@@ -3565,7 +3591,20 @@ export async function getInstanceAvailableCapacity(instanceId: string): Promise<
     const reservedCount = reserved.count || 0
     const cartCount = cart.count || 0
 
-    return Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
+    const availableCapacity = Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
+    
+    // 调试日志：记录容量计算详情
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[getInstanceAvailableCapacity ${instanceId}]`, {
+        max_students: maxStudents,
+        enrolled_count: enrolledCount,
+        reserved_count: reservedCount,
+        cart_count: cartCount,
+        available_capacity: availableCapacity,
+      })
+    }
+
+    return availableCapacity
   }
 
   return data as number
@@ -3917,15 +3956,58 @@ export async function extendCartExpiry(enrollmentId: string, userId: string, add
 
 // 结账（从 cart 转为 reserved）
 export async function checkoutCart(enrollmentIds: string[], userId: string, paymentMethodId?: string): Promise<CourseEnrollment[]> {
-  // 验证所有注册都属于该用户且状态为 cart
-  const { data: enrollments } = await supabaseAdmin
+  // 验证所有注册都属于该用户且状态为 cart，且未过期
+  const now = new Date().toISOString()
+  const { data: enrollments, error: queryError } = await supabaseAdmin
     .from('course_enrollments')
     .select('*')
     .in('id', enrollmentIds)
     .eq('user_id', userId)
     .eq('status', 'cart')
+    .gt('cart_expires_at', now)  // 确保购物车项未过期
+
+  if (queryError) {
+    throw new Error(`Failed to query enrollments: ${queryError.message}`)
+  }
 
   if (!enrollments || enrollments.length !== enrollmentIds.length) {
+    // 提供更详细的错误信息
+    const foundIds = enrollments?.map(e => e.id) || []
+    const missingIds = enrollmentIds.filter(id => !foundIds.includes(id))
+    
+    // 检查缺失的注册的详细信息
+    if (missingIds.length > 0) {
+      const { data: missingEnrollments } = await supabaseAdmin
+        .from('course_enrollments')
+        .select('id, status, user_id, cart_expires_at')
+        .in('id', missingIds)
+      
+      console.error('[checkoutCart] Missing enrollments details:', {
+        requested: enrollmentIds,
+        found: foundIds,
+        missing: missingIds,
+        missingDetails: missingEnrollments,
+        userId,
+        now,
+      })
+      
+      const expired = missingEnrollments?.filter(e => 
+        e.status === 'cart' && e.cart_expires_at && e.cart_expires_at <= now
+      ) || []
+      const wrongUser = missingEnrollments?.filter(e => e.user_id !== userId) || []
+      const wrongStatus = missingEnrollments?.filter(e => e.status !== 'cart') || []
+      
+      if (expired.length > 0) {
+        throw new Error(`Some items in your cart have expired. Please refresh the page and try again.`)
+      }
+      if (wrongUser.length > 0) {
+        throw new Error(`Some enrollments do not belong to you.`)
+      }
+      if (wrongStatus.length > 0) {
+        throw new Error(`Some enrollments are no longer in cart (status: ${wrongStatus.map(e => e.status).join(', ')}).`)
+      }
+    }
+    
     throw new Error('Some enrollments are invalid or not in cart')
   }
 
@@ -3941,7 +4023,7 @@ export async function checkoutCart(enrollmentIds: string[], userId: string, paym
   const reservedExpiryMinutes = parseInt(await getEnrollmentConfig('reserved_expiry_minutes') || '10')
   const reservedExpiresAt = new Date(Date.now() + reservedExpiryMinutes * 60 * 1000)
 
-  // 更新状态为 reserved
+  // 更新状态为 reserved（确保未过期）
   const { data, error } = await supabaseAdmin
     .from('course_enrollments')
     .update({
@@ -3955,6 +4037,7 @@ export async function checkoutCart(enrollmentIds: string[], userId: string, paym
     .in('id', enrollmentIds)
     .eq('user_id', userId)
     .eq('status', 'cart')
+    .gt('cart_expires_at', now)  // 确保未过期
     .select()
 
   if (error) {
@@ -3964,12 +4047,118 @@ export async function checkoutCart(enrollmentIds: string[], userId: string, paym
   return (data || []) as CourseEnrollment[]
 }
 
+// 计算注册记录的总金额
+export interface EnrollmentPriceInfo {
+  enrollmentId: string
+  amount: number
+  currency: string
+  courseName: string
+  instanceName?: string
+}
+
+export async function calculateEnrollmentTotal(
+  enrollmentIds: string[]
+): Promise<{
+  total: number
+  currency: string
+  items: EnrollmentPriceInfo[]
+}> {
+  if (enrollmentIds.length === 0) {
+    return { total: 0, currency: 'USD', items: [] }
+  }
+
+  // 获取所有注册记录及其关联的实例和课程信息
+  const { data: enrollments, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      id,
+      instance_id,
+      currency,
+      instance:course_instances(
+        id,
+        start_date,
+        start_time,
+        end_date,
+        end_time,
+        price_override,
+        assignment:course_assignments(
+          course:courses(
+            id,
+            name,
+            base_price,
+            currency
+          )
+        ),
+        location:course_locations(
+          id,
+          name
+        )
+      )
+    `)
+    .in('id', enrollmentIds)
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+  }
+
+  if (!enrollments || enrollments.length === 0) {
+    return { total: 0, currency: 'USD', items: [] }
+  }
+
+  const items: EnrollmentPriceInfo[] = []
+  let total = 0
+  let currency = 'USD'
+
+  for (const enrollment of enrollments) {
+    const instance = Array.isArray(enrollment.instance) 
+      ? enrollment.instance[0] 
+      : enrollment.instance
+    const assignment = Array.isArray(instance?.assignment)
+      ? instance?.assignment[0]
+      : instance?.assignment
+    const course = Array.isArray(assignment?.course)
+      ? assignment?.course[0]
+      : assignment?.course
+
+    // 价格优先级：实例价格覆盖 > 课程基础价格
+    const price = instance?.price_override ?? course?.base_price ?? 0
+    const itemCurrency = enrollment.currency || course?.currency || 'USD'
+    currency = itemCurrency // 使用第一个货币（假设所有项目使用相同货币）
+
+    // 构建实例描述（使用日期、时间和地点）
+    const location = Array.isArray(instance?.location)
+      ? instance.location[0]
+      : instance?.location
+    
+    const instanceDescription = instance 
+      ? [
+          instance.start_date ? new Date(instance.start_date).toLocaleDateString() : '',
+          instance.start_time ? instance.start_time.substring(0, 5) : '',
+          location?.name ? `at ${location.name}` : '',
+        ].filter(Boolean).join(' ')
+      : undefined
+
+    items.push({
+      enrollmentId: enrollment.id,
+      amount: price,
+      currency: itemCurrency,
+      courseName: course?.name || 'Unknown Course',
+      instanceName: instanceDescription,
+    })
+
+    total += price
+  }
+
+  return { total, currency, items }
+}
+
 // 确认注册（支付成功后）
 export async function confirmEnrollment(
   enrollmentId: string,
   userId: string,
   paymentTransactionId: string,
-  amountPaid: number
+  amountPaid: number,
+  stripePaymentIntentId?: string
 ): Promise<CourseEnrollment> {
   const enrollment = await getEnrollmentById(enrollmentId)
   
@@ -3987,16 +4176,22 @@ export async function confirmEnrollment(
   }
 
   // 更新为 enrolled
+  const updateData: any = {
+    status: 'enrolled',
+    enrolled_at: new Date().toISOString(),
+    payment_status: 'paid',
+    payment_transaction_id: paymentTransactionId,
+    amount_paid: amountPaid,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (stripePaymentIntentId) {
+    updateData.stripe_payment_intent_id = stripePaymentIntentId
+  }
+
   const { data, error } = await supabaseAdmin
     .from('course_enrollments')
-    .update({
-      status: 'enrolled',
-      enrolled_at: new Date().toISOString(),
-      payment_status: 'paid',
-      payment_transaction_id: paymentTransactionId,
-      amount_paid: amountPaid,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', enrollmentId)
     .eq('user_id', userId)
     .eq('status', 'reserved')
@@ -4005,6 +4200,134 @@ export async function confirmEnrollment(
 
   if (error) {
     throw new Error(`Failed to confirm enrollment: ${error.message}`)
+  }
+
+  return data as CourseEnrollment
+}
+
+// 根据 Stripe Checkout Session ID 获取注册记录
+export async function getEnrollmentByStripeSessionId(
+  sessionId: string
+): Promise<CourseEnrollmentWithDetails | null> {
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      ),
+      user:users(id, name, email)
+    `)
+    .eq('stripe_checkout_session_id', sessionId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+  }
+
+  return data as CourseEnrollmentWithDetails | null
+}
+
+// 根据 Stripe Payment Intent ID 获取注册记录
+export async function getEnrollmentByStripePaymentIntentId(
+  paymentIntentId: string
+): Promise<CourseEnrollmentWithDetails | null> {
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      *,
+      instance:course_instances(
+        *,
+        assignment:course_assignments(
+          *,
+          course:courses(*),
+          category:course_categories(*),
+          series:course_series(*),
+          location:course_locations(*)
+        ),
+        location:course_locations(*)
+      ),
+      user:users(id, name, email)
+    `)
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+  }
+
+  return data as CourseEnrollmentWithDetails | null
+}
+
+// 更新注册的 Stripe 信息
+export async function updateEnrollmentStripeInfo(
+  enrollmentId: string,
+  stripeInfo: {
+    checkout_session_id?: string
+    payment_intent_id?: string
+    customer_id?: string
+  }
+): Promise<CourseEnrollment> {
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  }
+
+  if (stripeInfo.checkout_session_id) {
+    updateData.stripe_checkout_session_id = stripeInfo.checkout_session_id
+  }
+  if (stripeInfo.payment_intent_id) {
+    updateData.stripe_payment_intent_id = stripeInfo.payment_intent_id
+  }
+  if (stripeInfo.customer_id) {
+    updateData.stripe_customer_id = stripeInfo.customer_id
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update(updateData)
+    .eq('id', enrollmentId)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to update enrollment Stripe info: ${error.message}`)
+  }
+
+  return data as CourseEnrollment
+}
+
+// 处理支付失败
+export async function markEnrollmentPaymentFailed(
+  enrollmentId: string,
+  reason?: string
+): Promise<CourseEnrollment> {
+  const enrollment = await getEnrollmentById(enrollmentId)
+  
+  const { data, error } = await supabaseAdmin
+    .from('course_enrollments')
+    .update({
+      payment_status: 'failed',
+      updated_at: new Date().toISOString(),
+      metadata: {
+        ...(enrollment?.metadata || {}),
+        payment_failure_reason: reason,
+        payment_failed_at: new Date().toISOString(),
+      },
+    })
+    .eq('id', enrollmentId)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to mark payment as failed: ${error.message}`)
   }
 
   return data as CourseEnrollment

@@ -131,7 +131,22 @@ export default function LoginPage() {
     } catch (error: any) {
       console.error("Google login exception:", error)
       setIsLoading(false)
-      setError(`Google login failed: ${error?.message || "Unknown error"}. Please check server logs.`)
+      
+      // 提供更友好的错误信息
+      let errorMessage = "Google login failed. "
+      const errorMsg = error?.message || error?.toString() || ""
+      
+      if (errorMsg.includes('fetch failed') || errorMsg.includes('timeout') || errorMsg.includes('ECONNREFUSED')) {
+        errorMessage += "Unable to connect to Google servers. This may be due to network restrictions. "
+        errorMessage += "Please check your network connection or configure a proxy/VPN. "
+        errorMessage += "See GOOGLE_OAUTH_NETWORK_FIX.md for details."
+      } else if (errorMsg.includes('OAuth') || errorMsg.includes('redirect')) {
+        errorMessage += "There was a problem with the authentication process. Please try again."
+      } else {
+        errorMessage += `${errorMsg || "Unknown error"}. Please check server logs for more details.`
+      }
+      
+      setError(errorMessage)
     }
   }
 

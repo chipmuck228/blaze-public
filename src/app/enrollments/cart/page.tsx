@@ -111,7 +111,9 @@ export default function CartPage() {
     try {
       setIsCheckingOut(true)
       const enrollmentIds = cartItems.map(item => item.id)
-      const response = await fetch('/api/enrollments/checkout', {
+      
+      // 创建 Stripe Checkout Session
+      const response = await fetch('/api/payments/create-checkout-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,17 +123,40 @@ export default function CartPage() {
         }),
       })
 
-      if (response.ok) {
-        // TODO: 跳转到支付页面
-        alert('Checkout successful! Payment integration coming soon.')
-        router.push('/enrollments')
-      } else {
-        const error = await response.json()
-        alert(error.error || 'Failed to checkout')
+      // 检查响应内容类型
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('Non-JSON response:', text.substring(0, 200))
+        throw new Error('Server returned an invalid response. Please try again.')
       }
-    } catch (error) {
+
+      if (response.ok) {
+        const data = await response.json()
+        // 跳转到 Stripe Checkout 页面
+        if (data.url) {
+          window.location.href = data.url
+        } else {
+          throw new Error('No checkout URL returned')
+        }
+      } else {
+        try {
+          const error = await response.json()
+          alert(error.error || 'Failed to create checkout session')
+        } catch (parseError) {
+          // 如果错误响应也不是 JSON，显示通用错误
+          const text = await response.text()
+          console.error('Error response:', text.substring(0, 200))
+          alert(`Failed to create checkout session (${response.status}). Please try again.`)
+        }
+      }
+    } catch (error: any) {
       console.error('Error during checkout:', error)
-      alert('Failed to checkout')
+      if (error.message) {
+        alert(error.message)
+      } else {
+        alert('Failed to checkout. Please try again.')
+      }
     } finally {
       setIsCheckingOut(false)
     }

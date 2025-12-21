@@ -27,6 +27,8 @@ import {
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UserAnalytics } from "@/components/UserAnalytics"
+import { AddPaymentMethodDialog } from "@/components/payment/AddPaymentMethodDialog"
+import { Trash2, Star } from "lucide-react"
 
 interface UserProfile {
   id: string
@@ -75,10 +77,17 @@ interface Enrollment {
 interface PaymentMethod {
   id: string
   type: 'card' | 'paypal' | 'bank'
+  card?: {
+    brand?: string
+    last4?: string
+    exp_month?: number
+    exp_year?: number
+  }
   last4?: string
   brand?: string
   is_default: boolean
   expires_at?: string
+  created?: number
 }
 
 export default function ProfilePage() {
@@ -91,6 +100,9 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  const [isAddPaymentMethodOpen, setIsAddPaymentMethodOpen] = useState(false)
+  const [isRemovingPaymentMethod, setIsRemovingPaymentMethod] = useState<string | null>(null)
+  const [isSettingDefault, setIsSettingDefault] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -137,11 +149,85 @@ export default function ProfilePage() {
       const response = await fetch("/api/user/payment-methods")
       if (response.ok) {
         const data = await response.json()
-        setPaymentMethods(data)
+        setPaymentMethods(data || [])
       }
     } catch (error) {
       console.error("Error fetching payment methods:", error)
     }
+  }
+
+  const handleAddPaymentMethodSuccess = () => {
+    fetchPaymentMethods()
+  }
+
+  const handleRemovePaymentMethod = async (paymentMethodId: string) => {
+    if (!confirm('Are you sure you want to remove this payment method?')) {
+      return
+    }
+
+    setIsRemovingPaymentMethod(paymentMethodId)
+    try {
+      const response = await fetch(`/api/user/payment-methods/${paymentMethodId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        await fetchPaymentMethods()
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to remove payment method')
+      }
+    } catch (error: any) {
+      console.error('Error removing payment method:', error)
+      alert('Failed to remove payment method')
+    } finally {
+      setIsRemovingPaymentMethod(null)
+    }
+  }
+
+  const handleSetDefaultPaymentMethod = async (paymentMethodId: string) => {
+    setIsSettingDefault(paymentMethodId)
+    try {
+      const response = await fetch(`/api/user/payment-methods/${paymentMethodId}`, {
+        method: 'PATCH',
+      })
+
+      if (response.ok) {
+        await fetchPaymentMethods()
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to set default payment method')
+      }
+    } catch (error: any) {
+      console.error('Error setting default payment method:', error)
+      alert('Failed to set default payment method')
+    } finally {
+      setIsSettingDefault(null)
+    }
+  }
+
+  const getCardBrandDisplay = (method: PaymentMethod): string => {
+    if (method.card?.brand) {
+      return method.card.brand.charAt(0).toUpperCase() + method.card.brand.slice(1)
+    }
+    if (method.brand) {
+      return method.brand.charAt(0).toUpperCase() + method.brand.slice(1)
+    }
+    return method.type.toUpperCase()
+  }
+
+  const getCardLast4 = (method: PaymentMethod): string | undefined => {
+    return method.card?.last4 || method.last4
+  }
+
+  const getCardExpiry = (method: PaymentMethod): string | undefined => {
+    if (method.card?.exp_month && method.card?.exp_year) {
+      return `${String(method.card.exp_month).padStart(2, '0')}/${method.card.exp_year}`
+    }
+    if (method.expires_at) {
+      return formatDate(method.expires_at)
+    }
+    return undefined
   }
 
   const handleSaveProfile = async () => {
@@ -496,7 +582,10 @@ export default function ProfilePage() {
                         Manage your payment methods and billing information
                       </CardDescription>
                     </div>
-                    <Button size="sm">
+                    <Button 
+                      size="sm"
+                      onClick={() => setIsAddPaymentMethodOpen(true)}
+                    >
                       <CreditCard className="mr-2 h-4 w-4" />
                       Add Payment Method
                     </Button>
@@ -507,7 +596,7 @@ export default function ProfilePage() {
                     <div className="text-center py-12">
                       <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                       <p className="text-muted-foreground mb-4">No payment methods added</p>
-                      <Button>
+                      <Button onClick={() => setIsAddPaymentMethodOpen(true)}>
                         <CreditCard className="mr-2 h-4 w-4" />
                         Add Payment Method
                       </Button>
@@ -525,8 +614,8 @@ export default function ProfilePage() {
                                 <div>
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium">
-                                      {method.brand || method.type.toUpperCase()} 
-                                      {method.last4 && ` •••• ${method.last4}`}
+                                      {getCardBrandDisplay(method)} 
+                                      {getCardLast4(method) && ` •••• ${getCardLast4(method)}`}
                                     </p>
                                     {method.is_default && (
                                       <Badge variant="outline" className="text-xs">
@@ -534,21 +623,45 @@ export default function ProfilePage() {
                                       </Badge>
                                     )}
                                   </div>
-                                  {method.expires_at && (
+                                  {getCardExpiry(method) && (
                                     <p className="text-sm text-muted-foreground">
-                                      Expires {formatDate(method.expires_at)}
+                                      Expires {getCardExpiry(method)}
                                     </p>
                                   )}
                                 </div>
                               </div>
                               <div className="flex gap-2">
                                 {!method.is_default && (
-                                  <Button variant="outline" size="sm">
-                                    Set as Default
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => handleSetDefaultPaymentMethod(method.id)}
+                                    disabled={isSettingDefault === method.id}
+                                  >
+                                    {isSettingDefault === method.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Star className="mr-2 h-4 w-4" />
+                                        Set as Default
+                                      </>
+                                    )}
                                   </Button>
                                 )}
-                                <Button variant="outline" size="sm">
-                                  Remove
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleRemovePaymentMethod(method.id)}
+                                  disabled={isRemovingPaymentMethod === method.id}
+                                >
+                                  {isRemovingPaymentMethod === method.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Remove
+                                    </>
+                                  )}
                                 </Button>
                               </div>
                             </div>
@@ -579,6 +692,13 @@ export default function ProfilePage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Add Payment Method Dialog */}
+      <AddPaymentMethodDialog
+        open={isAddPaymentMethodOpen}
+        onOpenChange={setIsAddPaymentMethodOpen}
+        onSuccess={handleAddPaymentMethodSuccess}
+      />
     </>
   )
 }

@@ -11,6 +11,8 @@ if (process.env.NODE_ENV === 'development') {
   console.log('  NEXTAUTH_URL:', process.env.NEXTAUTH_URL || '❌ Missing')
   console.log('  GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? '✅ Set' : '❌ Missing')
   console.log('  GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? '✅ Set' : '❌ Missing')
+  console.log('  HTTP_PROXY:', process.env.HTTP_PROXY || 'Not set')
+  console.log('  HTTPS_PROXY:', process.env.HTTPS_PROXY || 'Not set')
 }
 
 export const authConfig = {

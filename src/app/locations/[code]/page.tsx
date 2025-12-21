@@ -195,7 +195,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
               <div className="flex flex-wrap gap-3">
                 <Button asChild size="lg">
                   <a href={`/course-catalog?franchise=${encodeURIComponent(normalizedCode)}`}>
-                    View Programs
+                    View Activities
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </a>
                 </Button>

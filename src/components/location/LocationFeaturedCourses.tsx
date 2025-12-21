@@ -142,7 +142,7 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
                       <Link href={`/course-catalog?franchise=${encodeURIComponent(franchiseCode)}`}>
                         <span className="flex items-center gap-1">
                           <BookOpen className="h-3 w-3" />
-                          <span>View Programs</span>
+                          <span>View Activities</span>
                           <ArrowRight className="h-3 w-3" />
                         </span>
                       </Link>
