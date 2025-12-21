@@ -48,7 +48,7 @@ export async function DELETE(
     ) {
       await stripe.customers.update(customerId, {
         invoice_settings: {
-          default_payment_method: null,
+          default_payment_method: undefined,
         },
       })
     }
