@@ -1271,6 +1271,7 @@ export interface CourseInstance {
   id: string
   assignment_id: string
   location_id?: string
+  franchise_id?: string | null  // 冗余字段，用于加速按 Franchise 过滤
   start_date: string
   end_date: string
   start_time?: string
