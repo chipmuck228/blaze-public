@@ -43,7 +43,7 @@ export async function DELETE(
     // 如果是默认支付方式，先取消默认设置
     const customer = await stripe.customers.retrieve(customerId)
     if (
-      typeof customer !== 'deleted' &&
+      !customer.deleted &&
       customer.invoice_settings?.default_payment_method === paymentMethodId
     ) {
       await stripe.customers.update(customerId, {

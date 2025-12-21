@@ -32,7 +32,7 @@ export async function GET() {
     // 获取默认支付方式
     const customer = await stripe.customers.retrieve(customerId)
     const defaultPaymentMethodId = 
-      typeof customer !== 'deleted' && customer.invoice_settings?.default_payment_method
+      !customer.deleted && customer.invoice_settings?.default_payment_method
         ? customer.invoice_settings.default_payment_method as string
         : null
 
