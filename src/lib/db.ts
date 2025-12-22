@@ -640,61 +640,300 @@ export async function deleteUser(userId: string): Promise<{
 
 // 获取统计数据（管理员功能）
 export interface AdminStats {
-  totalUsers: number
-  verifiedUsers: number
-  admins: number
-  newToday: number
+  // 用户统计
+  users: {
+    total: number
+    verified: number
+    admins: number
+    coaches: number
+    newToday: number
+  }
+  // 课程统计
+  courses: {
+    total: number
+    published: number
+    draft: number
+    suspended: number
+    archived: number
+    totalInstances: number
+    activeInstances: number
+    scheduledInstances: number
+    ongoingInstances: number
+    completedInstances: number
+  }
+  // 报名统计
+  enrollments: {
+    total: number
+    active: number
+    enrolled: number
+    reserved: number
+    cart: number
+    waitlisted: number
+    completed: number
+    cancelled: number
+    expired: number
+  }
+  // 收入统计（如果启用支付）
+  revenue: {
+    total: number
+    monthly: number
+    pending: number
+  }
+  // 最近活动
+  recentActivity: {
+    newUsers: Array<{ id: string; name: string; email: string; created_at: string }>
+    newCourses: Array<{ id: string; name: string; status: string; created_at: string }>
+    recentEnrollments: Array<{ id: string; user_name: string; course_name: string; status: string; created_at: string }>
+  }
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
-  // 获取总用户数
-  const { count: totalUsers, error: totalError } = await supabaseAdmin
+  // ==================== 用户统计 ====================
+  const { count: totalUsers } = await supabaseAdmin
     .from('users')
     .select('id', { count: 'exact', head: true })
 
-  if (totalError) {
-    throw new Error(`Failed to fetch total users: ${totalError.message}`)
-  }
-
-  // 获取已验证用户数
-  const { count: verifiedUsers, error: verifiedError } = await supabaseAdmin
+  const { count: verifiedUsers } = await supabaseAdmin
     .from('users')
     .select('id', { count: 'exact', head: true })
     .eq('email_verified', true)
 
-  if (verifiedError) {
-    throw new Error(`Failed to fetch verified users: ${verifiedError.message}`)
-  }
-
-  // 获取管理员数量
-  const { count: admins, error: adminsError } = await supabaseAdmin
+  const { count: admins } = await supabaseAdmin
     .from('users')
     .select('id', { count: 'exact', head: true })
     .eq('role', 'admin')
 
-  if (adminsError) {
-    throw new Error(`Failed to fetch admins: ${adminsError.message}`)
-  }
+  const { count: coaches } = await supabaseAdmin
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'coach')
 
-  // 获取今天新注册的用户数
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayISO = today.toISOString()
 
-  const { count: newToday, error: newTodayError } = await supabaseAdmin
+  const { count: newToday } = await supabaseAdmin
     .from('users')
     .select('id', { count: 'exact', head: true })
     .gte('created_at', todayISO)
 
-  if (newTodayError) {
-    throw new Error(`Failed to fetch new today users: ${newTodayError.message}`)
-  }
+  // ==================== 课程统计 ====================
+  const { count: totalCourses } = await supabaseAdmin
+    .from('courses')
+    .select('id', { count: 'exact', head: true })
+
+  const { count: publishedCourses } = await supabaseAdmin
+    .from('courses')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'published')
+
+  const { count: draftCourses } = await supabaseAdmin
+    .from('courses')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'draft')
+
+  const { count: suspendedCourses } = await supabaseAdmin
+    .from('courses')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'suspended')
+
+  const { count: archivedCourses } = await supabaseAdmin
+    .from('courses')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'archived')
+
+  // 课程实例统计
+  const { count: totalInstances } = await supabaseAdmin
+    .from('course_instances')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+
+  const { count: scheduledInstances } = await supabaseAdmin
+    .from('course_instances')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+    .eq('status', 'scheduled')
+
+  const { count: ongoingInstances } = await supabaseAdmin
+    .from('course_instances')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+    .eq('status', 'ongoing')
+
+  const { count: completedInstances } = await supabaseAdmin
+    .from('course_instances')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+    .eq('status', 'completed')
+
+  const activeInstances = (scheduledInstances || 0) + (ongoingInstances || 0)
+
+  // ==================== 报名统计 ====================
+  const { count: totalEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+
+  const { count: enrolledCount } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'enrolled')
+
+  const { count: reservedCount } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'reserved')
+
+  const { count: cartCount } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'cart')
+
+  const { count: waitlistedCount } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'waitlisted')
+
+  const { count: completedEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'completed')
+
+  const { count: cancelledEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'cancelled')
+
+  const { count: expiredEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'expired')
+
+  const activeEnrollments = (enrolledCount || 0) + (reservedCount || 0)
+
+  // ==================== 收入统计 ====================
+  // 计算总收入（已支付的注册）
+  const { data: paidEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('amount_paid')
+    .eq('payment_status', 'paid')
+    .not('amount_paid', 'is', null)
+
+  const totalRevenue = paidEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || '0') || 0), 0) || 0
+
+  // 计算本月收入
+  const thisMonth = new Date()
+  thisMonth.setDate(1)
+  thisMonth.setHours(0, 0, 0, 0)
+
+  const { data: thisMonthEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('amount_paid')
+    .eq('payment_status', 'paid')
+    .not('amount_paid', 'is', null)
+    .gte('enrolled_at', thisMonth.toISOString())
+
+  const monthlyRevenue = thisMonthEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || '0') || 0), 0) || 0
+
+  // 计算待支付金额
+  const { data: pendingEnrollments } = await supabaseAdmin
+    .from('course_enrollments')
+    .select('amount_paid')
+    .eq('payment_status', 'pending')
+    .not('amount_paid', 'is', null)
+
+  const pendingPayments = pendingEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || '0') || 0), 0) || 0
+
+  // ==================== 最近活动 ====================
+  // 最近注册的用户（最近 5 个）
+  const { data: recentUsers } = await supabaseAdmin
+    .from('users')
+    .select('id, name, email, created_at')
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  // 最近创建的课程（最近 5 个）
+  const { data: recentCourses } = await supabaseAdmin
+    .from('courses')
+    .select('id, name, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  // 最近的报名记录（最近 10 个）
+  const { data: recentEnrollmentsData } = await supabaseAdmin
+    .from('course_enrollments')
+    .select(`
+      id,
+      status,
+      created_at,
+      user:users!inner(name),
+      instance:course_instances!inner(
+        assignment:course_assignments!inner(
+          course:courses!inner(name)
+        )
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  const recentEnrollments = (recentEnrollmentsData || []).map((e: any) => ({
+    id: e.id,
+    user_name: e.user?.name || 'Unknown',
+    course_name: e.instance?.assignment?.course?.name || 'Unknown Course',
+    status: e.status,
+    created_at: e.created_at,
+  }))
 
   return {
-    totalUsers: totalUsers || 0,
-    verifiedUsers: verifiedUsers || 0,
-    admins: admins || 0,
-    newToday: newToday || 0,
+    users: {
+      total: totalUsers || 0,
+      verified: verifiedUsers || 0,
+      admins: admins || 0,
+      coaches: coaches || 0,
+      newToday: newToday || 0,
+    },
+    courses: {
+      total: totalCourses || 0,
+      published: publishedCourses || 0,
+      draft: draftCourses || 0,
+      suspended: suspendedCourses || 0,
+      archived: archivedCourses || 0,
+      totalInstances: totalInstances || 0,
+      activeInstances: activeInstances || 0,
+      scheduledInstances: scheduledInstances || 0,
+      ongoingInstances: ongoingInstances || 0,
+      completedInstances: completedInstances || 0,
+    },
+    enrollments: {
+      total: totalEnrollments || 0,
+      active: activeEnrollments,
+      enrolled: enrolledCount || 0,
+      reserved: reservedCount || 0,
+      cart: cartCount || 0,
+      waitlisted: waitlistedCount || 0,
+      completed: completedEnrollments || 0,
+      cancelled: cancelledEnrollments || 0,
+      expired: expiredEnrollments || 0,
+    },
+    revenue: {
+      total: totalRevenue,
+      monthly: monthlyRevenue,
+      pending: pendingPayments,
+    },
+    recentActivity: {
+      newUsers: (recentUsers || []).map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        created_at: u.created_at,
+      })),
+      newCourses: (recentCourses || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        created_at: c.created_at,
+      })),
+      recentEnrollments: recentEnrollments,
+    },
   }
 }
 
