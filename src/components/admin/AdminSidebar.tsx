@@ -58,32 +58,17 @@ const menuItems = [
     icon: MapPin,
   },
   {
-    title: "Settings",
-    href: "/admin/settings",
+    title: "Admin Guide",
+    href: "/admin/guide",
     icon: Settings,
   },
 ]
 
 const courseMenuItems = [
   {
-    title: "Courses",
+    title: "Offerings",
     href: "/admin/courses",
     icon: BookOpen,
-  },
-  {
-    title: "Categories",
-    href: "/admin/categories",
-    icon: FolderTree,
-  },
-  {
-    title: "Series",
-    href: "/admin/series",
-    icon: List,
-  },
-  {
-    title: "Subcategories",
-    href: "/admin/subcategories",
-    icon: Tag,
   },
   {
     title: "Assignments",
@@ -91,14 +76,32 @@ const courseMenuItems = [
     icon: LinkIcon,
   },
   {
+    title: "Instances",
+    href: "/admin/instances",
+    icon: Calendar,
+  },
+]
+
+const settingsMenuItems = [
+  {
+    title: "Programs",
+    href: "/admin/series",
+    icon: List,
+  },
+  {
+    title: "Categories",
+    href: "/admin/categories",
+    icon: FolderTree,
+  },
+  {
     title: "Campuses",
     href: "/admin/locations",
     icon: MapPin,
   },
   {
-    title: "Instances",
-    href: "/admin/instances",
-    icon: Calendar,
+    title: "Subcategories",
+    href: "/admin/subcategories",
+    icon: Tag,
   },
   {
     title: "Learning Paths",
@@ -107,7 +110,11 @@ const courseMenuItems = [
   },
 ]
 
-export function AdminSidebar() {
+interface AdminSidebarProps {
+  onNavigate?: () => void
+}
+
+export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
   const pathname = usePathname()
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -123,9 +130,14 @@ export function AdminSidebar() {
     (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
   )
 
+  // 检查是否有任何设置相关的页面是活动的
+  const isAnySettingsPageActive = settingsMenuItems.some(
+    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  )
+
   return (
     <aside className={cn(
-      "border-r bg-card min-h-screen flex flex-col transition-all duration-300",
+      "border-r bg-card h-screen flex flex-col transition-all duration-300",
       isCollapsed ? "w-16" : "w-64"
     )}>
       <div className="p-6 border-b relative">
@@ -136,11 +148,12 @@ export function AdminSidebar() {
           <Shield className="h-6 w-6 text-primary shrink-0" />
           {!isCollapsed && <h1 className="text-xl font-bold">Admin Panel</h1>}
         </div>
+        {/* 只在非移动端显示折叠按钮 */}
         <Button
           variant="ghost"
           size="icon"
           className={cn(
-            "absolute top-4 right-2 h-8 w-8",
+            "absolute top-4 right-2 h-8 w-8 hidden md:flex",
             isCollapsed && "right-1"
           )}
           onClick={() => setIsCollapsed(!isCollapsed)}
@@ -159,7 +172,12 @@ export function AdminSidebar() {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
           
           return (
-            <Link key={item.href} href={item.href} title={isCollapsed ? item.title : undefined}>
+            <Link 
+              key={item.href} 
+              href={item.href} 
+              title={isCollapsed ? item.title : undefined}
+              onClick={onNavigate}
+            >
               <Button
                 variant={isActive ? "secondary" : "ghost"}
                 className={cn(
@@ -175,14 +193,14 @@ export function AdminSidebar() {
           )
         })}
 
-        {/* Courses 可展开菜单 */}
+        {/* Content Admin 可展开菜单 */}
         {!isCollapsed ? (
           <Accordion type="single" collapsible defaultValue={isAnyCoursePageActive ? "courses" : undefined} className="w-full">
             <AccordionItem value="courses" className="border-none">
               <AccordionTrigger className="px-3 py-2 hover:no-underline">
                 <div className="flex items-center gap-2 w-full">
                   <BookOpen className="h-4 w-4" />
-                  <span className="text-sm font-medium pl-2">Courses Admin</span>
+                  <span className="text-sm font-medium pl-2">Content Admin</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-0 pt-2">
@@ -192,7 +210,11 @@ export function AdminSidebar() {
                     const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
                     
                     return (
-                      <Link key={item.href} href={item.href}>
+                      <Link 
+                        key={item.href} 
+                        href={item.href}
+                        onClick={onNavigate}
+                      >
                         <Button
                           variant={isActive ? "secondary" : "ghost"}
                           className={cn(
@@ -217,7 +239,79 @@ export function AdminSidebar() {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
               
               return (
-                <Link key={item.href} href={item.href} title={item.title}>
+                <Link 
+                  key={item.href} 
+                  href={item.href} 
+                  title={item.title}
+                  onClick={onNavigate}
+                >
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-center px-0",
+                      isActive && "bg-secondary"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </Button>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Settings 可展开菜单 */}
+        {!isCollapsed ? (
+          <Accordion type="single" collapsible defaultValue={isAnySettingsPageActive ? "settings" : undefined} className="w-full">
+            <AccordionItem value="settings" className="border-none">
+              <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                <div className="flex items-center gap-2 w-full">
+                  <Settings className="h-4 w-4" />
+                  <span className="text-sm font-medium pl-2">Settings</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-0 pt-2">
+                <div className="space-y-1 pl-6">
+                  {settingsMenuItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                    
+                    return (
+                      <Link 
+                        key={item.href} 
+                        href={item.href}
+                        onClick={onNavigate}
+                      >
+                        <Button
+                          variant={isActive ? "secondary" : "ghost"}
+                          className={cn(
+                            "w-full justify-start text-sm",
+                            isActive && "bg-secondary"
+                          )}
+                        >
+                          <Icon className="mr-2 h-4 w-4" />
+                          {item.title}
+                        </Button>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : (
+          <div className="space-y-1">
+            {settingsMenuItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+              
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href} 
+                  title={item.title}
+                  onClick={onNavigate}
+                >
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
                     className={cn(

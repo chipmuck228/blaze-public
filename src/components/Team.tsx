@@ -281,6 +281,9 @@ export const Team = () => {
                   width={96}
                   height={96}
                   className="absolute -top-12 rounded-full w-24 h-24 aspect-square object-cover"
+                  loading="lazy"
+                  placeholder="blur"
+                  blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNDgiIGN5PSI0OCIgcj0iNDgiIGZpbGw9IiNlNWU3ZWIiLz48L3N2Zz4="
                 />
                 <CardTitle className="text-center">{name}</CardTitle>
                 <CardDescription className="text-primary">

@@ -1665,7 +1665,6 @@ export async function getAllCourseCategories(): Promise<CourseCategory[]> {
   const { data, error } = await supabaseAdmin
     .from('course_categories')
     .select('*')
-    .eq('is_active', true)
     .order('display_order', { ascending: true })
 
   if (error) {

@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server"
-import { getAllCourseCategories } from "@/lib/db"
+import { supabaseAdmin } from "@/lib/supabase"
 
 // 获取所有活跃的课程类别（公开 API）
 export async function GET() {
   try {
-    // 获取所有活跃的类别（getAllCourseCategories 已经过滤了 is_active = true）
-    const categories = await getAllCourseCategories()
+    // 只获取活跃的类别（is_active = true）
+    const { data, error } = await supabaseAdmin
+      .from('course_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
 
-    return NextResponse.json({ categories }, { status: 200 })
+    if (error) {
+      throw new Error(`Failed to fetch course categories: ${error.message}`)
+    }
+
+    return NextResponse.json({ categories: data || [] }, { status: 200 })
   } catch (error: any) {
     console.error("Error fetching categories:", error)
     return NextResponse.json(

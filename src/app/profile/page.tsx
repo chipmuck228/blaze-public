@@ -3,7 +3,10 @@
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Navbar } from "@/components/Navbar"
+import { MobileLayout } from "@/app/mobile-layout"
+import { usePlatform } from "@/hooks/usePlatform"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,9 +26,13 @@ import {
   Save,
   X,
   CheckCircle2,
-  Loader2
+  Loader2,
+  FileText,
+  ExternalLink,
+  Send
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { UserAnalytics } from "@/components/UserAnalytics"
 import { AddPaymentMethodDialog } from "@/components/payment/AddPaymentMethodDialog"
 import { Trash2, Star } from "lucide-react"
@@ -90,12 +97,52 @@ interface PaymentMethod {
   created?: number
 }
 
+interface BillingRecord {
+  id: string
+  amount: number
+  currency: string
+  payment_status: 'paid' | 'refunded'
+  payment_transaction_id?: string
+  stripe_checkout_session_id?: string
+  stripe_payment_intent_id?: string
+  enrolled_at?: string
+  created_at: string
+  course?: {
+    id: string
+    name: string
+    slug?: string
+  }
+  category?: {
+    id: string
+    name: string
+    display_name?: string
+  }
+  series?: {
+    id: string
+    name: string
+    display_name?: string
+  }
+  location?: {
+    id: string
+    name: string
+  }
+  instance?: {
+    id: string
+    start_date: string
+    end_date: string
+    start_time?: string
+    end_time?: string
+  }
+}
+
 export default function ProfilePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { isNative, isReady } = usePlatform()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+  const [billingHistory, setBillingHistory] = useState<BillingRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
@@ -103,6 +150,9 @@ export default function ProfilePage() {
   const [isAddPaymentMethodOpen, setIsAddPaymentMethodOpen] = useState(false)
   const [isRemovingPaymentMethod, setIsRemovingPaymentMethod] = useState<string | null>(null)
   const [isSettingDefault, setIsSettingDefault] = useState<string | null>(null)
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null)
+  const [invoiceData, setInvoiceData] = useState<any>(null)
+  const [sendingInvoiceIds, setSendingInvoiceIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -114,6 +164,7 @@ export default function ProfilePage() {
       fetchProfile()
       fetchEnrollments()
       fetchPaymentMethods()
+      fetchBillingHistory()
     }
   }, [status, session, router])
 
@@ -141,6 +192,62 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error("Error fetching enrollments:", error)
+    }
+  }
+
+  const fetchBillingHistory = async () => {
+    try {
+      const response = await fetch("/api/user/billing-history")
+      if (response.ok) {
+        const data = await response.json()
+        setBillingHistory(data.billingHistory || [])
+      }
+    } catch (error) {
+      console.error("Error fetching billing history:", error)
+    }
+  }
+
+  const handleViewInvoice = async (recordId: string) => {
+    try {
+      setViewingInvoiceId(recordId)
+      const response = await fetch(`/api/user/invoice/${recordId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setInvoiceData(data.invoice)
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to load invoice')
+        setViewingInvoiceId(null)
+      }
+    } catch (error) {
+      console.error("Error fetching invoice:", error)
+      toast.error('Failed to load invoice')
+      setViewingInvoiceId(null)
+    }
+  }
+
+  const handleSendInvoice = async (recordId: string) => {
+    try {
+      setSendingInvoiceIds(prev => new Set(prev).add(recordId))
+      const response = await fetch(`/api/user/invoice/${recordId}/send`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        toast.success('Invoice sent successfully to your email!')
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to send invoice')
+      }
+    } catch (error) {
+      console.error("Error sending invoice:", error)
+      toast.error('Failed to send invoice')
+    } finally {
+      setSendingInvoiceIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(recordId)
+        return newSet
+      })
     }
   }
 
@@ -173,13 +280,14 @@ export default function ProfilePage() {
 
       if (response.ok) {
         await fetchPaymentMethods()
+        toast.success('Payment method removed successfully')
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to remove payment method')
+        toast.error(error.error || 'Failed to remove payment method')
       }
     } catch (error: any) {
       console.error('Error removing payment method:', error)
-      alert('Failed to remove payment method')
+      toast.error('Failed to remove payment method')
     } finally {
       setIsRemovingPaymentMethod(null)
     }
@@ -194,13 +302,14 @@ export default function ProfilePage() {
 
       if (response.ok) {
         await fetchPaymentMethods()
+        toast.success('Default payment method updated')
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to set default payment method')
+        toast.error(error.error || 'Failed to set default payment method')
       }
     } catch (error: any) {
       console.error('Error setting default payment method:', error)
-      alert('Failed to set default payment method')
+      toast.error('Failed to set default payment method')
     } finally {
       setIsSettingDefault(null)
     }
@@ -310,20 +419,18 @@ export default function ProfilePage() {
     return null
   }
 
-  return (
-    <>
-      <Navbar />
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 sm:py-12">
-        <div className="space-y-6">
-          {/* Header */}
-          <div>
-            <h1 className="text-3xl font-bold">Profile</h1>
-            <p className="text-muted-foreground mt-2">
-              Manage your personal information, course enrollments, and payment methods
-            </p>
-          </div>
+  const content = (
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 sm:py-12">
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold">Profile</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage your personal information, course enrollments, and payment methods
+          </p>
+        </div>
 
-          <Tabs defaultValue="personal" className="space-y-6">
+        <Tabs defaultValue="personal" className="space-y-6">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="personal">Personal Info</TabsTrigger>
               <TabsTrigger value="enrollments">My Courses</TabsTrigger>
@@ -682,24 +789,332 @@ export default function ProfilePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-12">
-                    <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No billing history available</p>
-                  </div>
+                  {billingHistory.length === 0 ? (
+                    <div className="text-center py-12">
+                      <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No billing history available</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {billingHistory.map((record) => (
+                        <div
+                          key={record.id}
+                          className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold">
+                                  {record.course?.name || 'Unknown Course'}
+                                </h4>
+                                <Badge
+                                  variant={
+                                    record.payment_status === 'paid'
+                                      ? 'default'
+                                      : record.payment_status === 'refunded'
+                                      ? 'secondary'
+                                      : 'outline'
+                                  }
+                                >
+                                  {record.payment_status === 'paid' ? 'Paid' : 'Refunded'}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                                {record.category && (
+                                  <div className="flex items-center gap-1">
+                                    <BookOpen className="h-3 w-3" />
+                                    <span>{record.category.display_name || record.category.name}</span>
+                                  </div>
+                                )}
+                                {record.series && (
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    <span>{record.series.display_name || record.series.name}</span>
+                                  </div>
+                                )}
+                                {record.location && (
+                                  <div className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    <span>{record.location.name}</span>
+                                  </div>
+                                )}
+                                {record.instance?.start_date && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    <span>
+                                      {new Date(record.instance.start_date).toLocaleDateString()}
+                                      {record.instance.start_time && ` ${record.instance.start_time}`}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {record.payment_transaction_id && (
+                                <p className="text-xs text-muted-foreground">
+                                  Transaction ID: {record.payment_transaction_id}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right space-y-2">
+                              <p className="font-semibold text-lg">
+                                {record.currency} ${record.amount.toFixed(2)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(record.created_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                              <div className="flex gap-2 justify-end mt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewInvoice(record.id)}
+                                >
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  View Invoice
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleSendInvoice(record.id)}
+                                  disabled={sendingInvoiceIds.has(record.id)}
+                                >
+                                  {sendingInvoiceIds.has(record.id) ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="mr-2 h-4 w-4" />
+                                      Send Invoice
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
         </div>
       </div>
+  );
 
-      {/* Add Payment Method Dialog */}
+  // 移动端：使用移动端布局
+  if (isReady && isNative) {
+    return (
+      <MobileLayout>
+        {content}
+        <AddPaymentMethodDialog
+          open={isAddPaymentMethodOpen}
+          onOpenChange={setIsAddPaymentMethodOpen}
+          onSuccess={handleAddPaymentMethodSuccess}
+        />
+      </MobileLayout>
+    );
+  }
+
+  // Web 端：使用完整布局
+  return (
+    <>
+      <Navbar />
+      {content}
       <AddPaymentMethodDialog
         open={isAddPaymentMethodOpen}
         onOpenChange={setIsAddPaymentMethodOpen}
         onSuccess={handleAddPaymentMethodSuccess}
       />
+
+      {/* Invoice Dialog */}
+      <Dialog open={viewingInvoiceId !== null} onOpenChange={(open) => {
+        if (!open) {
+          setViewingInvoiceId(null)
+          setInvoiceData(null)
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invoice</DialogTitle>
+            <DialogDescription>
+              Payment receipt and invoice details
+            </DialogDescription>
+          </DialogHeader>
+          {invoiceData ? (
+            <div className="space-y-6 py-4">
+              {/* Invoice Header */}
+              <div className="flex justify-between items-start border-b pb-4">
+                <div>
+                  <h3 className="text-2xl font-bold">Invoice</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Invoice #: {invoiceData.invoice_number}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-muted-foreground">Date</p>
+                  <p className="font-medium">{invoiceData.date}</p>
+                  {invoiceData.payment_date && (
+                    <>
+                      <p className="text-sm text-muted-foreground mt-2">Payment Date</p>
+                      <p className="font-medium">{invoiceData.payment_date}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Customer Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold mb-2">Bill To:</h4>
+                  <p className="text-sm">{invoiceData.customer.name}</p>
+                  <p className="text-sm text-muted-foreground">{invoiceData.customer.email}</p>
+                </div>
+                {invoiceData.location && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Location:</h4>
+                    <p className="text-sm">{invoiceData.location.name}</p>
+                    <p className="text-sm text-muted-foreground">{invoiceData.location.address}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Course Details */}
+              {invoiceData.course && (
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <h4 className="font-semibold mb-2">Course Details</h4>
+                  <p className="font-medium">{invoiceData.course.name}</p>
+                  {invoiceData.course.description && (
+                    <p className="text-sm text-muted-foreground mt-1">{invoiceData.course.description}</p>
+                  )}
+                  <div className="flex flex-wrap gap-4 mt-3 text-sm">
+                    {invoiceData.category && (
+                      <div>
+                        <span className="text-muted-foreground">Category: </span>
+                        <span>{invoiceData.category.name}</span>
+                      </div>
+                    )}
+                    {invoiceData.series && (
+                      <div>
+                        <span className="text-muted-foreground">Series: </span>
+                        <span>{invoiceData.series.name}</span>
+                      </div>
+                    )}
+                    {invoiceData.instance?.start_date && (
+                      <div>
+                        <span className="text-muted-foreground">Start Date: </span>
+                        <span>{new Date(invoiceData.instance.start_date).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Items Table */}
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="text-left p-3 font-semibold">Description</th>
+                      <th className="text-right p-3 font-semibold">Quantity</th>
+                      <th className="text-right p-3 font-semibold">Unit Price</th>
+                      <th className="text-right p-3 font-semibold">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceData.items.map((item: any, index: number) => (
+                      <tr key={index} className="border-t">
+                        <td className="p-3">{item.description}</td>
+                        <td className="p-3 text-right">{item.quantity}</td>
+                        <td className="p-3 text-right">
+                          {invoiceData.currency} ${item.unit_price.toFixed(2)}
+                        </td>
+                        <td className="p-3 text-right font-medium">
+                          {invoiceData.currency} ${item.total.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals */}
+              <div className="flex justify-end">
+                <div className="w-64 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span>{invoiceData.currency} ${invoiceData.subtotal.toFixed(2)}</span>
+                  </div>
+                  {invoiceData.tax > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tax:</span>
+                      <span>{invoiceData.currency} ${invoiceData.tax.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <Separator />
+                  <div className="flex justify-between font-bold text-lg">
+                    <span>Total:</span>
+                    <span>{invoiceData.currency} ${invoiceData.total.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Status */}
+              <div className="flex items-center justify-between border-t pt-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Status</p>
+                  <Badge
+                    variant={
+                      invoiceData.payment_status === 'paid'
+                        ? 'default'
+                        : invoiceData.payment_status === 'refunded'
+                        ? 'secondary'
+                        : 'outline'
+                    }
+                    className="mt-1"
+                  >
+                    {invoiceData.payment_status === 'paid' ? 'Paid' : 'Refunded'}
+                  </Badge>
+                </div>
+                {invoiceData.stripe_receipt_url && (
+                  <Button
+                    variant="outline"
+                    asChild
+                  >
+                    <a
+                      href={invoiceData.stripe_receipt_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View Stripe Receipt
+                    </a>
+                  </Button>
+                )}
+              </div>
+
+              {/* Transaction ID */}
+              {invoiceData.payment_transaction_id && (
+                <div className="text-xs text-muted-foreground border-t pt-4">
+                  Transaction ID: {invoiceData.payment_transaction_id}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
-  )
+  );
 }
 

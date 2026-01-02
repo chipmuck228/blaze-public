@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -49,7 +49,6 @@ interface User {
 
 export default function UsersManagementPage() {
   const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -60,17 +59,15 @@ export default function UsersManagementPage() {
     fetchUsers()
   }, [])
 
-  useEffect(() => {
+  const filteredUsers = useMemo(() => {
     if (searchQuery) {
-      const filtered = users.filter(
+      return users.filter(
         (user) =>
           user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           user.email.toLowerCase().includes(searchQuery.toLowerCase())
       )
-      setFilteredUsers(filtered)
-    } else {
-      setFilteredUsers(users)
     }
+    return users
   }, [searchQuery, users])
 
   const fetchUsers = async () => {
@@ -95,10 +92,8 @@ export default function UsersManagementPage() {
             return user
           })
           setUsers(usersWithTeams)
-          setFilteredUsers(usersWithTeams)
         } else {
           setUsers(data)
-          setFilteredUsers(data)
         }
       } else {
         console.error("Failed to fetch users")
@@ -132,7 +127,6 @@ export default function UsersManagementPage() {
       
       if (response.ok) {
         setUsers(users.filter((u) => u.id !== user.id))
-        setFilteredUsers(filteredUsers.filter((u) => u.id !== user.id))
         
         // 显示删除结果
         if (data.deletedTeamsCount > 0) {

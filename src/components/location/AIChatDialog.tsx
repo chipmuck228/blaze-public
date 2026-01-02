@@ -139,7 +139,7 @@ export function AIChatDialog({
   // 最小化状态：只显示图标按钮
   if (isMinimized) {
     return (
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-6 right-6 z-[100]">
         <Button
           onClick={handleExpand}
           size="lg"
@@ -154,7 +154,7 @@ export function AIChatDialog({
 
   // 展开状态：显示完整对话框
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] flex flex-col bg-background border rounded-lg shadow-2xl overflow-hidden">
+    <div className="fixed bottom-6 right-6 z-[100] w-[400px] h-[600px] flex flex-col bg-background border rounded-lg shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b shrink-0">
         <div className="flex items-center gap-2">

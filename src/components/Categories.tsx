@@ -146,7 +146,7 @@ export const Categories = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+      <div className="flex flex-wrap justify-center gap-6 md:gap-8">
         {categories.map((category) => {
           const styles = getCategoryStyle(category.name)
           const icon = getCategoryIcon(category.name)
@@ -154,7 +154,7 @@ export const Categories = () => {
           return (
             <Card
               key={category.id}
-              className={`group relative overflow-hidden transition-all duration-300 shadow-md hover:shadow-2xl hover:-translate-y-1 ${styles.bg} ${styles.border} border-0`}
+              className={`group relative overflow-hidden transition-all duration-300 shadow-md hover:shadow-2xl hover:-translate-y-1 ${styles.bg} ${styles.border} border-0 w-full md:w-[calc(50%-1rem)] lg:w-[calc(25%-1.5rem)] max-w-sm`}
             >
               {/* Decorative background pattern */}
               <div className="absolute top-0 right-0 w-40 h-40 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -188,7 +188,7 @@ export const Categories = () => {
                     size="sm"
                     className={`${styles.text} ${styles.hover} group-hover:translate-x-1 transition-all duration-300 font-medium`}
                   >
-                    <Link href={`/course-catalog?category=${category.id}`}>
+                    <Link href={`/programs#${category.name.toLowerCase()}`}>
                       Explore
                       <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                     </Link>
@@ -206,7 +206,7 @@ export const Categories = () => {
       {/* Call to Action */}
       <div className="mt-12 md:mt-16 text-center">
         <Button asChild variant={"default"}>
-          <Link href="/course-catalog">
+          <Link href="/programs">
             View All Programs
             <ArrowRight className="ml-2 h-5 w-5" />
           </Link>

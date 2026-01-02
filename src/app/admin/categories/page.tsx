@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,7 +57,6 @@ interface CourseCategory {
 
 export default function CategoriesManagementPage() {
   const [categories, setCategories] = useState<CourseCategory[]>([])
-  const [filteredCategories, setFilteredCategories] = useState<CourseCategory[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [editingCategory, setEditingCategory] = useState<CourseCategory | null>(null)
@@ -77,18 +76,16 @@ export default function CategoriesManagementPage() {
     fetchCategories()
   }, [])
 
-  useEffect(() => {
+  const filteredCategories = useMemo(() => {
     if (searchQuery) {
-      const filtered = categories.filter(
+      return categories.filter(
         (category) =>
           category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           category.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           category.description?.toLowerCase().includes(searchQuery.toLowerCase())
       )
-      setFilteredCategories(filtered)
-    } else {
-      setFilteredCategories(categories)
     }
+    return categories
   }, [searchQuery, categories])
 
   const fetchCategories = async () => {
@@ -103,7 +100,6 @@ export default function CategoriesManagementPage() {
 
       const data = await response.json()
       setCategories(data)
-      setFilteredCategories(data)
     } catch (err: any) {
       console.error("Error fetching categories:", err)
       setError(err.message || "Failed to load categories")

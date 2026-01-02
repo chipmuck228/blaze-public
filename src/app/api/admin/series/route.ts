@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getCourseSeriesByCategory, hasSeriesAssignments } from "@/lib/db"
+import { getCourseSeriesByCategory } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
 
 // 获取所有系列（支持按 category 过滤）

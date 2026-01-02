@@ -11,7 +11,7 @@ import Link from 'next/link'
 function PaymentSuccessContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { data: session } = useSession()
+  const { data: session, status: sessionStatus, update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(true)
   const [enrollments, setEnrollments] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -25,21 +25,46 @@ function PaymentSuccessContent() {
       return
     }
 
-    if (!session?.user) {
-      router.push('/login')
+    // 等待 session 加载完成
+    if (sessionStatus === 'loading') {
       return
     }
 
     // 验证支付并获取注册信息
     const verifyPayment = async () => {
       try {
+        // 如果 session 不存在，先尝试刷新（可能从 Stripe 返回时 session 还未更新）
+        if (!session?.user && sessionStatus !== 'unauthenticated') {
+          await updateSession()
+          // 等待 session 更新
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+
         const response = await fetch(`/api/payments/success?session_id=${sessionId}`)
         const data = await response.json()
 
         if (response.ok) {
           setEnrollments(data.enrollments || [])
         } else {
-          setError(data.error || 'Failed to verify payment')
+          // 如果是 401 错误，可能是 session 过期或未登录
+          if (response.status === 401) {
+            // 尝试刷新 session 后重试一次
+            await updateSession()
+            await new Promise(resolve => setTimeout(resolve, 300))
+            
+            const retryResponse = await fetch(`/api/payments/success?session_id=${sessionId}`)
+            const retryData = await retryResponse.json()
+            
+            if (retryResponse.ok) {
+              setEnrollments(retryData.enrollments || [])
+            } else {
+              // 如果重试后仍然失败，跳转到登录页面（带回调 URL）
+              const callbackUrl = encodeURIComponent(`/enrollments/success?session_id=${sessionId}`)
+              router.push(`/login?callbackUrl=${callbackUrl}`)
+            }
+          } else {
+            setError(data.error || 'Failed to verify payment')
+          }
         }
       } catch (err: any) {
         setError(err.message || 'Failed to verify payment')
@@ -49,7 +74,7 @@ function PaymentSuccessContent() {
     }
 
     verifyPayment()
-  }, [sessionId, session, router])
+  }, [sessionId, session, sessionStatus, router, updateSession])
 
   if (isLoading) {
     return (

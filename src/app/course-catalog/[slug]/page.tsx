@@ -1,9 +1,11 @@
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { CourseDetail } from "@/components/CourseDetail";
+import { MobileLayout } from "@/app/mobile-layout";
 import { notFound } from "next/navigation";
 import { getCourseWithDetailsBySlug, getCourseWithDetails } from "@/lib/db";
 import type { Metadata } from "next";
+import { CourseDetailPageClient } from "./client";
 
 export async function generateMetadata({
   params,
@@ -79,11 +81,5 @@ export default async function CourseDetailPage({
     notFound();
   }
 
-  return (
-    <>
-      <Navbar />
-      <CourseDetail course={course} />
-      <Footer />
-    </>
-  );
+  return <CourseDetailPageClient course={course} />;
 }

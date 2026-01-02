@@ -396,3 +396,191 @@ export async function sendPasswordNotificationEmail(
   }
 }
 
+// 发送发票邮件
+export async function sendInvoiceEmail(
+  email: string,
+  name: string,
+  invoiceData: {
+    invoice_number: string
+    date: string
+    payment_date?: string | null
+    course?: { name: string; description?: string } | null
+    category?: { name: string } | null
+    series?: { name: string } | null
+    location?: { name: string; address?: string } | null
+    instance?: { start_date: string; start_time?: string; end_time?: string } | null
+    items: Array<{ description: string; quantity: number; unit_price: number; total: number }>
+    subtotal: number
+    tax: number
+    total: number
+    currency: string
+    payment_status: string
+    payment_transaction_id?: string
+    stripe_receipt_url?: string | null
+  }
+) {
+  const mailOptions = {
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: `Invoice ${invoiceData.invoice_number} - ${invoiceData.course?.name || 'Course Enrollment'}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 700px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">Invoice</h1>
+            <p style="color: white; margin: 10px 0 0 0; opacity: 0.9;">${invoiceData.invoice_number}</p>
+          </div>
+          <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+            <p>Hello ${name},</p>
+            <p>Thank you for your payment. Please find your invoice details below:</p>
+            
+            <!-- Invoice Header -->
+            <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #e0e0e0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                <div>
+                  <h2 style="margin: 0 0 10px 0; color: #333;">Invoice Details</h2>
+                  <p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Invoice #:</strong> ${invoiceData.invoice_number}</p>
+                  <p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Date:</strong> ${invoiceData.date}</p>
+                  ${invoiceData.payment_date ? `<p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Payment Date:</strong> ${invoiceData.payment_date}</p>` : ''}
+                </div>
+                <div style="text-align: right;">
+                  <p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Status:</strong> <span style="color: ${invoiceData.payment_status === 'paid' ? '#10b981' : '#6b7280'}; font-weight: bold;">${invoiceData.payment_status === 'paid' ? 'Paid' : 'Refunded'}</span></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Course Details -->
+            ${invoiceData.course ? `
+              <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #e0e0e0;">
+                <h3 style="margin: 0 0 15px 0; color: #333;">Course Information</h3>
+                <p style="margin: 5px 0; font-size: 16px; font-weight: bold;">${invoiceData.course.name}</p>
+                ${invoiceData.course.description ? `<p style="margin: 10px 0; color: #666; font-size: 14px;">${invoiceData.course.description}</p>` : ''}
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                  ${invoiceData.category ? `<p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Category:</strong> ${invoiceData.category.name}</p>` : ''}
+                  ${invoiceData.series ? `<p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Series:</strong> ${invoiceData.series.name}</p>` : ''}
+                  ${invoiceData.location ? `<p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Location:</strong> ${invoiceData.location.name}${invoiceData.location.address ? ` - ${invoiceData.location.address}` : ''}</p>` : ''}
+                  ${invoiceData.instance?.start_date ? `<p style="margin: 5px 0; color: #666; font-size: 14px;"><strong>Start Date:</strong> ${new Date(invoiceData.instance.start_date).toLocaleDateString()}${invoiceData.instance.start_time ? ` at ${invoiceData.instance.start_time}` : ''}</p>` : ''}
+                </div>
+              </div>
+            ` : ''}
+
+            <!-- Items Table -->
+            <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #e0e0e0;">
+              <h3 style="margin: 0 0 15px 0; color: #333;">Items</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background: #f5f5f5;">
+                    <th style="text-align: left; padding: 10px; border-bottom: 2px solid #e0e0e0;">Description</th>
+                    <th style="text-align: right; padding: 10px; border-bottom: 2px solid #e0e0e0;">Quantity</th>
+                    <th style="text-align: right; padding: 10px; border-bottom: 2px solid #e0e0e0;">Unit Price</th>
+                    <th style="text-align: right; padding: 10px; border-bottom: 2px solid #e0e0e0;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${invoiceData.items.map((item: any) => `
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">${item.description}</td>
+                      <td style="text-align: right; padding: 10px; border-bottom: 1px solid #e0e0e0;">${item.quantity}</td>
+                      <td style="text-align: right; padding: 10px; border-bottom: 1px solid #e0e0e0;">${invoiceData.currency} $${item.unit_price.toFixed(2)}</td>
+                      <td style="text-align: right; padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">${invoiceData.currency} $${item.total.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Totals -->
+            <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0; border: 1px solid #e0e0e0;">
+              <div style="display: flex; justify-content: flex-end;">
+                <div style="width: 250px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="color: #666;">Subtotal:</span>
+                    <span style="font-weight: bold;">${invoiceData.currency} $${invoiceData.subtotal.toFixed(2)}</span>
+                  </div>
+                  ${invoiceData.tax > 0 ? `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                      <span style="color: #666;">Tax:</span>
+                      <span style="font-weight: bold;">${invoiceData.currency} $${invoiceData.tax.toFixed(2)}</span>
+                    </div>
+                  ` : ''}
+                  <div style="border-top: 2px solid #667eea; padding-top: 10px; margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between;">
+                      <span style="font-size: 18px; font-weight: bold; color: #333;">Total:</span>
+                      <span style="font-size: 18px; font-weight: bold; color: #667eea;">${invoiceData.currency} $${invoiceData.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            ${invoiceData.payment_transaction_id ? `
+              <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <p style="margin: 0; color: #666; font-size: 12px;"><strong>Transaction ID:</strong> ${invoiceData.payment_transaction_id}</p>
+              </div>
+            ` : ''}
+
+            ${invoiceData.stripe_receipt_url ? `
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${invoiceData.stripe_receipt_url}" 
+                   style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                  View Stripe Receipt
+                </a>
+              </div>
+            ` : ''}
+
+            <p style="color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px;">
+              If you have any questions about this invoice, please contact our support team.
+            </p>
+          </div>
+        </body>
+      </html>
+    `,
+  }
+
+  try {
+    const transporter = createTransporter()
+    
+    try {
+      await transporter.verify()
+      console.log('✅ SMTP connection verified')
+    } catch (verifyError: any) {
+      console.warn('⚠️ SMTP verification failed, but continuing with send:', verifyError.message)
+    }
+    
+    const info = await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Email send timeout after 60 seconds')), 60000)
+      )
+    ]) as any
+    
+    console.log(`✅ Invoice email sent to ${email}`, { messageId: info.messageId })
+    return true
+  } catch (error: any) {
+    console.error('❌ Failed to send invoice email:', {
+      error: error.message,
+      code: error.code,
+      command: error.command,
+      address: error.address || process.env.SMTP_HOST,
+      port: error.port || process.env.SMTP_PORT,
+    })
+    
+    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      throw new Error(`SMTP connection timeout. Please check your network connection and SMTP settings.`)
+    } else if (error.code === 'ECONNREFUSED') {
+      throw new Error(`SMTP connection refused. Please check your SMTP_HOST and SMTP_PORT settings.`)
+    } else if (error.code === 'EAUTH') {
+      throw new Error(`SMTP authentication failed. Please check your SMTP_USER and SMTP_PASSWORD.`)
+    } else if (error.message.includes('not configured')) {
+      throw error
+    } else {
+      throw new Error(`Failed to send invoice email: ${error.message}`)
+    }
+  }
+}
+

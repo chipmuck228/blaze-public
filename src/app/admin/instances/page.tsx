@@ -34,7 +34,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar as CalendarIcon, MapPin, Users, Clock, Copy } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar as CalendarIcon, MapPin, Users, Clock, Copy, Table2, Network } from "lucide-react"
+import { ChevronRight, ChevronDown, Calendar } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { BatchCreateInstanceDialog } from "@/components/admin/BatchCreateInstanceDialog"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -126,15 +128,58 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Saturday' },
 ]
 
+interface HierarchyData {
+  id: string
+  code: string
+  name: string
+  categories: Array<{
+    id: string
+    name: string
+    display_name: string
+    series: Array<{
+      id: string
+      name: string
+      display_name: string
+      description?: string
+      instances: Array<{
+        id: string
+        start_date: string
+        end_date: string
+        start_time?: string
+        end_time?: string
+        max_students?: number
+        current_students: number
+        status: string
+        price_override?: number
+        location?: {
+          id: string
+          name: string
+          address?: string
+          city?: string
+          state?: string
+        } | null
+        course?: {
+          id: string
+          name: string
+          slug: string
+        } | null
+      }>
+    }>
+  }>
+}
+
 function InstancesManagementPageContent() {
   const searchParams = useSearchParams()
+  const [viewMode, setViewMode] = useState<"table" | "hierarchy">("table")
   const [instances, setInstances] = useState<CourseInstance[]>([])
   const [filteredInstances, setFilteredInstances] = useState<CourseInstance[]>([])
+  const [hierarchyData, setHierarchyData] = useState<HierarchyData[]>([])
   const [assignments, setAssignments] = useState<CourseAssignment[]>([])
   const [locations, setLocations] = useState<CourseLocation[]>([])
   const [coaches, setCoaches] = useState<Coach[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false)
   const [editingInstance, setEditingInstance] = useState<CourseInstance | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -145,6 +190,7 @@ function InstancesManagementPageContent() {
   const [isBatchCreateDialogOpen, setIsBatchCreateDialogOpen] = useState(false)
   const [selectedAssignmentForBatch, setSelectedAssignmentForBatch] = useState<CourseAssignment | null>(null)
   const [selectedAssignmentFranchiseId, setSelectedAssignmentFranchiseId] = useState<string | null>(null)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
   const [formData, setFormData] = useState<Omit<CourseInstance, 'id' | 'created_at' | 'updated_at'>>({
     assignment_id: "",
@@ -182,6 +228,12 @@ function InstancesManagementPageContent() {
       }, 500)
     }
   }, [franchiseFilter, searchParams])
+
+  useEffect(() => {
+    if (viewMode === "hierarchy") {
+      fetchHierarchy()
+    }
+  }, [viewMode])
 
   useEffect(() => {
     if (searchQuery) {
@@ -265,6 +317,51 @@ function InstancesManagementPageContent() {
     }
   }
 
+  const fetchHierarchy = async () => {
+    try {
+      setIsLoadingHierarchy(true)
+      setError(null)
+      const response = await fetch("/api/admin/instances/hierarchy")
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch hierarchy")
+      }
+
+      const data = await response.json()
+      setHierarchyData(data.hierarchy || [])
+      
+      // 默认展开所有项
+      const allIds = new Set<string>()
+      data.hierarchy?.forEach((franchise: HierarchyData) => {
+        allIds.add(`franchise-${franchise.id}`)
+        franchise.categories.forEach((category) => {
+          allIds.add(`category-${category.id}`)
+          category.series.forEach((series) => {
+            allIds.add(`series-${series.id}`)
+          })
+        })
+      })
+      setExpandedItems(allIds)
+    } catch (err: any) {
+      console.error("Error fetching hierarchy:", err)
+      setError(err.message || "Failed to load hierarchy")
+    } finally {
+      setIsLoadingHierarchy(false)
+    }
+  }
+
+  const toggleExpanded = (id: string) => {
+    setExpandedItems((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
   const handleDelete = async (instanceId: string) => {
     if (!confirm("Are you sure you want to delete this instance?")) {
       return
@@ -277,6 +374,10 @@ function InstancesManagementPageContent() {
 
       if (response.ok) {
         fetchInstances()
+        // 如果当前是层级视图，也刷新层级数据
+        if (viewMode === "hierarchy") {
+          fetchHierarchy()
+        }
       } else {
         const data = await response.json()
         alert(data.error || "Failed to delete instance")
@@ -476,6 +577,10 @@ function InstancesManagementPageContent() {
 
       if (response.ok) {
         fetchInstances()
+        // 如果当前是层级视图，也刷新层级数据
+        if (viewMode === "hierarchy") {
+          fetchHierarchy()
+        }
         setIsEditDialogOpen(false)
         setEditingInstance(null)
         setExceptions([])
@@ -557,54 +662,82 @@ function InstancesManagementPageContent() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Instances</CardTitle>
-              <CardDescription>
-                A list of all course instances in the system
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Instances</CardTitle>
+                <CardDescription>
+                  A list of all course instances in the system
+                </CardDescription>
+              </div>
+              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "hierarchy")}>
+                <TabsList>
+                  <TabsTrigger value="table" title="Table View">
+                    <Table2 className="h-4 w-4" />
+                  </TabsTrigger>
+                  <TabsTrigger value="hierarchy" title="Hierarchy View">
+                    <Network className="h-4 w-4" />
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search instances..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 w-64"
-                  />
+            {viewMode === "table" && (
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                <div className="flex flex-col xs:flex-row gap-2 flex-1 min-w-0">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8 w-full sm:w-48"
+                    />
+                  </div>
+                  <Select
+                    value={franchiseFilter}
+                    onValueChange={(value) => setFranchiseFilter(value)}
+                  >
+                    <SelectTrigger className="w-full sm:w-[160px]">
+                      <SelectValue placeholder="Franchise" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All franchises</SelectItem>
+                      <SelectItem value="bellevue">Bellevue</SelectItem>
+                      <SelectItem value="belred">Bel-Red</SelectItem>
+                      <SelectItem value="issaquah">Issaquah</SelectItem>
+                      <SelectItem value="cherrycrest">Cherry Crest</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Select
-                  value={franchiseFilter}
-                  onValueChange={(value) => setFranchiseFilter(value)}
-                >
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="All franchises" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All franchises</SelectItem>
-                    <SelectItem value="bellevue">Bellevue</SelectItem>
-                    <SelectItem value="belred">Bel-Red</SelectItem>
-                    <SelectItem value="issaquah">Issaquah</SelectItem>
-                    <SelectItem value="cherrycrest">Cherry Crest</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2 shrink-0">
+                  <Button onClick={handleAdd} variant="outline" size="sm" className="flex-1 sm:flex-initial">
+                    <Plus className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add Instance</span>
+                  </Button>
+                  <Button onClick={() => setIsBatchCreateDialogOpen(true)} size="sm" className="flex-1 sm:flex-initial">
+                    <Copy className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Batch Create</span>
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button onClick={handleAdd} variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Instance
+            )}
+            {viewMode === "hierarchy" && (
+              <div className="flex gap-2 justify-end">
+                <Button onClick={handleAdd} variant="outline" size="sm">
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add Instance</span>
                 </Button>
-                <Button onClick={() => setIsBatchCreateDialogOpen(true)}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Batch Create
+                <Button onClick={() => setIsBatchCreateDialogOpen(true)} size="sm">
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Batch Create</span>
                 </Button>
               </div>
-            </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "hierarchy")}>
+            <TabsContent value="table" className="mt-0">
           {isLoading ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -742,6 +875,217 @@ function InstancesManagementPageContent() {
               ))}
             </div>
           )}
+            </TabsContent>
+            <TabsContent value="hierarchy" className="mt-0">
+              {isLoadingHierarchy ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : error ? (
+                <div className="text-center py-12 space-y-4">
+                  <p className="text-destructive text-lg">{error}</p>
+                  <Button onClick={fetchHierarchy}>
+                    <RefreshCcw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
+              ) : hierarchyData.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  No hierarchy data found.
+                </div>
+              ) : (
+                <div className="space-y-3 md:space-y-4">
+                  {hierarchyData.map((franchise) => {
+                    const franchiseId = `franchise-${franchise.id}`
+                    const isFranchiseExpanded = expandedItems.has(franchiseId)
+                    
+                    return (
+                      <Card key={franchise.id} className="overflow-hidden">
+                        <button
+                          onClick={() => toggleExpanded(franchiseId)}
+                          className="w-full"
+                        >
+                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                              {isFranchiseExpanded ? (
+                                <ChevronDown className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground shrink-0" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-base md:text-lg font-semibold truncate">{franchise.name}</h3>
+                                <p className="text-xs md:text-sm text-muted-foreground truncate">Code: {franchise.code}</p>
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="shrink-0 ml-2 text-xs">
+                              {franchise.categories.length} Categor{franchise.categories.length !== 1 ? 'ies' : 'y'}
+                            </Badge>
+                          </div>
+                        </button>
+                        {isFranchiseExpanded && (
+                          <div className="pl-4 md:pl-8 pr-3 md:pr-4 pb-3 md:pb-4 space-y-2 md:space-y-3">
+                            {franchise.categories.map((category) => {
+                              const categoryId = `category-${category.id}`
+                              const isCategoryExpanded = expandedItems.has(categoryId)
+                              
+                              return (
+                                <Card key={category.id} className="border-l-2 border-l-primary/20">
+                                  <button
+                                    onClick={() => toggleExpanded(categoryId)}
+                                    className="w-full"
+                                  >
+                                    <div className="flex items-center justify-between p-2 md:p-3 hover:bg-muted/30 transition-colors">
+                                      <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                                        {isCategoryExpanded ? (
+                                          <ChevronDown className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
+                                        ) : (
+                                          <ChevronRight className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
+                                        )}
+                                        <div className="min-w-0 flex-1">
+                                          <h4 className="font-medium text-sm md:text-base truncate">{category.display_name}</h4>
+                                          <p className="text-xs text-muted-foreground truncate">{category.name}</p>
+                                        </div>
+                                      </div>
+                                      <Badge variant="secondary" className="shrink-0 ml-2 text-xs">
+                                        {category.series.length} Serie{category.series.length !== 1 ? 's' : ''}
+                                      </Badge>
+                                    </div>
+                                  </button>
+                                  {isCategoryExpanded && (
+                                    <div className="pl-4 md:pl-8 pr-2 md:pr-3 pb-2 md:pb-3 space-y-2">
+                                      {category.series.map((seriesItem) => {
+                                        const seriesId = `series-${seriesItem.id}`
+                                        const isSeriesExpanded = expandedItems.has(seriesId)
+                                        
+                                        return (
+                                          <Card key={seriesItem.id} className="border-l-2 border-l-secondary/20">
+                                            <div className="flex items-center justify-between p-2 md:p-3">
+                                              <button
+                                                onClick={() => toggleExpanded(seriesId)}
+                                                className="flex-1 flex items-center gap-2 md:gap-3 hover:bg-muted/20 transition-colors rounded-md p-2 -m-2 min-w-0"
+                                              >
+                                                {isSeriesExpanded ? (
+                                                  <ChevronDown className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
+                                                ) : (
+                                                  <ChevronRight className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
+                                                )}
+                                                <div className="flex-1 text-left min-w-0">
+                                                  <h5 className="font-medium text-xs md:text-sm truncate">{seriesItem.display_name}</h5>
+                                                  <p className="text-xs text-muted-foreground truncate">{seriesItem.name}</p>
+                                                </div>
+                                                <Badge variant="outline" className="text-xs shrink-0 ml-2">
+                                                  {seriesItem.instances.length} Instance{seriesItem.instances.length !== 1 ? 's' : ''}
+                                                </Badge>
+                                              </button>
+                                            </div>
+                                            {isSeriesExpanded && (
+                                              <div className="pl-4 md:pl-8 pr-2 md:pr-3 pb-2 md:pb-3 space-y-2">
+                                                {seriesItem.instances.length === 0 ? (
+                                                  <p className="text-xs text-muted-foreground italic pl-4">No instances available</p>
+                                                ) : (
+                                                  seriesItem.instances.map((instance) => (
+                                                    <Card key={instance.id} className="border-l-2 border-l-accent/20">
+                                                      <div className="p-2 md:p-3 space-y-2">
+                                                        <div className="flex items-start justify-between gap-2">
+                                                          <div className="flex-1 min-w-0">
+                                                            {instance.course && (
+                                                              <h6 className="font-medium text-xs md:text-sm mb-1 truncate">{instance.course.name}</h6>
+                                                            )}
+                                                            <div className="flex items-center gap-1.5 md:gap-2 flex-wrap text-xs">
+                                                              <Badge variant={getStatusColor(instance.status as any)} className="text-xs">
+                                                                {instance.status}
+                                                              </Badge>
+                                                              {instance.location && (
+                                                                <div className="flex items-center gap-1 text-muted-foreground">
+                                                                  <MapPin className="h-3 w-3 shrink-0" />
+                                                                  <span className="truncate max-w-[100px]">{instance.location.name}</span>
+                                                                </div>
+                                                              )}
+                                                              {instance.start_time && instance.end_time && (
+                                                                <div className="flex items-center gap-1 text-muted-foreground">
+                                                                  <Clock className="h-3 w-3 shrink-0" />
+                                                                  <span className="truncate">{formatTime(instance.start_time)} - {formatTime(instance.end_time)}</span>
+                                                                </div>
+                                                              )}
+                                                              <div className="flex items-center gap-1 text-muted-foreground">
+                                                                <Users className="h-3 w-3 shrink-0" />
+                                                                <span>{instance.current_students}{instance.max_students ? ` / ${instance.max_students}` : ''}</span>
+                                                              </div>
+                                                            </div>
+                                                          </div>
+                                                          <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                              <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 shrink-0">
+                                                                <MoreVertical className="h-3 w-3 md:h-4 md:w-4" />
+                                                              </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                              <DropdownMenuItem onClick={async () => {
+                                                                const foundInstance = instances.find((i: CourseInstance) => i.id === instance.id)
+                                                                if (foundInstance) {
+                                                                  handleEdit(foundInstance)
+                                                                } else {
+                                                                  await fetchInstances()
+                                                                  const found = instances.find((i: CourseInstance) => i.id === instance.id)
+                                                                  if (found) handleEdit(found)
+                                                                }
+                                                              }}>
+                                                                <Edit className="mr-2 h-4 w-4" />
+                                                                Edit
+                                                              </DropdownMenuItem>
+                                                              <DropdownMenuItem
+                                                                onClick={() => {
+                                                                  window.open(`/api/admin/instances/${instance.id}/export`, '_blank')
+                                                                }}
+                                                              >
+                                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                                Export to Calendar
+                                                              </DropdownMenuItem>
+                                                              <DropdownMenuItem
+                                                                className="text-destructive"
+                                                                onClick={() => handleDelete(instance.id)}
+                                                              >
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Delete
+                                                              </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                          </DropdownMenu>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                                          <div>
+                                                            <p className="text-muted-foreground">Date Range</p>
+                                                            <p className="font-medium">{formatDate(instance.start_date)} - {formatDate(instance.end_date)}</p>
+                                                          </div>
+                                                          {instance.price_override && (
+                                                            <div>
+                                                              <p className="text-muted-foreground">Price</p>
+                                                              <p className="font-medium">${instance.price_override.toFixed(2)}</p>
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      </div>
+                                                    </Card>
+                                                  ))
+                                                )}
+                                              </div>
+                                            )}
+                                          </Card>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </Card>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 

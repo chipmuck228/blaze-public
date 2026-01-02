@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from "react";
+import { usePlatform } from "@/hooks/usePlatform";
 import { Navbar } from "@/components/Navbar";
 import { Cta } from "@/components/Cta";
 import { Hero } from "@/components/Hero";
@@ -12,12 +13,15 @@ import { Footer } from "@/components/Footer";
 import { Newsletter } from "@/components/Newsletter";
 import { Team } from "@/components/Team";
 import { Faq } from "@/components/Faq";
+import { MobileHomePage } from "@/components/mobile/MobileHomePage";
+import { MobileLayout } from "./mobile-layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { MapPin, List } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
+  const { isNative, isReady } = usePlatform();
   const [mounted, setMounted] = useState(false);
   const [activeSection, setActiveSection] = useState<'courses' | 'camps'>('courses');
   const [franchises, setFranchises] = useState<Array<{
@@ -168,6 +172,17 @@ export default function Home() {
     };
   }, [franchises.length]); // 当 franchises 加载完成后设置监听
 
+  // 移动端：显示移动端优化的首页
+  // 等待平台检测完成，避免 SSR hydration mismatch
+  if (isReady && isNative) {
+    return (
+      <MobileLayout>
+        <MobileHomePage />
+      </MobileLayout>
+    )
+  }
+
+  // Web 端：显示完整的 Web 首页
   return (
     <>
       <Navbar />

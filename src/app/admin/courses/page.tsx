@@ -69,7 +69,7 @@ export default function CoursesManagementPage() {
       const response = await fetch("/api/admin/courses")
       
       if (!response.ok) {
-        throw new Error("Failed to fetch courses")
+        throw new Error("Failed to fetch offerings")
       }
 
       const data = await response.json()
@@ -77,7 +77,7 @@ export default function CoursesManagementPage() {
       setFilteredCourses(data)
     } catch (err: any) {
       console.error("Error fetching courses:", err)
-      setError(err.message || "Failed to load courses")
+      setError(err.message || "Failed to load offerings")
     } finally {
       setIsLoading(false)
     }
@@ -105,11 +105,11 @@ export default function CoursesManagementPage() {
     // 检查课程状态：只有 draft 状态的课程可以删除
     const course = courses.find(c => c.id === courseId)
     if (course && course.status !== 'draft') {
-      alert(`Cannot delete course with status '${course.status}'. Only draft courses can be deleted. Please archive the course instead.`)
+      alert(`Cannot delete offering with status '${course.status}'. Only draft offerings can be deleted. Please archive the offering instead.`)
       return
     }
 
-    if (!confirm("Are you sure you want to delete this course? This action cannot be undone.")) {
+    if (!confirm("Are you sure you want to delete this offering? This action cannot be undone.")) {
       return
     }
 
@@ -122,11 +122,11 @@ export default function CoursesManagementPage() {
         fetchCourses() // Refresh the list
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete course")
+        alert(data.error || "Failed to delete offering")
       }
     } catch (error) {
-      console.error("Error deleting course:", error)
-      alert("Failed to delete course")
+      console.error("Error deleting offering:", error)
+      alert("Failed to delete offering")
     }
   }
 
@@ -138,7 +138,7 @@ export default function CoursesManagementPage() {
   const handleEdit = (course: Course) => {
     // 禁止编辑 archived 状态的课程
     if (course.status === 'archived') {
-      alert('Cannot edit archived courses. Please view the course details instead.')
+      alert('Cannot edit archived offerings. Please view the offering details instead.')
       return
     }
     setEditingCourse(course)
@@ -189,9 +189,9 @@ export default function CoursesManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Courses Admin</h1>
+        <h1 className="text-3xl font-bold">Offerings Admin</h1>
         <p className="text-muted-foreground mt-2">
-          Manage all courses in the system
+          Manage all offerings in the system
         </p>
       </div>
 
@@ -199,16 +199,16 @@ export default function CoursesManagementPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Courses</CardTitle>
+              <CardTitle>Offerings</CardTitle>
               <CardDescription>
-                A list of all courses in the system
+                A list of all offerings in the system
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search courses..."
+                  placeholder="Search offerings..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 w-64"
@@ -216,7 +216,7 @@ export default function CoursesManagementPage() {
               </div>
               <Button onClick={handleAdd}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Course
+                Add Offering
               </Button>
             </div>
           </div>
@@ -236,14 +236,14 @@ export default function CoursesManagementPage() {
             </div>
           ) : filteredCourses.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No courses found matching your search." : "No courses found."}
+              {searchQuery ? "No offerings found matching your search." : "No offerings found."}
             </div>
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Course Name</TableHead>
+                    <TableHead>Offering Name</TableHead>
                     <TableHead>Tags</TableHead>
                     <TableHead>Sessions</TableHead>
                     <TableHead>Age Range</TableHead>
@@ -356,7 +356,7 @@ export default function CoursesManagementPage() {
                               disabled={course.status === 'archived'}
                             >
                               <Edit className="mr-2 h-4 w-4" />
-                              Edit {course.status === 'archived' && '(Archived courses cannot be edited)'}
+                              Edit {course.status === 'archived' && '(Archived offerings cannot be edited)'}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
