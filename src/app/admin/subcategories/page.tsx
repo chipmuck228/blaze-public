@@ -306,15 +306,16 @@ export default function SubcategoriesManagementPage() {
       </Card>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[500px] lg:max-w-[600px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editingSubcategory ? "Edit Subcategory" : "Add New Subcategory"}</DialogTitle>
             <DialogDescription>
               {editingSubcategory ? "Update subcategory information" : "Create a new subcategory tag (can be used as tags for courses)"}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
               <Input
@@ -361,11 +362,12 @@ export default function SubcategoriesManagementPage() {
               />
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            </div>
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !formData.name || !formData.display_name}>
+              <Button type="submit" disabled={isSubmitting || !formData.name || !formData.display_name} className="w-full sm:w-auto">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

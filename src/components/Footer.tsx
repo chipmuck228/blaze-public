@@ -5,10 +5,8 @@ import { FacebookIcon, InstagramIcon, YoutubeIcon, XiaohongshuIcon } from "./Ico
 export const Footer = () => {
   return (
     <footer id="footer">
-      <hr className="w-11/12 mx-auto" />
-
-      <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-10">
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start justify-center">
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-10 border-t border-border">
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start justify-between">
           {/* Logo */}
           <div className="shrink-0 flex flex-col gap-4">
             <a
@@ -24,7 +22,7 @@ export const Footer = () => {
               <a
                 rel="noreferrer noopener"
                 target="_blank"
-                href="https://www.linkedin.com/in/leopoldo-miranda/"
+                href="https://www.blazeroboticsacademy.org/"
                 className="text-primary transition-all border-primary hover:border-b-2"
               >
                 Blaze Robotics Academy
@@ -32,6 +30,8 @@ export const Footer = () => {
             </div>
           </div>
 
+          {/* Right side: Follow US and About in horizontal layout */}
+          <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 shrink-0">
           {/* Follow US */}
           <div className="flex flex-col gap-2 shrink-0">
             <h3 className="font-bold text-lg">Follow US</h3>
@@ -111,6 +111,7 @@ export const Footer = () => {
               >
                 Calendar
               </a>
+              </div>
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { MapPin, List } from "lucide-react";
 import Link from "next/link";
+import { RoboticsJourney } from "@/components/RoboticsJourney";
 
 export default function Home() {
   const { isNative, isReady } = usePlatform();
@@ -187,6 +188,7 @@ export default function Home() {
     <>
       <Navbar />
       <Hero />
+      {/* <RoboticsJourney /> */}
 
       {/* Location selection section */}
       <section

@@ -1716,4 +1716,484 @@ HAVING (sessions_used + sessions_remaining) != sessions_purchased;
 10. **业务规则**: 系统的用户一般都是家长，他们的年龄不能参加这些课程，因此所有购买都必须分配给某个孩子
 11. **先导课程验证**: 创建 enrollment 时必须验证孩子是否完成了所有必需的先导课程，未完成则不能注册
 12. **完成课程判断**: 通过 `course_enrollments` 表的 `status = 'completed'` 和 `child_id` 来判断孩子是否完成了某个课程
+13. **退款系统**: 支持三种退款场景：提前15天取消（扣除3%处理费和税费）、开课后取消（按比例转为credit）、Academy取消课程（全额退款）
+14. **退款计算**: 提前取消扣除3%处理费和税费；开课后取消按剩余课程次数比例计算；Academy取消全额退款
+15. **Credit系统**: 开课后取消只能转为credit，提前取消和Academy取消可以选择原支付方式或credit
+
+## 13. 退款系统设计
+
+### 13.1 退款政策
+
+根据 Blaze Robotics Academy 的退款政策，系统需要支持以下三种退款场景：
+
+**政策 1：提前 15 天取消（开课前）**
+- 条件：在 enrollment 开始日期前至少 15 天取消
+- 退款方式：100% 退款，扣除 3% 处理费（加上相关税费）
+- 退款选项：可以退回到原支付方式或转为 credit
+
+**政策 2：开课后取消**
+- 条件：enrollment 已经开始后取消
+- 退款方式：按剩余课程次数按比例退款（转为 credit）
+- 计算方式：`(剩余课程次数 / 总课程次数) × 原始支付金额`
+
+**政策 3：Blaze Robotics Academy 取消课程**
+- 条件：Blaze Robotics Academy 主动取消整个 instance
+- 退款方式：全额退款（100%）
+- 退款选项：可以退回到原支付方式或转为 credit
+
+### 13.2 数据模型设计
+
+#### 13.2.1 退款记录表
+
+```sql
+CREATE TABLE enrollment_refunds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  enrollment_id UUID NOT NULL REFERENCES course_enrollments(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  child_id UUID REFERENCES children(id) ON DELETE SET NULL,
+  
+  -- 退款类型
+  refund_policy_type TEXT NOT NULL CHECK (refund_policy_type IN (
+    'early_cancellation',    -- 提前15天取消
+    'post_start_cancellation', -- 开课后取消
+    'academy_cancellation'    -- Academy 取消课程
+  )),
+  
+  -- 金额信息
+  original_amount DECIMAL(10, 2) NOT NULL,      -- 原始支付金额
+  refund_amount DECIMAL(10, 2) NOT NULL,        -- 实际退款金额（扣除费用后）
+  processing_fee DECIMAL(10, 2) DEFAULT 0,       -- 处理费（3%）
+  tax_amount DECIMAL(10, 2) DEFAULT 0,           -- 税费
+  net_refund DECIMAL(10, 2) NOT NULL,            -- 净退款金额（实际退还给用户的金额）
+  
+  -- 退款方式
+  refund_method TEXT NOT NULL CHECK (refund_method IN (
+    'original_payment',  -- 退回到原支付方式
+    'credit',            -- 转为 credit
+    'split'              -- 部分退款，部分 credit
+  )),
+  
+  -- Credit 相关（如果选择转为 credit）
+  credit_amount DECIMAL(10, 2) DEFAULT 0,        -- 转为 credit 的金额
+  credit_transaction_id UUID REFERENCES user_credit_transactions(id),
+  
+  -- 支付平台信息
+  payment_provider TEXT,                          -- 'stripe', 'amilia', etc.
+  payment_transaction_id TEXT,                    -- 原支付交易 ID
+  refund_transaction_id TEXT,                     -- 退款交易 ID（支付平台返回）
+  
+  -- 状态
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN (
+    'pending',    -- 待处理
+    'processing', -- 处理中
+    'completed',  -- 已完成
+    'failed',     -- 失败
+    'cancelled'   -- 已取消
+  )),
+  
+  -- 时间信息
+  days_before_start INTEGER,                      -- 距离开始日期的天数（提前取消时）
+  sessions_remaining INTEGER,                    -- 剩余课程次数（开课后取消时）
+  total_sessions INTEGER,                        -- 总课程次数
+  cancellation_date DATE,                         -- 取消日期
+  instance_start_date DATE,                       -- Instance 开始日期
+  
+  -- 原因和备注
+  cancellation_reason TEXT,                       -- 取消原因
+  admin_notes TEXT,                               -- 管理员备注
+  cancelled_by UUID REFERENCES users(id),        -- 谁取消的（用户或管理员）
+  
+  -- 时间戳
+  requested_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),  -- 申请时间
+  processed_at TIMESTAMP WITH TIME ZONE,                -- 处理时间
+  completed_at TIMESTAMP WITH TIME ZONE,                -- 完成时间
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 创建索引
+CREATE INDEX idx_enrollment_refunds_enrollment_id ON enrollment_refunds(enrollment_id);
+CREATE INDEX idx_enrollment_refunds_user_id ON enrollment_refunds(user_id);
+CREATE INDEX idx_enrollment_refunds_status ON enrollment_refunds(status);
+CREATE INDEX idx_enrollment_refunds_refund_policy_type ON enrollment_refunds(refund_policy_type);
+```
+
+#### 13.2.2 用户 Credit 表（如果不存在）
+
+```sql
+-- 用户账户余额表
+CREATE TABLE IF NOT EXISTS user_credits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  
+  -- 余额信息
+  balance DECIMAL(10, 2) NOT NULL DEFAULT 0,     -- 当前余额
+  currency TEXT DEFAULT 'USD',
+  
+  -- 有效期
+  expires_at TIMESTAMP WITH TIME ZONE,            -- 过期时间（可选）
+  
+  -- 时间戳
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(user_id)
+);
+
+-- Credit 交易记录表
+CREATE TABLE IF NOT EXISTS user_credit_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credit_id UUID REFERENCES user_credits(id) ON DELETE CASCADE,
+  
+  -- 交易类型
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN (
+    'credit',      -- 增加 credit（退款转入）
+    'debit',       -- 减少 credit（用于支付）
+    'expired',     -- 过期
+    'refund'       -- 退款（credit 转回支付方式）
+  )),
+  
+  -- 金额
+  amount DECIMAL(10, 2) NOT NULL,                -- 交易金额（正数表示增加，负数表示减少）
+  balance_before DECIMAL(10, 2) NOT NULL,        -- 交易前余额
+  balance_after DECIMAL(10, 2) NOT NULL,          -- 交易后余额
+  
+  -- 关联信息
+  enrollment_id UUID REFERENCES course_enrollments(id),
+  refund_id UUID REFERENCES enrollment_refunds(id),
+  description TEXT,                               -- 交易描述
+  
+  -- 时间戳
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 创建索引
+CREATE INDEX idx_user_credit_transactions_user_id ON user_credit_transactions(user_id);
+CREATE INDEX idx_user_credit_transactions_credit_id ON user_credit_transactions(credit_id);
+```
+
+#### 13.2.3 扩展 course_enrollments 表
+
+```sql
+-- 添加退款相关字段
+ALTER TABLE course_enrollments
+  ADD COLUMN IF NOT EXISTS refund_id UUID REFERENCES enrollment_refunds(id),
+  ADD COLUMN IF NOT EXISTS cancellation_date DATE,  -- 取消日期
+  ADD COLUMN IF NOT EXISTS days_before_start INTEGER, -- 提前取消的天数
+  ADD COLUMN IF NOT EXISTS sessions_remaining INTEGER, -- 取消时剩余课程次数
+  ADD COLUMN IF NOT EXISTS cancelled_by UUID REFERENCES users(id); -- 谁取消的
+```
+
+### 13.3 退款计算逻辑
+
+#### 13.3.1 提前 15 天取消退款计算
+
+```typescript
+function calculateEarlyCancellationRefund(
+  originalAmount: number,
+  taxAmount: number = 0,
+  processingFeePercentage: number = 0.03  // 3%
+): {
+  originalAmount: number
+  processingFee: number
+  taxAmount: number
+  netRefund: number
+} {
+  // 计算处理费（3%）
+  const processingFee = originalAmount * processingFeePercentage
+  
+  // 计算净退款金额
+  const netRefund = originalAmount - processingFee - taxAmount
+  
+  return {
+    originalAmount,
+    processingFee,
+    taxAmount,
+    netRefund
+  }
+}
+```
+
+**示例：**
+- 原始支付金额：$1000
+- 税费：$80
+- 处理费（3%）：$1000 × 0.03 = $30
+- 净退款：$1000 - $30 - $80 = $890
+
+#### 13.3.2 开课后取消退款计算（按比例）
+
+```typescript
+function calculatePostStartCancellationRefund(
+  originalAmount: number,
+  totalSessions: number,
+  sessionsCompleted: number,
+  sessionsRemaining: number
+): {
+  originalAmount: number
+  sessionsCompleted: number
+  sessionsRemaining: number
+  totalSessions: number
+  refundAmount: number  // 按比例计算的退款金额
+} {
+  // 计算退款比例
+  const refundPercentage = sessionsRemaining / totalSessions
+  
+  // 计算退款金额
+  const refundAmount = originalAmount * refundPercentage
+  
+  return {
+    originalAmount,
+    sessionsCompleted,
+    sessionsRemaining,
+    totalSessions,
+    refundAmount
+  }
+}
+```
+
+**示例：**
+- 原始支付金额：$1000
+- 总课程次数：10 次
+- 已完成：3 次
+- 剩余：7 次
+- 退款金额：$1000 × (7 / 10) = $700（转为 credit）
+
+#### 13.3.3 Academy 取消课程退款计算
+
+```typescript
+function calculateAcademyCancellationRefund(
+  originalAmount: number
+): {
+  originalAmount: number
+  refundAmount: number  // 全额退款
+} {
+  return {
+    originalAmount,
+    refundAmount: originalAmount  // 100% 退款
+  }
+}
+```
+
+### 13.4 退款流程设计
+
+#### 13.4.1 用户提前取消流程
+
+**API**: `POST /api/enrollments/[id]/cancel`
+
+**流程：**
+1. **验证取消条件**
+   - enrollment 状态必须是 `enrolled` 且 `payment_status` 为 `paid`
+   - instance 开始日期必须 >= 当前日期 + 15 天
+   - 用户必须是 enrollment 的所有者
+
+2. **计算退款金额**
+   - 获取原始支付金额和税费
+   - 计算处理费（3%）
+   - 计算净退款金额
+
+3. **用户选择退款方式**
+   - 选项 1：退回到原支付方式
+   - 选项 2：转为 credit
+   - 选项 3：部分退款，部分 credit
+
+4. **创建退款记录**
+   - `refund_policy_type = 'early_cancellation'`
+   - 记录所有金额信息
+   - 状态：`pending`
+
+5. **执行退款**
+   - 如果选择原支付方式：调用支付平台退款 API
+   - 如果选择 credit：增加用户 credit 余额
+   - 如果选择 split：同时执行两种方式
+
+6. **更新 enrollment 状态**
+   - 状态改为 `cancelled`
+   - 记录取消时间和原因
+   - 关联退款记录
+
+7. **发送通知**
+   - 邮件通知用户退款详情
+
+#### 13.4.2 开课后取消流程
+
+**API**: `POST /api/enrollments/[id]/cancel`
+
+**流程：**
+1. **验证取消条件**
+   - enrollment 状态必须是 `enrolled`
+   - instance 已经开始（`start_date <= CURRENT_DATE`）
+   - 用户必须是 enrollment 的所有者
+
+2. **计算已完成的课程次数**
+   - 查询 `workshop_attendances` 或根据 `instance.start_date` 和当前日期计算
+   - 计算剩余课程次数
+
+3. **计算按比例退款金额**
+   - 使用 `calculatePostStartCancellationRefund` 函数
+
+4. **创建退款记录**
+   - `refund_policy_type = 'post_start_cancellation'`
+   - `refund_method = 'credit'`（开课后取消只能转为 credit）
+   - 记录剩余课程次数和退款金额
+   - 状态：`pending`
+
+5. **执行退款（转为 credit）**
+   - 增加用户 credit 余额
+   - 创建 credit 交易记录
+
+6. **更新 enrollment 状态**
+   - 状态改为 `cancelled`
+   - 记录取消时间和原因
+   - 关联退款记录
+
+7. **发送通知**
+   - 邮件通知用户 credit 已到账
+
+#### 13.4.3 Academy 取消课程流程
+
+**API**: `POST /api/admin/instances/[id]/cancel`
+
+**流程：**
+1. **管理员取消 instance**
+   - 设置 `course_instances.cancelled_at`
+   - 设置取消原因
+
+2. **查找所有相关 enrollment**
+   - 查询所有 `status = 'enrolled'` 且 `payment_status = 'paid'` 的 enrollment
+
+3. **批量创建退款记录**
+   - 为每个 enrollment 创建退款记录
+   - `refund_policy_type = 'academy_cancellation'`
+   - `refund_amount = original_amount`（全额退款）
+   - 状态：`pending`
+
+4. **批量处理退款**
+   - 异步处理每个 enrollment 的退款
+   - 根据用户选择或默认策略执行退款（原支付方式或 credit）
+
+5. **更新所有 enrollment 状态**
+   - 状态改为 `cancelled`
+   - 关联退款记录
+
+6. **发送批量通知**
+   - 邮件通知所有受影响用户
+
+### 13.5 API 设计
+
+#### 13.5.1 用户取消 Enrollment
+
+```typescript
+// POST /api/enrollments/[id]/cancel
+// 请求体：
+{
+  cancellation_reason?: string,
+  refund_method: 'original_payment' | 'credit' | 'split',
+  credit_amount?: number  // 如果选择 split，指定转为 credit 的金额
+}
+
+// 响应（成功）：
+{
+  refund_id: string,
+  refund_policy_type: 'early_cancellation' | 'post_start_cancellation',
+  original_amount: number,
+  refund_amount: number,
+  processing_fee?: number,
+  tax_amount?: number,
+  net_refund: number,
+  refund_method: string,
+  status: 'pending' | 'processing' | 'completed',
+  estimated_completion: string  // 预计完成时间
+}
+
+// 响应（失败）：
+{
+  error: string,
+  message: string,
+  details?: {
+    days_before_start?: number,  // 如果不足 15 天
+    instance_start_date?: string,
+    current_date?: string
+  }
+}
+```
+
+#### 13.5.2 查询退款状态
+
+```typescript
+// GET /api/enrollments/[id]/refund
+// 响应：
+{
+  refund_id: string,
+  status: 'pending' | 'processing' | 'completed' | 'failed',
+  refund_amount: number,
+  refund_method: string,
+  processed_at?: string,
+  completed_at?: string
+}
+```
+
+#### 13.5.3 管理员取消 Instance
+
+```typescript
+// POST /api/admin/instances/[id]/cancel
+// 请求体：
+{
+  cancellation_reason: string,
+  refund_method: 'original_payment' | 'credit' | 'split',  // 默认退款方式
+  send_notification: boolean
+}
+
+// 响应：
+{
+  instance_id: string,
+  cancelled_at: string,
+  affected_enrollments: number,
+  refunds_created: number,
+  status: 'processing'
+}
+```
+
+### 13.6 UI/UX 设计思路
+
+#### 13.6.1 用户取消 Enrollment 界面
+
+**显示内容：**
+1. **取消确认对话框**
+   - Enrollment 信息（课程名称、开始日期、支付金额）
+   - 取消政策说明：
+     - 如果提前 15 天：显示 "将扣除 3% 处理费和税费"
+     - 如果开课后：显示 "将按剩余课程次数按比例退款（转为 credit）"
+   - 退款金额预览
+   - 退款方式选择（提前 15 天取消时）
+
+2. **退款金额计算显示**
+   - 原始支付金额
+   - 扣除项（处理费、税费）
+   - 净退款金额
+   - 预计到账时间
+
+3. **取消原因输入**（可选）
+   - 下拉选择或文本输入
+
+#### 13.6.2 退款历史界面
+
+**显示内容：**
+1. 所有退款记录列表
+2. 每个退款显示：
+   - 退款类型（提前取消 / 开课后取消 / Academy 取消）
+   - 退款金额
+   - 退款方式（原支付方式 / credit）
+   - 状态（待处理 / 处理中 / 已完成）
+   - 退款日期
+
+### 13.7 注意事项
+
+1. **时间计算**：使用 instance 的 `start_date` 计算是否提前 15 天
+2. **课程次数计算**：对于 Course 类型，需要从 `type_config` 或 `assignment_config` 获取总课程次数
+3. **已完成课程判断**：需要根据 `workshop_attendances` 或 `instance.start_date` 和当前日期计算
+4. **税费计算**：需要从原始支付记录中获取税费信息
+5. **异步处理**：批量退款应该异步处理，避免阻塞
+6. **通知系统**：所有退款操作都应该发送邮件通知用户
 

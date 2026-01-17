@@ -584,3 +584,28 @@ export async function sendInvoiceEmail(
   }
 }
 
+// 发送 Newsletter 邮件
+export async function sendNewsletterEmail(
+  email: string,
+  subject: string,
+  htmlContent: string
+) {
+  const transporter = createTransporter()
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject,
+    html: htmlContent,
+    text: htmlContent.replace(/<[^>]*>/g, ''), // 简单的 HTML 转纯文本
+  }
+
+  try {
+    const info = await transporter.sendMail(mailOptions)
+    console.log('Newsletter email sent:', info.messageId)
+    return info
+  } catch (error: any) {
+    console.error('Error sending newsletter email:', error)
+    throw new Error(`Failed to send newsletter email: ${error.message}`)
+  }
+}

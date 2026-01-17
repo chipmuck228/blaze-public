@@ -31,11 +31,33 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, display_name, description, display_order } = body
+    const { name, display_name, description, display_order, featured, poster_url, featured_slogan, featured_subtitle, featured_display_order, is_active } = body
 
     if (!name || !display_name) {
       return NextResponse.json(
         { error: "Missing required fields: name, display_name" },
+        { status: 400 }
+      )
+    }
+
+    // 验证：如果 featured = true，必须 is_active = true
+    if (featured && !is_active) {
+      return NextResponse.json(
+        { error: "Category must be active to be featured" },
+        { status: 400 }
+      )
+    }
+
+    // 验证字符长度
+    if (featured_slogan && featured_slogan.length > 100) {
+      return NextResponse.json(
+        { error: "Featured slogan must be 100 characters or less" },
+        { status: 400 }
+      )
+    }
+    if (featured_subtitle && featured_subtitle.length > 60) {
+      return NextResponse.json(
+        { error: "Featured subtitle must be 60 characters or less" },
         { status: 400 }
       )
     }
@@ -47,7 +69,12 @@ export async function POST(request: Request) {
         display_name,
         description,
         display_order: display_order || 0,
-        is_active: true,
+        is_active: is_active !== undefined ? is_active : true,
+        featured: featured || false,
+        poster_url: poster_url || null,
+        featured_slogan: featured_slogan || null,
+        featured_subtitle: featured_subtitle || null,
+        featured_display_order: featured_display_order || 0,
       })
       .select()
       .single()

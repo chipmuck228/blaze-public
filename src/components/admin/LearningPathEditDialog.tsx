@@ -243,8 +243,8 @@ export function LearningPathEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[900px] xl:max-w-[1000px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>
             {path ? "Edit Learning Path" : "Add New Learning Path"}
           </DialogTitle>
@@ -255,14 +255,15 @@ export function LearningPathEditDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <Tabs defaultValue="basic" className="w-full flex flex-col flex-1 min-h-0">
+            <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
               <TabsTrigger value="basic">Basic Information</TabsTrigger>
               <TabsTrigger value="courses">Courses</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="basic" className="space-y-4">
+            <div className="flex-1 overflow-y-auto pr-1 mt-4">
+            <TabsContent value="basic" className="space-y-4 mt-0">
               {/* Path Name */}
               <div className="space-y-2">
                 <Label htmlFor="name">Path Name *</Label>
@@ -484,13 +485,13 @@ export function LearningPathEditDialog({
                 )}
               </div>
             </TabsContent>
+            </div>
           </Tabs>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !formData.name}>
+            <Button type="submit" disabled={isLoading || !formData.name} className="w-full sm:w-auto">
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

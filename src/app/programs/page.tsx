@@ -79,69 +79,53 @@ export default function ProgramsPage() {
   const [franchises, setFranchises] = useState<Franchise[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; display_name: string }>>([])
 
   // 筛选状态
   const [selectedFranchise, setSelectedFranchise] = useState<string>("all")
-  const [selectedProgram, setSelectedProgram] = useState<string>("all")
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedGrade, setSelectedGrade] = useState<string>("all")
 
-  // 从 URL hash 获取 category
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  // 从 URL query parameter 获取 category
+  const categoryFromUrl = searchParams.get("category")
 
   useEffect(() => {
-    // 检查 URL hash
-    const hash = window.location.hash.slice(1) // 移除 #
-    if (hash) {
-      setActiveCategory(hash.toLowerCase())
+    // 从 URL query parameter 读取 category，并设置到筛选状态
+    if (categoryFromUrl) {
+      setSelectedCategory(categoryFromUrl)
     }
+  }, [categoryFromUrl])
 
-    // 监听 hash 变化
-    const handleHashChange = () => {
-      const newHash = window.location.hash.slice(1)
-      setActiveCategory(newHash ? newHash.toLowerCase() : null)
-    }
-
-    window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
+  useEffect(() => {
+    fetchCategories()
   }, [])
-
-  // 当数据加载完成后，滚动到对应的 category section
-  useEffect(() => {
-    if (!isLoading && activeCategory && franchises.length > 0) {
-      // 延迟一下确保 DOM 已渲染
-      setTimeout(() => {
-        const element = document.getElementById(`category-${activeCategory}`)
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
-      }, 100)
-    }
-  }, [isLoading, activeCategory, franchises])
 
   useEffect(() => {
     fetchInstances()
-  }, [activeCategory])
+  }, [selectedCategory])
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch("/api/public/categories")
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data.categories || [])
+      }
+    } catch (err) {
+      console.error("Error fetching categories:", err)
+    }
+  }
 
   const fetchInstances = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      // 根据 activeCategory 构建 API URL
+      // 根据 selectedCategory 构建 API URL
       let url = "/api/public/instances"
-      if (activeCategory) {
-        // 需要先获取 category ID
-        const categoriesRes = await fetch("/api/public/categories")
-        if (categoriesRes.ok) {
-          const categoriesData = await categoriesRes.json()
-          const category = categoriesData.categories?.find(
-            (cat: any) => cat.name.toLowerCase() === activeCategory
-          )
-          if (category) {
-            url += `?category=${category.id}`
-          }
-        }
+      if (selectedCategory && selectedCategory !== "all") {
+        url += `?category=${selectedCategory}`
       }
 
       const response = await fetch(url)
@@ -191,21 +175,21 @@ export default function ProgramsPage() {
     return franchises.map((f) => ({ id: f.id, code: f.code, name: f.name }))
   }, [franchises])
 
-  // 获取所有唯一的 program 列表
-  const allPrograms = useMemo(() => {
-    const programMap = new Map<string, { id: string; name: string; display_name: string }>()
+  // 获取所有唯一的 category 列表（从实际数据中提取）
+  const allCategoriesFromData = useMemo(() => {
+    const categoryMap = new Map<string, { id: string; name: string; display_name: string }>()
     franchises.forEach((franchise) => {
       franchise.programs.forEach((program) => {
-        if (!programMap.has(program.id)) {
-          programMap.set(program.id, {
-            id: program.id,
-            name: program.name,
-            display_name: program.display_name,
+        if (program.category && !categoryMap.has(program.category.id)) {
+          categoryMap.set(program.category.id, {
+            id: program.category.id,
+            name: program.category.name,
+            display_name: program.category.display_name,
           })
         }
       })
     })
-    return Array.from(programMap.values())
+    return Array.from(categoryMap.values())
   }, [franchises])
 
   // 获取所有唯一的 grade 列表
@@ -227,7 +211,7 @@ export default function ProgramsPage() {
   }, [franchises])
 
   // 过滤数据
-  // 注意：即使没有 instances，也要显示 programs；即使没有 programs，也要显示 franchises
+  // 只显示有 instances 的 programs
   const filteredFranchises = useMemo(() => {
     return franchises
       .filter((franchise) => {
@@ -241,8 +225,8 @@ export default function ProgramsPage() {
         ...franchise,
         programs: franchise.programs
           .filter((program) => {
-            // Program 筛选
-            if (selectedProgram !== "all" && program.id !== selectedProgram) {
+            // Category 筛选
+            if (selectedCategory !== "all" && program.category?.id !== selectedCategory) {
               return false
             }
             return true
@@ -273,13 +257,17 @@ export default function ProgramsPage() {
 
               return true
             }),
-          })),
+          }))
+          .filter((program) => {
+            // 只返回有 instances 的 programs
+            return program.instances && program.instances.length > 0
+          }),
       }))
       .filter((franchise) => {
-        // 只返回有 programs 的 franchises（即使 programs 没有 instances）
+        // 只返回有 programs 的 franchises
         return franchise.programs.length > 0
       })
-  }, [franchises, selectedFranchise, selectedProgram, searchQuery, selectedGrade])
+  }, [franchises, selectedFranchise, selectedCategory, searchQuery, selectedGrade])
 
   const handleEnroll = async (instanceId: string) => {
     if (!session?.user) {
@@ -293,14 +281,18 @@ export default function ProgramsPage() {
 
   const clearFilters = () => {
     setSelectedFranchise("all")
-    setSelectedProgram("all")
+    setSelectedCategory("all")
     setSearchQuery("")
     setSelectedGrade("all")
+    // 清除 URL 中的 category 参数
+    if (categoryFromUrl) {
+      router.push("/programs")
+    }
   }
 
   const hasActiveFilters =
     selectedFranchise !== "all" ||
-    selectedProgram !== "all" ||
+    selectedCategory !== "all" ||
     searchQuery !== "" ||
     selectedGrade !== "all"
 
@@ -380,18 +372,26 @@ export default function ProgramsPage() {
                   </Select>
                 </div>
 
-                {/* Program Filter */}
+                {/* Category Filter */}
                 <div className="space-y-2">
-                  <Label htmlFor="program">Program</Label>
-                  <Select value={selectedProgram} onValueChange={setSelectedProgram}>
-                    <SelectTrigger id="program">
-                      <SelectValue placeholder="All Programs" />
+                  <Label htmlFor="category">Category</Label>
+                  <Select value={selectedCategory} onValueChange={(value) => {
+                    setSelectedCategory(value)
+                    // 更新 URL 参数
+                    if (value === "all") {
+                      router.push("/programs")
+                    } else {
+                      router.push(`/programs?category=${value}`)
+                    }
+                  }}>
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Programs</SelectItem>
-                      {allPrograms.map((program) => (
-                        <SelectItem key={program.id} value={program.id}>
-                          {program.display_name}
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {allCategoriesFromData.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.display_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -480,15 +480,11 @@ export default function ProgramsPage() {
                     {/* Programs */}
                     {franchise.programs && franchise.programs.length > 0 ? (
                       franchise.programs.map((program) => {
-                        const categoryId = `category-${program.category?.name?.toLowerCase() || 'unknown'}`
-                        const isActiveCategory = activeCategory === program.category?.name?.toLowerCase()
                         const instancesCount = program.instances?.length || 0
                         
                         return (
                           <Card
                             key={program.id}
-                            id={categoryId}
-                            className={`${isActiveCategory ? 'scroll-mt-24 border-primary' : ''}`}
                           >
                             <CardHeader>
                               <div className="flex items-center justify-between">

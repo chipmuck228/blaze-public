@@ -98,16 +98,16 @@ export function FranchiseContentEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[1000px] xl:max-w-[1200px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Edit Franchise Content - {franchiseName}</DialogTitle>
           <DialogDescription>
             Configure the branding and content for this franchise's public page.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="hero" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+        <Tabs defaultValue="hero" className="w-full flex flex-col flex-1 min-h-0">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 flex-shrink-0">
             <TabsTrigger value="hero">Hero</TabsTrigger>
             <TabsTrigger value="highlights">Highlights</TabsTrigger>
             <TabsTrigger value="contact">Contact</TabsTrigger>
@@ -116,8 +116,9 @@ export function FranchiseContentEditDialog({
             <TabsTrigger value="seo">SEO</TabsTrigger>
           </TabsList>
 
+          <div className="flex-1 overflow-y-auto pr-1 mt-4">
           {/* Hero Tab */}
-          <TabsContent value="hero" className="space-y-4">
+          <TabsContent value="hero" className="space-y-4 mt-0">
             <div className="space-y-2">
               <Label htmlFor="hero-title">Hero Title</Label>
               <Input
@@ -476,13 +477,13 @@ export function FranchiseContentEditDialog({
               />
             </div>
           </TabsContent>
+          </div>
         </Tabs>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSubmitting}>
+          <Button onClick={handleSave} disabled={isSubmitting} className="w-full sm:w-auto">
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
           </Button>

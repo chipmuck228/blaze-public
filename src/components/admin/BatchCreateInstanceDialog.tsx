@@ -266,15 +266,16 @@ export function BatchCreateInstanceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Batch Create Instances</DialogTitle>
           <DialogDescription>
             Create multiple instances at once for the selected assignment. All instances will share the same schedule but can be at different campuses.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto pr-1 space-y-4">
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
@@ -491,17 +492,18 @@ export function BatchCreateInstanceDialog({
               </p>
             </div>
           )}
-
-          <DialogFooter>
+          </div>
+          <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || previewCount === 0}>
+            <Button type="submit" disabled={isSubmitting || previewCount === 0} className="w-full sm:w-auto">
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

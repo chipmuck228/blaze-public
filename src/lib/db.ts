@@ -1350,6 +1350,11 @@ export interface CourseCategory {
   description?: string
   display_order: number
   is_active: boolean
+  featured: boolean
+  poster_url?: string | null
+  featured_slogan?: string | null
+  featured_subtitle?: string | null
+  featured_display_order: number
   created_at: string
   updated_at: string
 }

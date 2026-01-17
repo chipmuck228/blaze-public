@@ -411,15 +411,16 @@ export default function LocationsManagementPage() {
       </Card>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editingLocation ? "Edit Campus" : "Add New Campus"}</DialogTitle>
             <DialogDescription>
               {editingLocation ? "Update campus information" : "Create a new course campus"}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Campus Name *</Label>
               <Input
@@ -553,11 +554,12 @@ export default function LocationsManagementPage() {
               />
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            </div>
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !formData.name}>
+              <Button type="submit" disabled={isSubmitting || !formData.name} className="w-full sm:w-auto">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -1090,17 +1090,18 @@ function InstancesManagementPageContent() {
       </Card>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editingInstance ? "Edit Instance" : "Add New Instance"}</DialogTitle>
             <DialogDescription>
               {editingInstance ? "Update instance information" : "Create a new course instance (specific dates, times, and campus)"}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="assignment_id">Assignment *</Label>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="assignment_id">Assignment *</Label>
               <Select
                 value={formData.assignment_id}
                 onValueChange={(value) => {
@@ -1128,32 +1129,34 @@ function InstancesManagementPageContent() {
                   <SelectValue placeholder="Select an assignment" />
                 </SelectTrigger>
                 <SelectContent className="max-h-[400px]">
-                  {assignments.map((assignment) => {
-                    const courseName = assignment.course?.name || "Unknown Course"
-                    const categoryName = assignment.category?.display_name || "Unknown Category"
-                    const seriesName = assignment.series?.display_name || "Unknown Series"
-                    const franchiseName = assignment.franchise?.name || "No Franchise"
-                    
-                    // 构建显示信息
-                    const infoParts = [franchiseName, categoryName, seriesName].filter(Boolean)
-                    const displayText = `${courseName} (${infoParts.join(' > ')})`
-                    
-                    return (
-                      <SelectItem 
-                        key={assignment.id} 
-                        value={assignment.id}
-                        textValue={displayText}
-                        className="py-2.5"
-                      >
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium text-sm leading-tight">{courseName}</span>
-                          <span className="text-xs text-muted-foreground leading-tight">
-                            {infoParts.join(' • ')}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    )
-                  })}
+                  {assignments
+                    .filter(assignment => assignment.id && assignment.id.trim() !== "")
+                    .map((assignment) => {
+                      const courseName = assignment.course?.name || "Unknown Course"
+                      const categoryName = assignment.category?.display_name || "Unknown Category"
+                      const seriesName = assignment.series?.display_name || "Unknown Series"
+                      const franchiseName = assignment.franchise?.name || "No Franchise"
+                      
+                      // 构建显示信息
+                      const infoParts = [franchiseName, categoryName, seriesName].filter(Boolean)
+                      const displayText = `${courseName} (${infoParts.join(' > ')})`
+                      
+                      return (
+                        <SelectItem 
+                          key={assignment.id} 
+                          value={assignment.id}
+                          textValue={displayText}
+                          className="py-2.5"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-sm leading-tight">{courseName}</span>
+                            <span className="text-xs text-muted-foreground leading-tight">
+                              {infoParts.join(' • ')}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
                 </SelectContent>
               </Select>
               {prefilledAssignmentId && (
@@ -1189,11 +1192,13 @@ function InstancesManagementPageContent() {
                       )
                     }
                     
-                    return filteredLocations.map((location) => (
-                      <SelectItem key={location.id} value={location.id}>
-                        {location.name}
-                      </SelectItem>
-                    ))
+                    return filteredLocations
+                      .filter(location => location.id && location.id.trim() !== "")
+                      .map((location) => (
+                        <SelectItem key={location.id} value={location.id}>
+                          {location.name}
+                        </SelectItem>
+                      ))
                   })()}
                 </SelectContent>
               </Select>
@@ -1458,11 +1463,13 @@ function InstancesManagementPageContent() {
                   </SelectTrigger>
                   <SelectContent className="max-h-[300px]">
                     <SelectItem value="__none__">None</SelectItem>
-                    {coaches.map((coach) => (
-                      <SelectItem key={coach.id} value={coach.id}>
-                        {coach.name} {coach.email ? `(${coach.email})` : ''}
-                      </SelectItem>
-                    ))}
+                    {coaches
+                      .filter(coach => coach.id && coach.id.trim() !== "")
+                      .map((coach) => (
+                        <SelectItem key={coach.id} value={coach.id}>
+                          {coach.name} {coach.email ? `(${coach.email})` : ''}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1499,16 +1506,16 @@ function InstancesManagementPageContent() {
                 rows={3}
               />
             </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            </div>
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !formData.assignment_id || !formData.start_date || !formData.end_date}>
+              <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
+                    {editingInstance ? "Updating..." : "Creating..."}
                   </>
                 ) : editingInstance ? (
                   "Update Instance"

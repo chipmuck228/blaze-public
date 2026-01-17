@@ -65,10 +65,18 @@
 
 }
 
+* {
+  font-family: inherit;
+}
+
+html,
+body {
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 html {
@@ -505,3 +513,25 @@ body {
   }
 }
 
+/* HeroCards orientation support for desktop screens (>= 1024px) */
+/* Desktop portrait mode: show portrait version (vertical stack), hide landscape version */
+@media (min-width: 1024px) and (orientation: portrait) {
+  .hero-cards-desktop-portrait {
+    display: flex !important;
+  }
+  
+  .hero-cards-desktop-landscape {
+    display: none !important;
+  }
+}
+
+/* Desktop landscape mode: show masonry/grid layout (photo wall style) */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .hero-cards-desktop-portrait {
+    display: none !important;
+  }
+  
+  .hero-cards-desktop-landscape {
+    display: grid !important;
+  }
+}

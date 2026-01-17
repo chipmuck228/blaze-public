@@ -312,8 +312,8 @@ export function TeamEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[800px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{team ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
           <DialogDescription>
             {team 
@@ -321,7 +321,7 @@ export function TeamEditDialog({
               : "Fill in the information below to add a new team member."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="flex-1 overflow-y-auto pr-1 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="user_id">
               Coach User <span className="text-muted-foreground">(Optional but recommended)</span>
@@ -560,15 +560,16 @@ export function TeamEditDialog({
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isLoading}
+            className="w-full sm:w-auto"
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isLoading}>
+          <Button onClick={handleSave} disabled={isLoading} className="w-full sm:w-auto">
             {isLoading ? "Saving..." : team ? "Save Changes" : "Create Member"}
           </Button>
         </DialogFooter>

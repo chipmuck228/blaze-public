@@ -120,15 +120,15 @@ export function CourseDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[900px] xl:max-w-[1000px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Course Details</DialogTitle>
           <DialogDescription>
             View detailed information about this course
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 pr-4 overflow-y-auto">
+        <ScrollArea className="flex-1 min-h-0 pr-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -307,8 +307,8 @@ export function CourseDetailDialog({
             </div>
           ) : null}
 
-        <div className="flex justify-end pt-4 border-t shrink-0">
-          <Button onClick={() => onOpenChange(false)}>Close</Button>
+        <div className="flex justify-end pt-4 border-t flex-shrink-0 mt-4">
+          <Button onClick={() => onOpenChange(false)} className="w-full sm:w-auto">Close</Button>
         </div>
         </ScrollArea>
       </DialogContent>

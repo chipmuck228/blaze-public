@@ -7,8 +7,10 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar"
 import { Button } from "@/components/ui/button"
 import { Menu } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
+import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext"
+import { cn } from "@/lib/utils"
 
-export default function AdminLayout({
+function AdminLayoutContent({
   children,
 }: {
   children: React.ReactNode
@@ -18,6 +20,7 @@ export default function AdminLayout({
   const pathname = usePathname()
   const isLoginPage = pathname === "/admin/login"
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { isCollapsed } = useSidebar()
 
   useEffect(() => {
     // 如果是登录页面，不需要检查认证
@@ -64,7 +67,13 @@ export default function AdminLayout({
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 md:ml-64 overflow-auto relative">
+      <main 
+        className={cn(
+          "flex-1 overflow-auto relative transition-all duration-300",
+          "md:ml-64", // 默认展开状态：左边距 64 (w-64 = 16rem = 256px)
+          isCollapsed && "md:ml-16" // 折叠状态：左边距 16 (w-16 = 4rem = 64px)
+        )}
+      >
         {/* 小屏幕：汉堡菜单按钮 */}
         <div className="md:hidden fixed top-4 left-4 z-40">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -80,6 +89,20 @@ export default function AdminLayout({
         </div>
       </main>
     </div>
+  )
+}
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <SidebarProvider>
+      <AdminLayoutContent>
+        {children}
+      </AdminLayoutContent>
+    </SidebarProvider>
   )
 }
 

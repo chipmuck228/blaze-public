@@ -272,7 +272,7 @@ export const Team = () => {
           ({ id, imageUrl, name, position, socialNetworks, description }: TeamProps) => (
             <Card
               key={id}
-              className="bg-muted/50 relative mt-8 flex flex-col h-full w-full"
+              className="bg-muted/50 relative mt-8 flex flex-col h-full w-full font-sans"
             >
               <CardHeader className="mt-8 flex flex-col justify-center items-center pb-2 flex-shrink-0">
                 <Image
@@ -285,13 +285,13 @@ export const Team = () => {
                   placeholder="blur"
                   blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iOTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNDgiIGN5PSI0OCIgcj0iNDgiIGZpbGw9IiNlNWU3ZWIiLz48L3N2Zz4="
                 />
-                <CardTitle className="text-center">{name}</CardTitle>
-                <CardDescription className="text-primary">
+                <CardTitle className="text-center font-sans">{name}</CardTitle>
+                <CardDescription className="text-primary font-sans">
                   {position}
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="text-center pb-2 text-sm flex-1 flex flex-col justify-center min-h-[100px] px-4">
+              <CardContent className="text-center pb-2 text-sm flex-1 flex flex-col justify-center min-h-[100px] px-4 font-sans">
                 <p className="line-clamp-4 leading-relaxed">{description}</p>
               </CardContent>
 

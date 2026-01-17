@@ -452,8 +452,8 @@ export function CourseEditDialog({
 
       {/* Main Course Edit Dialog */}
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[900px] xl:max-w-[1000px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>
             {course ? (isArchived ? "View Course (Archived)" : "Edit Course") : "Add New Course"}
           </DialogTitle>
@@ -473,13 +473,15 @@ export function CourseEditDialog({
           )}
         </DialogHeader>
 
-        <Tabs defaultValue="basic" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="basic">Basic Information</TabsTrigger>
-            <TabsTrigger value="prerequisites">Prerequisites</TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col flex-1 min-h-0">
+          <Tabs defaultValue="basic" className="w-full flex flex-col flex-1 min-h-0">
+            <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
+              <TabsTrigger value="basic">Basic Information</TabsTrigger>
+              <TabsTrigger value="prerequisites">Prerequisites</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="basic" className="space-y-4">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4 mt-4">
+            <TabsContent value="basic" className="space-y-4 mt-0">
             <form onSubmit={handleSubmit} className="space-y-4">
           {/* Course Name */}
           <div className="space-y-2">
@@ -911,11 +913,11 @@ export function CourseEditDialog({
             />
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !formData.name || isArchived}>
+            <Button type="submit" disabled={isLoading || !formData.name || isArchived} className="w-full sm:w-auto">
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -933,13 +935,15 @@ export function CourseEditDialog({
         </form>
           </TabsContent>
 
-          <TabsContent value="prerequisites" className="space-y-4">
+          <TabsContent value="prerequisites" className="space-y-4 mt-0">
             <CoursePrerequisitesManager
               courseId={course?.id || null}
               disabled={isArchived}
             />
           </TabsContent>
+          </div>
         </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
     </>

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { useSidebar } from "@/contexts/SidebarContext"
 import {
   Accordion,
   AccordionContent,
@@ -28,6 +29,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ShoppingCart,
+  Package,
+  Network,
+  Mail,
+  Send,
+  FileText,
+  BarChart3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -53,9 +60,9 @@ const menuItems = [
     icon: UserCircle,
   },
   {
-    title: "Franchises",
-    href: "/admin/franchises",
-    icon: MapPin,
+    title: "Traffic",
+    href: "/admin/traffic",
+    icon: BarChart3,
   },
   {
     title: "Admin Guide",
@@ -80,6 +87,16 @@ const courseMenuItems = [
     href: "/admin/instances",
     icon: Calendar,
   },
+  {
+    title: "New Offerings",
+    href: "/admin/offerings",
+    icon: Package,
+  },
+  {
+    title: "New Assignments",
+    href: "/admin/offerings-assignments",
+    icon: Network,
+  },
 ]
 
 const settingsMenuItems = [
@@ -99,6 +116,11 @@ const settingsMenuItems = [
     icon: MapPin,
   },
   {
+    title: "Franchises",
+    href: "/admin/franchises",
+    icon: Network,
+  },
+  {
     title: "Subcategories",
     href: "/admin/subcategories",
     icon: Tag,
@@ -107,6 +129,29 @@ const settingsMenuItems = [
     title: "Learning Paths",
     href: "/admin/learning-paths",
     icon: FolderTree,
+  },
+  {
+    title: "Offering Types",
+    href: "/admin/offering-types",
+    icon: Package,
+  },
+]
+
+const newsletterMenuItems = [
+  {
+    title: "Subscribers",
+    href: "/admin/newsletter/subscribers",
+    icon: Mail,
+  },
+  {
+    title: "Templates",
+    href: "/admin/newsletter/templates",
+    icon: FileText,
+  },
+  {
+    title: "Send Newsletter",
+    href: "/admin/newsletter/send",
+    icon: Send,
   },
 ]
 
@@ -117,7 +162,7 @@ interface AdminSidebarProps {
 export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
   const pathname = usePathname()
   const router = useRouter()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const { isCollapsed, setIsCollapsed } = useSidebar()
 
   const handleSignOut = async () => {
     await signOut({ redirect: false })
@@ -132,6 +177,11 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
 
   // 检查是否有任何设置相关的页面是活动的
   const isAnySettingsPageActive = settingsMenuItems.some(
+    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  )
+
+  // 检查是否有任何 Newsletter 相关的页面是活动的
+  const isAnyNewsletterPageActive = newsletterMenuItems.some(
     (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
   )
 
@@ -302,6 +352,73 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
         ) : (
           <div className="space-y-1">
             {settingsMenuItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+              
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href} 
+                  title={item.title}
+                  onClick={onNavigate}
+                >
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-center px-0",
+                      isActive && "bg-secondary"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </Button>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Newsletter 可展开菜单 */}
+        {!isCollapsed ? (
+          <Accordion type="single" collapsible defaultValue={isAnyNewsletterPageActive ? "newsletter" : undefined} className="w-full">
+            <AccordionItem value="newsletter" className="border-none">
+              <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                <div className="flex items-center gap-2 w-full">
+                  <Mail className="h-4 w-4" />
+                  <span className="text-sm font-medium pl-2">Newsletter Admin</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-0 pt-2">
+                <div className="space-y-1 pl-6">
+                  {newsletterMenuItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                    
+                    return (
+                      <Link 
+                        key={item.href} 
+                        href={item.href}
+                        onClick={onNavigate}
+                      >
+                        <Button
+                          variant={isActive ? "secondary" : "ghost"}
+                          className={cn(
+                            "w-full justify-start text-sm",
+                            isActive && "bg-secondary"
+                          )}
+                        >
+                          <Icon className="mr-2 h-4 w-4" />
+                          {item.title}
+                        </Button>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : (
+          <div className="space-y-1">
+            {newsletterMenuItems.map((item) => {
               const Icon = item.icon
               const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
               
