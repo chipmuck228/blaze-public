@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
@@ -72,7 +72,7 @@ interface Franchise {
   programs: Program[]
 }
 
-export default function ProgramsPage() {
+function ProgramsPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { data: session } = useSession()
@@ -637,3 +637,18 @@ export default function ProgramsPage() {
   )
 }
 
+export default function ProgramsPage() {
+  return (
+    <Suspense fallback={
+      <>
+        <Navbar />
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+        <Footer />
+      </>
+    }>
+      <ProgramsPageContent />
+    </Suspense>
+  )
+}
