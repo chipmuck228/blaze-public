@@ -5,11 +5,14 @@ import { AIChatDialog } from './AIChatDialog'
 import { MessageCircle } from 'lucide-react'
 
 interface AIChatButtonProps {
-  franchiseCode: string
-  franchiseName: string
+  franchiseCode?: string
+  franchiseName?: string
 }
 
-export function AIChatButton({ franchiseCode, franchiseName }: AIChatButtonProps) {
+export function AIChatButton({ 
+  franchiseCode = 'general', 
+  franchiseName = 'Blaze Robotics Academy' 
+}: AIChatButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 

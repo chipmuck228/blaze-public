@@ -10,15 +10,15 @@ import { X, Send, Loader2, MessageCircle, Minimize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface AIChatDialogProps {
-  franchiseCode: string
-  franchiseName: string
+  franchiseCode?: string
+  franchiseName?: string
   isOpen: boolean
   onOpenChange: (open: boolean) => void
 }
 
 export function AIChatDialog({
-  franchiseCode,
-  franchiseName,
+  franchiseCode = 'general',
+  franchiseName = 'Blaze Robotics Academy',
   isOpen,
   onOpenChange,
 }: AIChatDialogProps) {
