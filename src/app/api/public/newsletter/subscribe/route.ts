@@ -56,7 +56,16 @@ export async function POST(request: Request) {
         }
 
         // 发送欢迎邮件（重新订阅）
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+        // 获取 base URL：优先使用 NEXT_PUBLIC_APP_URL，其次使用 VERCEL_URL，最后使用 localhost
+        let baseUrl = process.env.NEXT_PUBLIC_APP_URL
+        if (!baseUrl) {
+          // 在 Vercel 环境中，使用 VERCEL_URL（Vercel 自动提供）
+          if (process.env.VERCEL_URL) {
+            baseUrl = `https://${process.env.VERCEL_URL}`
+          } else {
+            baseUrl = "http://localhost:3000"
+          }
+        }
         const unsubscribeLink = `${baseUrl}/newsletter/unsubscribe?token=${unsubscribeToken}`
         
         const welcomeEmailSubject = "Welcome Back to Our Newsletter!"
@@ -76,7 +85,7 @@ export async function POST(request: Request) {
               
               <p>You'll continue to receive our latest updates, news, and insights directly in your inbox.</p>
               
-              <p style="margin-top: 30px;">Best regards,<br>The Team</p>
+              <p style="margin-top: 30px;">Best regards,<br>The Blaze Robotics Admin Team</p>
             </div>
             
             <div style="margin-top: 40px; padding: 20px; border-top: 1px solid #e0e0e0; text-align: center; font-size: 12px; color: #666;">
@@ -128,7 +137,16 @@ export async function POST(request: Request) {
     }
 
     // 发送欢迎邮件（异步，不阻塞响应）
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    // 获取 base URL：优先使用 NEXT_PUBLIC_APP_URL，其次使用 VERCEL_URL，最后使用 localhost
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (!baseUrl) {
+      // 在 Vercel 环境中，使用 VERCEL_URL（Vercel 自动提供）
+      if (process.env.VERCEL_URL) {
+        baseUrl = `https://${process.env.VERCEL_URL}`
+      } else {
+        baseUrl = "http://localhost:3000"
+      }
+    }
     const unsubscribeLink = `${baseUrl}/newsletter/unsubscribe?token=${unsubscribeToken}`
     
     const welcomeEmailSubject = "Welcome to Our Newsletter!"
