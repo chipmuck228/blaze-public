@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { AdminSidebar } from "@/components/admin/AdminSidebar"
+import { NotificationCenter } from "@/components/admin/NotificationCenter"
 import { Button } from "@/components/ui/button"
 import { Menu } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
@@ -74,17 +75,22 @@ function AdminLayoutContent({
           isCollapsed && "md:ml-16" // 折叠状态：左边距 16 (w-16 = 4rem = 64px)
         )}
       >
-        {/* 小屏幕：汉堡菜单按钮 */}
-        <div className="md:hidden fixed top-4 left-4 z-40">
-          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-10 w-10">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-          </Sheet>
+        {/* 顶部导航栏 */}
+        <div className="fixed top-0 right-0 left-0 md:left-64 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b flex items-center justify-between px-4 h-14">
+          <div className="md:hidden">
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+            </Sheet>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <NotificationCenter />
+          </div>
         </div>
-        <div className="md:pt-0 pt-16">
+        <div className="md:pt-14 pt-16">
           {children}
         </div>
       </main>

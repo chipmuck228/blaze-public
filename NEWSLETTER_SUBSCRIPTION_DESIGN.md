@@ -109,6 +109,10 @@ CREATE TABLE newsletter_sends (
   status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'sent', 'failed', 'bounced'
   sent_at TIMESTAMP WITH TIME ZONE,
   error_message TEXT,
+  retry_count INTEGER DEFAULT 0,
+  last_retry_at TIMESTAMP WITH TIME ZONE,
+  is_permanent_failure BOOLEAN DEFAULT FALSE,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -117,9 +121,18 @@ CREATE INDEX idx_newsletter_sends_campaign ON newsletter_sends(campaign_id);
 CREATE INDEX idx_newsletter_sends_subscriber ON newsletter_sends(subscriber_id);
 CREATE INDEX idx_newsletter_sends_status ON newsletter_sends(status);
 
+-- 索引
+CREATE INDEX idx_newsletter_sends_status ON newsletter_sends(status);
+CREATE INDEX idx_newsletter_sends_failed ON newsletter_sends(status, created_at) WHERE status = 'failed';
+CREATE INDEX idx_newsletter_sends_campaign_status ON newsletter_sends(campaign_id, status);
+
 -- 注释
 COMMENT ON TABLE newsletter_sends IS 'Newsletter 发送详情记录';
 COMMENT ON COLUMN newsletter_sends.status IS '发送状态：pending(待发送), sent(已发送), failed(失败), bounced(退回)';
+COMMENT ON COLUMN newsletter_sends.error_message IS '失败原因（当 status = failed 时）';
+COMMENT ON COLUMN newsletter_sends.retry_count IS '重试次数，用于限制重试次数';
+COMMENT ON COLUMN newsletter_sends.last_retry_at IS '最后重试时间';
+COMMENT ON COLUMN newsletter_sends.is_permanent_failure IS '是否为永久失败（如邮箱地址无效），永久失败的邮件不应再重试';
 ```
 
 ### 2.2 数据库迁移脚本
@@ -155,6 +168,27 @@ COMMENT ON COLUMN newsletter_sends.status IS '发送状态：pending(待发送),
   "error": "Email already subscribed"
 }
 ```
+
+**实现逻辑：**
+1. 验证邮箱格式
+2. 检查是否已订阅
+3. 创建订阅记录（新订阅）或更新订阅记录（重新订阅）
+4. **自动发送欢迎邮件**（异步，不阻塞响应）：
+   - 新订阅：发送"Welcome to Our Newsletter!"邮件
+   - 重新订阅：发送"Welcome Back to Our Newsletter!"邮件
+   - 邮件包含退订链接（使用 `unsubscribe_token`）
+   - HTML 格式，响应式设计
+5. 返回成功响应
+
+**欢迎邮件内容：**
+- 欢迎信息和感谢
+- 期望内容说明（最新更新、独家内容、特别优惠、技巧和最佳实践）
+- 退订链接（自动添加）
+- 品牌风格和设计
+
+**错误处理：**
+- 邮件发送失败不影响订阅成功
+- 记录错误日志但不抛出异常
 
 #### 3.1.2 GET /api/public/newsletter/unsubscribe?token={token}
 
@@ -347,6 +381,113 @@ COMMENT ON COLUMN newsletter_sends.status IS '发送状态：pending(待发送),
 
 取消已计划的发送任务。
 
+#### 3.2.13 GET /api/admin/newsletter/failed-sends
+
+获取失败邮件列表。
+
+**查询参数：**
+- `page`: 页码（默认 1）
+- `limit`: 每页数量（默认 20）
+- `campaign_id`: 筛选特定 campaign（可选）
+- `email`: 搜索邮箱（可选）
+- `start_date`: 开始日期（可选）
+- `end_date`: 结束日期（可选）
+
+**响应：**
+```json
+{
+  "failed_sends": [
+    {
+      "id": "...",
+      "campaign_id": "...",
+      "campaign_subject": "Monthly Newsletter",
+      "subscriber_id": "...",
+      "email": "user@example.com",
+      "status": "failed",
+      "error_message": "SMTP connection timeout",
+      "created_at": "2024-01-15T10:00:00Z",
+      "retry_count": 0
+    }
+  ],
+  "total": 50,
+  "page": 1,
+  "limit": 20,
+  "totalPages": 3
+}
+```
+
+#### 3.2.14 POST /api/admin/newsletter/failed-sends/retry
+
+重发失败的邮件。
+
+**请求体：**
+```json
+{
+  "send_ids": ["id1", "id2", "id3"],  // 要重发的 send ID 列表
+  "campaign_id": "..."  // 可选：重发整个 campaign 的所有失败邮件
+}
+```
+
+**响应：**
+```json
+{
+  "success": true,
+  "retried_count": 3,
+  "failed_count": 0,
+  "message": "Successfully retried 3 failed emails"
+}
+```
+
+**错误响应：**
+```json
+{
+  "error": "Some emails failed to retry",
+  "retried_count": 2,
+  "failed_count": 1,
+  "failed_sends": [
+    {
+      "send_id": "id3",
+      "error": "Subscriber no longer active"
+    }
+  ]
+}
+```
+
+#### 3.2.15 GET /api/admin/newsletter/failed-sends/stats
+
+获取失败邮件统计信息。
+
+**查询参数：**
+- `start_date`: 开始日期（可选）
+- `end_date`: 结束日期（可选）
+
+**响应：**
+```json
+{
+  "total_failed": 150,
+  "failed_by_reason": {
+    "SMTP connection timeout": 45,
+    "Invalid email address": 30,
+    "Mailbox full": 25,
+    "DNS resolution failed": 20,
+    "Other": 30
+  },
+  "failed_by_campaign": [
+    {
+      "campaign_id": "...",
+      "campaign_subject": "Monthly Newsletter",
+      "failed_count": 50
+    }
+  ],
+  "recent_failures": [
+    {
+      "date": "2024-01-15",
+      "count": 10
+    }
+  ]
+}
+```
+
 ## 四、前端组件设计
 
 ### 4.1 退订页面组件
@@ -478,7 +619,7 @@ import { Toaster } from "sonner"
 6. 设置活动模板
 
 **模板编辑器：**
-- 使用富文本编辑器（如 TipTap 或 React Quill）
+- 使用 TipTap 富文本编辑器
 - 支持 HTML 编辑
 - 预览功能
 - 变量占位符支持（如 `{{unsubscribe_link}}`）
@@ -605,12 +746,24 @@ const emailContent = template.content_html.replace(
   ↓
 创建订阅记录（生成 unsubscribe_token）
   ↓
+异步发送欢迎邮件（包含退订链接）
+  ↓
 返回成功响应
   ↓
 前端显示 Sonner 成功提示
   ↓
 重置表单
 ```
+
+**欢迎邮件功能：**
+- **新订阅时**：自动发送欢迎邮件，包含：
+  - 欢迎信息和感谢
+  - 期望内容说明（最新更新、独家内容、特别优惠、技巧和最佳实践）
+  - 退订链接（使用用户的 `unsubscribe_token`）
+- **重新订阅时**：发送"欢迎回来"邮件
+- **邮件格式**：HTML 格式，响应式设计
+- **发送方式**：异步发送，不阻塞订阅响应
+- **错误处理**：发送失败不影响订阅成功
 
 ### 7.2 信息条款查看流程
 
@@ -651,12 +804,65 @@ Admin 进入发送页面
   ↓
 创建发送记录（newsletter_sends）
   ↓
-批量发送邮件
+立即显示进度条（0%）
   ↓
-更新发送状态和统计
+建立 SSE 连接，实时推送进度
   ↓
-显示发送结果
+批量发送邮件（异步处理）
+  ↓
+每发送10封或每10%进度更新一次 campaign 进度
+  ↓
+SSE 每2秒推送进度更新到前端
+  ↓
+前端实时显示进度（已发送/失败数量、百分比）
+  ↓
+发送完成后更新 campaign 状态
+  ↓
+创建通知记录（newsletter_sent 或 newsletter_failed）
+  ↓
+SSE 推送完成事件
+  ↓
+前端显示完成状态
+  ↓
+用户可通过通知中心查看详细结果
 ```
+
+**实时进度显示功能：**
+- **立即显示**：点击发送后立即显示进度条（0%）
+- **实时更新**：SSE 每2秒推送进度更新
+- **进度信息**：
+  - 进度条（百分比）
+  - 已发送数量
+  - 失败数量
+  - 总收件人数
+  - 发送状态（sending/sent/failed）
+- **用户提示**：发送中显示"You can leave this page and check back later"
+
+**用户离开页面后返回功能：**
+- **自动恢复**：页面加载时检查是否有正在发送的 campaign
+- **恢复进度**：如果有，自动恢复进度显示并重新连接 SSE
+- **状态同步**：用户可以随时返回查看发送进度
+
+**遗留 Campaign 检测和修复：**
+- **检测机制**：页面加载时检查 campaign 创建时间
+  - 如果创建超过30分钟且没有进度（`sent_count === 0 && failed_count === 0`），判定为卡住
+  - 如果所有邮件已处理但状态仍为 "sending"，判定为状态不一致
+- **修复策略**：
+  - 卡住的 campaign：不恢复状态显示，避免误导用户
+  - 状态不一致的 campaign：不恢复状态显示，让 SSE 流自动修复
+- **自动修复**：SSE 流检测到异常状态时自动修复
+  - 所有邮件已处理但状态仍为 "sending" → 自动更新状态并发送 `completed` 事件
+  - 卡住的 campaign → 自动标记为 "failed" 并发送 `completed` 事件
+
+**发送结果异步通知：**
+- **通知类型**：
+  - `newsletter_sent`：发送成功
+  - `newsletter_failed`：发送失败
+- **通知内容**：
+  - Campaign ID
+  - 邮件主题
+  - 发送统计（总数、成功数、失败数）
+- **通知显示**：通过通知中心显示，不在发送页面显示 toast
 
 #### 7.3.2 定时发送
 
@@ -1106,11 +1312,17 @@ To unsubscribe, visit: {{unsubscribe_link}}
 9. ✅ **邮件中退订链接生成**
 
 ### 中优先级
-1. Admin 模板编辑器（富文本）
-2. 定时发送功能
-3. 发送历史查看
-4. 发送统计
-5. 退订统计和分析
+1. ✅ Admin 模板编辑器（富文本）
+2. ✅ 定时发送功能
+3. ✅ 发送历史查看
+4. ✅ 发送统计
+5. ✅ 退订统计和分析
+6. **失败邮件追踪和重发功能**（新增）
+   - 失败邮件列表查看
+   - 失败原因显示和分析
+   - 单个/批量重发功能
+   - 失败统计图表
+   - 智能重试机制（避免永久失败邮件重复重试）
 
 ### 低优先级
 1. 邮件模板变量系统（扩展）
@@ -1165,7 +1377,7 @@ To unsubscribe, visit: {{unsubscribe_link}}
 - React / Next.js
 - Sonner（Toast 通知）
 - shadcn/ui 组件（Dialog, Table, Form）
-- TipTap 或 React Quill（富文本编辑器）
+- TipTap（富文本编辑器）
 
 ### 后端
 - Next.js API Routes
@@ -1189,11 +1401,892 @@ To unsubscribe, visit: {{unsubscribe_link}}
 9. **退订后处理**：确保退订用户立即从发送列表中排除
 10. **用户体验**：退订流程应简单明了，避免用户困惑
 
-## 十四、未来扩展
+## 十四、失败邮件追踪和重发功能详细设计
+
+### 14.1 功能概述
+
+管理员需要能够：
+1. **查看失败邮件列表**：了解哪些邮件发送失败
+2. **查看失败原因**：了解失败的具体原因（SMTP 错误、邮箱无效等）
+3. **重发失败邮件**：支持单个或批量重发
+4. **失败统计**：查看失败趋势和原因分布
+5. **智能重试**：避免永久失败的邮件重复重试
+
+### 14.2 数据库扩展
+
+#### 14.2.1 newsletter_sends 表扩展
+
+在 `newsletter_sends` 表中添加以下字段（如果尚未存在）：
+
+```sql
+ALTER TABLE newsletter_sends
+ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS last_retry_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS is_permanent_failure BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- 添加索引以优化查询性能
+CREATE INDEX IF NOT EXISTS idx_newsletter_sends_failed 
+ON newsletter_sends(status, created_at) 
+WHERE status = 'failed';
+
+CREATE INDEX IF NOT EXISTS idx_newsletter_sends_campaign_status 
+ON newsletter_sends(campaign_id, status);
+```
+
+#### 14.2.2 newsletter_retry_tasks 表（新增）
+
+用于记录异步重发任务：
+
+```sql
+CREATE TABLE IF NOT EXISTS newsletter_retry_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) NOT NULL,
+  task_type TEXT NOT NULL DEFAULT 'retry_failed_sends',
+  send_ids UUID[] NOT NULL,
+  campaign_id UUID REFERENCES newsletter_campaigns(id),
+  status TEXT NOT NULL DEFAULT 'pending',
+  total_count INTEGER DEFAULT 0,
+  processed_count INTEGER DEFAULT 0,
+  success_count INTEGER DEFAULT 0,
+  failed_count INTEGER DEFAULT 0,
+  skipped_count INTEGER DEFAULT 0,
+  error_message TEXT,
+  started_at TIMESTAMP WITH TIME ZONE,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_newsletter_retry_tasks_user_id ON newsletter_retry_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_newsletter_retry_tasks_status ON newsletter_retry_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_newsletter_retry_tasks_created_at ON newsletter_retry_tasks(created_at DESC);
+
+COMMENT ON TABLE newsletter_retry_tasks IS 'Newsletter 重发任务表，用于异步处理重发操作';
+COMMENT ON COLUMN newsletter_retry_tasks.status IS '任务状态：pending(待处理), processing(处理中), completed(已完成), failed(失败)';
+```
+
+#### 14.2.3 admin_notifications 表（新增）
+
+用于存储管理员通知：
+
+```sql
+CREATE TABLE IF NOT EXISTS admin_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) NOT NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  data JSONB,
+  is_read BOOLEAN DEFAULT FALSE,
+  read_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_user_id ON admin_notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_is_read ON admin_notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_created_at ON admin_notifications(created_at DESC);
+
+ALTER TABLE admin_notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own notifications" ON admin_notifications
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Service can manage notifications" ON admin_notifications
+  FOR ALL USING (true) WITH CHECK (true);
+
+COMMENT ON TABLE admin_notifications IS '管理员通知表，用于异步任务完成通知';
+COMMENT ON COLUMN admin_notifications.type IS '通知类型：retry_task_completed, retry_task_failed 等';
+```
+
+### 14.3 失败原因分类
+
+**临时性错误（可重试）：**
+- SMTP 连接超时
+- SMTP 服务器暂时不可用
+- DNS 解析失败（临时）
+- 网络连接问题
+
+**永久性错误（不应重试）：**
+- 邮箱地址格式无效
+- 邮箱域名不存在
+- 邮箱地址不存在（550 错误）
+- 订阅者已退订
+
+**需要人工处理：**
+- 邮箱已满（可能需要稍后重试）
+- 邮件被标记为垃圾邮件
+- 其他未知错误
+
+### 14.4 API 实现细节
+
+#### 14.4.1 GET /api/admin/newsletter/failed-sends
+
+**实现逻辑：**
+1. 查询 `newsletter_sends` 表，筛选 `status = 'failed'`
+2. 支持按 `campaign_id`、`email`、日期范围筛选
+3. 关联查询 `newsletter_campaigns` 获取 campaign 信息
+4. 返回分页结果
+
+**错误处理：**
+- 无效的日期范围
+- 无效的 campaign_id
+- 数据库查询错误
+
+#### 14.4.2 POST /api/admin/newsletter/failed-sends/retry
+
+**实现逻辑（同步模式 - 已弃用）：**
+1. 验证请求参数（send_ids 或 campaign_id）
+2. 查询要重发的邮件记录
+3. 检查每个邮件：
+   - 如果 `is_permanent_failure = true`，跳过
+   - 如果 `retry_count >= 3`，标记为永久失败并跳过
+   - 如果订阅者已退订（`is_active = false`），跳过
+4. 获取对应的 campaign 和 template
+5. 逐个重发邮件
+6. 更新发送记录：
+   - 成功：`status = 'sent'`, `sent_at = NOW()`
+   - 失败：`retry_count += 1`, `last_retry_at = NOW()`, 更新 `error_message`
+7. 返回重发结果
+
+**实现逻辑（异步模式 - 推荐）：**
+1. 验证请求参数（send_ids 或 campaign_id）
+2. 验证用户权限（管理员）
+3. 创建重发任务记录（`newsletter_retry_tasks` 表）
+4. 立即返回任务 ID 和状态（`pending`）
+5. 后台异步处理重发任务：
+   - 查询要重发的邮件记录
+   - 检查每个邮件（跳过永久失败、超过重试次数、已退订的）
+   - 逐个重发邮件
+   - 更新发送记录和任务状态
+6. 任务完成后发送通知（通过通知系统）
+
+**重发限制：**
+- 每个邮件最多重试 3 次
+- 永久失败的邮件不重试
+- 已退订的订阅者不重试
+
+**异步处理优势：**
+- 用户无需等待长时间操作完成
+- 可以离开页面，稍后查看结果
+- 支持批量处理大量邮件
+- 避免 HTTP 请求超时
+
+#### 14.4.3 GET /api/admin/newsletter/failed-sends/stats
+
+**实现逻辑：**
+1. 统计总失败数
+2. 按 `error_message` 分组统计失败原因
+3. 按 `campaign_id` 分组统计各 campaign 的失败数
+4. 按日期分组统计最近失败趋势
+
+#### 14.4.4 GET /api/admin/newsletter/failed-sends/retry-tasks
+
+**获取重发任务列表**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 查询 `newsletter_retry_tasks` 表
+3. 筛选当前用户的任务
+4. 支持按状态筛选（pending, processing, completed, failed）
+5. 支持分页
+6. 返回任务列表和总数
+
+#### 14.4.5 GET /api/admin/newsletter/failed-sends/retry-tasks/[id]
+
+**获取单个任务详情**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 查询 `newsletter_retry_tasks` 表
+3. 验证任务属于当前用户
+4. 返回任务详细信息（包含进度统计）
+
+#### 14.4.6 POST /api/admin/newsletter/failed-sends/retry-tasks/process
+
+**后台任务处理器**
+
+**实现逻辑：**
+1. 获取任务 ID（从请求 body）
+2. 查询任务记录（状态为 pending）
+3. 更新任务状态为 processing
+4. 获取要重发的邮件记录（包含 campaign、template、subscriber）
+5. 逐个处理邮件重发：
+   - 检查永久失败标记，跳过
+   - 检查重试次数限制（>=3），标记为永久失败并跳过
+   - 检查订阅者状态，已退订则跳过
+   - 准备邮件内容（替换 unsubscribe link）
+   - 调用 `sendNewsletterEmail` 发送邮件
+   - 更新发送记录状态（成功或失败）
+6. 每处理 10 个邮件更新一次任务进度
+7. 任务完成后：
+   - 更新任务状态为 completed
+   - 创建通知记录（`admin_notifications`）
+8. 错误处理：任务失败时更新状态并创建失败通知
+
+**关键特性：**
+- 异步处理，不阻塞 HTTP 响应
+- 详细的日志记录
+- 智能跳过永久失败的邮件
+- 自动更新重试次数和错误信息
+
+#### 14.4.7 GET /api/admin/newsletter/campaigns/send/stream
+
+**Server-Sent Events (SSE) Newsletter 发送进度流**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 获取 `campaign_id` 查询参数
+3. 建立 SSE 连接，设置响应头：
+   - `Content-Type: text/event-stream`
+   - `Cache-Control: no-cache, no-transform`
+   - `Connection: keep-alive`
+   - `X-Accel-Buffering: no`
+4. 发送初始连接消息（`connected` 事件）
+5. 定期检查 campaign 进度（每 2 秒）：
+   - 查询 `newsletter_campaigns` 表（包含 `created_at` 字段）
+   - 获取 `sent_count`、`failed_count`、`total_recipients`、`status`、`created_at`
+   - 计算进度百分比
+   - 如果计数有变化，推送 `progress` 事件
+   - **自动修复机制**：
+     a. 如果所有邮件已处理（`sent_count + failed_count >= total_recipients`）但状态仍为 "sending"，自动更新状态并推送 `completed` 事件
+     b. 如果 campaign 创建超过30分钟且没有进度（`sent_count === 0 && failed_count === 0`），自动标记为 "failed" 并推送 `completed` 事件
+6. 发送完成时推送 `completed` 事件
+7. 发送心跳消息（每 30 秒）保持连接活跃
+8. 监听客户端断开连接，清理资源
+
+**事件格式：**
+- `connected`: `{ type: "connected", message: "Connected to campaign stream" }`
+- `progress`: `{ type: "progress", campaign_id, sent_count, failed_count, total_recipients, progress, status }`
+- `completed`: `{ type: "completed", campaign_id, sent_count, failed_count, total_recipients, status }`
+- `heartbeat`: `: heartbeat`
+
+**使用场景：**
+- Admin 发送 Newsletter 时实时显示进度
+- 用户离开页面后返回时恢复进度显示
+- 自动修复遗留的 "sending" 状态 campaign
+- 自动修复状态不一致的 campaign
+
+#### 14.4.8 GET /api/admin/notifications/stream
+
+**Server-Sent Events (SSE) 实时通知流**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 建立 SSE 连接，设置响应头：
+   - `Content-Type: text/event-stream`
+   - `Cache-Control: no-cache, no-transform`
+   - `Connection: keep-alive`
+   - `X-Accel-Buffering: no`（禁用 Nginx 缓冲）
+3. 发送初始连接消息（`connected` 事件）
+4. 定期检查新通知（每 3 秒）：
+   - 查询 `admin_notifications` 表
+   - 筛选当前用户的未读通知
+   - 检查 `created_at > lastCheckTime` 的新通知
+   - 如果发现新通知，推送 `new_notifications` 事件
+5. 发送心跳消息（每 30 秒）保持连接活跃
+6. 监听客户端断开连接，清理资源
+
+**事件格式：**
+- `connected`: `{ type: "connected", message: "Connected to notification stream" }`
+- `new_notifications`: `{ type: "new_notifications", count: <number> }`
+- `heartbeat`: `: heartbeat`（注释消息，不触发 onmessage）
+
+**错误处理：**
+- 连接断开时正确清理资源
+- 数据库查询错误记录日志但不中断连接
+- 发送数据失败时记录错误
+
+**性能优化：**
+- 使用索引优化通知查询
+- 限制查询结果数量（最多 10 条）
+- 后台检查不阻塞主线程
+- 只在有新通知时才推送事件
+
+#### 14.4.8 GET /api/admin/notifications
+
+**获取通知列表**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 查询 `admin_notifications` 表
+3. 支持筛选：
+   - `is_read`: true/false（筛选已读/未读）
+   - `type`: 通知类型
+   - `page`: 页码
+   - `limit`: 每页数量
+4. 返回通知列表和未读数量
+
+#### 14.4.11 PUT /api/admin/notifications/[id]/read
+
+**标记通知为已读**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 验证通知属于当前用户
+3. 更新 `is_read = true`, `read_at = NOW()`
+4. 返回成功响应
+
+#### 14.4.12 PUT /api/admin/notifications/read-all
+
+**标记所有通知为已读**
+
+**实现逻辑：**
+1. 验证用户权限（管理员）
+2. 批量更新当前用户的所有未读通知
+3. 设置 `is_read = true`, `read_at = NOW()`
+4. 返回成功响应
+
+### 14.5 前端页面实现
+
+#### 14.5.1 失败邮件列表页面
+
+**路由：** `/admin/newsletter/failed-sends`
+
+**功能模块：**
+1. **统计概览卡片**
+   - 总失败数
+   - 可重试数量
+   - 永久失败数量
+   - 最近 7 天失败趋势
+
+2. **筛选器**
+   - Campaign 下拉选择
+   - 邮箱搜索框
+   - 日期范围选择器
+   - 失败原因筛选
+
+3. **操作栏**
+   - 全选/取消全选
+   - 批量重发选中邮件
+   - 重发当前筛选条件下的所有邮件
+   - 导出 CSV
+
+4. **失败邮件表格**
+   - 选择框（checkbox）
+   - Campaign 名称/主题
+   - 订阅者邮箱
+   - 失败时间
+   - 失败原因（带颜色标签）
+   - 重试次数
+   - 操作按钮（单个重发）
+
+**UI 设计要点：**
+- 失败原因使用不同颜色的 Badge 显示
+- 永久失败的邮件使用灰色显示，禁用重发按钮
+- 重试次数超过限制的邮件显示警告图标
+- 支持表格排序（按时间、失败原因等）
+
+#### 14.5.2 重发确认对话框
+
+**触发时机：** 点击重发按钮时
+
+**内容：**
+- 显示将要重发的邮件数量
+- 显示重发邮件列表（可选，如果数量少）
+- 警告信息（如果有永久失败的邮件将被跳过）
+- 确认/取消按钮
+
+**重发进度：**（可选）
+- 显示重发进度条
+- 实时更新成功/失败数量
+
+#### 14.5.3 失败统计图表
+
+**位置：** 失败邮件列表页面顶部
+
+**图表类型：**
+1. **失败原因分布饼图**：显示各种失败原因的比例
+2. **失败趋势折线图**：显示最近 30 天的失败趋势
+3. **Campaign 失败柱状图**：显示各 campaign 的失败数量
+
+### 14.6 错误处理策略
+
+#### 14.6.1 错误分类
+
+**自动识别永久失败：**
+- 邮箱格式错误（正则验证）
+- 550 错误（邮箱不存在）
+- 553 错误（邮箱域名无效）
+- 订阅者已退订
+
+**自动识别临时失败：**
+- 连接超时
+- DNS 解析失败
+- SMTP 服务器 4xx 错误（临时）
+
+#### 14.6.2 重试策略
+
+1. **立即重试**：管理员手动触发
+2. **延迟重试**：（可选）自动延迟重试，如 1 小时后
+3. **重试限制**：最多 3 次
+4. **智能跳过**：永久失败的邮件自动跳过
+
+### 14.7 实施检查清单
+
+#### 14.7.1 数据库
+- [ ] 添加 `retry_count` 字段
+- [ ] 添加 `last_retry_at` 字段
+- [ ] 添加 `is_permanent_failure` 字段
+- [ ] 添加 `updated_at` 字段
+- [ ] 创建失败邮件查询索引
+- [ ] 更新现有记录的默认值
+
+#### 14.7.2 API
+- [ ] 实现 `GET /api/admin/newsletter/failed-sends`
+- [ ] 实现 `POST /api/admin/newsletter/failed-sends/retry`
+- [ ] 实现 `GET /api/admin/newsletter/failed-sends/stats`
+- [ ] 错误处理和验证
+- [ ] 权限验证（仅管理员）
+
+#### 14.7.3 前端
+- [x] 创建失败邮件列表页面
+- [x] 实现筛选功能
+- [x] 实现批量选择
+- [x] 实现重发功能（异步模式）
+- [x] 实现统计图表
+- [x] 实现导出功能
+- [x] 实现通知中心组件（NotificationCenter）
+- [x] 实现 SSE 实时通知更新
+- [x] 实现任务状态轮询
+- [x] 错误处理和用户提示
+
+#### 14.7.4 测试
+- [ ] 测试失败邮件查询
+- [ ] 测试单个重发
+- [ ] 测试批量重发
+- [ ] 测试永久失败识别
+- [ ] 测试重试次数限制
+- [ ] 测试已退订订阅者跳过
+
+### 14.8 用户体验优化
+
+1. **清晰的失败原因显示**：使用图标和颜色区分不同类型的错误
+2. **智能筛选建议**：根据失败原因提供快速筛选选项
+3. **批量操作确认**：批量重发前显示确认对话框
+4. **重发结果反馈**：显示详细的重发结果（成功/失败数量）
+5. **导出功能**：支持导出失败邮件列表为 CSV，便于分析
+
+### 14.9 性能考虑
+
+1. **分页加载**：失败邮件列表使用分页，避免一次性加载大量数据
+2. **索引优化**：为常用查询字段创建索引
+3. **异步重发**：批量重发使用异步处理，避免阻塞
+4. **缓存统计**：失败统计信息可以缓存，定期更新
+5. **实时通知更新（SSE）**：使用 Server-Sent Events 替代轮询，实现服务器主动推送
+   - 避免频繁的 HTTP 请求
+   - 只在有新通知时才刷新 UI
+   - 减少服务器负载和网络流量
+   - 提供更好的用户体验
+6. **任务批处理**：大量邮件分批处理，避免单次处理过多导致超时
+
+### 14.10 用户体验优化
+
+#### 14.10.1 异步操作反馈
+
+**即时反馈：**
+- 用户点击重发后立即显示"任务已创建"消息
+- 显示任务 ID（便于追踪）
+- 提供任务详情链接
+
+**进度追踪：**
+- 任务详情页面显示实时进度
+- 显示已处理/总数
+- 显示预计剩余时间（可选）
+
+**完成通知：**
+- 通过通知中心显示完成消息
+- Toast 通知（如果用户在当前页面）
+- 邮件通知（可选，用于重要任务）
+
+#### 14.10.2 通知管理
+
+**通知中心功能：**
+- 显示未读通知数量徽章
+- **通知列表（最多5个）**：按时间顺序显示最多5个最新通知
+- 标记为已读功能
+- 一键标记全部已读
+- **清除通知显示**：清除所有通知显示（不删除数据库，仅隐藏）
+- 通知详情查看
+- 通知跳转到相关页面
+- **实时更新机制（SSE）**：使用 Server-Sent Events 实现实时通知推送
+- **View all notifications 按钮**：始终显示，点击跳转到完整通知页面
+
+**通知类型：**
+- `retry_task_completed`：重发任务完成
+- `retry_task_failed`：重发任务失败
+- `newsletter_sent`：Newsletter 发送成功（✅ 已实现）
+- `newsletter_failed`：Newsletter 发送失败（✅ 已实现）
+- 系统告警（未来扩展）
+
+**通知显示优化：**
+- **数量限制**：最多显示5个最新通知（按时间顺序，最新的在前）
+- **清除功能**：添加"Clear"按钮，清除所有通知显示（本地状态，不删除数据库）
+- **过滤机制**：已清除的通知不再显示，直到有新通知
+- **View all 按钮**：始终显示"View all notifications"按钮，点击跳转到完整通知页面
+
+**实时通知更新机制（SSE）：**
+
+**设计目标：**
+- 避免频繁刷新 UI，提升用户体验
+- 实现服务器主动推送通知更新
+- 减少不必要的网络请求
+- 提供备用机制确保可靠性
+
+**技术实现：**
+
+1. **SSE API 端点**：`GET /api/admin/notifications/stream`
+   - 建立 Server-Sent Events 连接
+   - 服务器每 3 秒检查新通知（后台检查，不刷新 UI）
+   - 检测到新通知时推送 `new_notifications` 事件
+   - 每 30 秒发送心跳保持连接
+   - 正确处理连接断开和资源清理
+
+2. **前端实现**：
+   - 使用 `EventSource` 连接 SSE 流
+   - 监听 `new_notifications` 事件
+   - 只在收到推送事件时才刷新通知列表
+   - SSE 失败时自动回退到 10 秒轮询（备用机制）
+   - 保留自定义事件监听（`refreshNotifications`）用于即时刷新
+
+3. **工作流程：**
+   ```
+   用户打开页面
+     ↓
+   NotificationCenter 建立 SSE 连接
+     ↓
+   服务器后台检查（每3秒，不刷新UI）
+     ↓
+   检测到新通知 → 推送事件
+     ↓
+   客户端接收事件 → 刷新通知列表
+   ```
+
+4. **优势：**
+   - ✅ 通知列表不会频繁刷新（只在有新通知时刷新）
+   - ✅ 新通知实时推送（3秒内）
+   - ✅ 更流畅的用户体验
+   - ✅ 减少服务器负载（相比频繁轮询）
+   - ✅ 有备用机制，可靠性高
+
+5. **API 端点详情：**
+
+   **GET /api/admin/notifications/stream**
+   - **认证**：需要管理员权限
+   - **响应类型**：`text/event-stream`
+   - **事件类型**：
+     - `connected`：连接建立成功
+     - `new_notifications`：检测到新通知（包含 count）
+     - `heartbeat`：心跳消息（保持连接）
+   - **检查频率**：每 3 秒检查一次新通知
+   - **心跳间隔**：每 30 秒发送一次心跳
+
+6. **前端组件实现：**
+
+   **NotificationCenter 组件：**
+   - 使用 `EventSource` 连接 `/api/admin/notifications/stream`
+   - 监听 `onmessage` 事件处理推送
+   - 监听 `onerror` 事件处理连接错误
+   - SSE 失败时自动回退到轮询机制
+   - 组件卸载时正确关闭 SSE 连接
+
+7. **双重保障机制：**
+   - **主要机制**：SSE 实时推送
+   - **备用机制**：自定义事件监听（`refreshNotifications`）
+   - **兜底机制**：SSE 失败时自动回退到 10 秒轮询
+
+8. **性能优化：**
+   - SSE 连接保持打开，避免频繁建立连接
+   - 服务器后台检查，不阻塞主线程
+   - 只在有新通知时才推送，减少网络流量
+   - 心跳机制保持连接活跃，避免超时
+
+#### 14.10.3 错误处理
+
+**任务失败处理：**
+- 记录详细错误信息
+- 通知用户任务失败
+- 提供重试选项（如果适用）
+- 记录到日志系统
+
+**部分成功处理：**
+- 显示成功/失败/跳过统计
+- 提供失败邮件列表链接
+- 允许针对失败邮件再次重试
+
+## 十五、已实现功能总结
+
+### 15.1 核心功能（✅ 已实现）
+
+1. **用户订阅功能**：✅ 已实现
+   - 订阅表单和验证
+   - **自动发送欢迎邮件**（✅ 新增）
+   - 退订功能
+   - 重新订阅功能
+
+2. **Newsletter 发送功能**：✅ 已实现
+   - 模板管理
+   - 立即发送
+   - 定时发送
+   - **实时进度显示（SSE）**（✅ 新增）
+   - **用户离开页面后返回查看进度**（✅ 新增）
+   - **发送结果异步通知**（✅ 新增）
+
+3. **失败邮件管理**：✅ 已实现
+   - 失败邮件列表
+   - 重发功能（异步）
+   - 失败统计
+
+4. **通知系统**：✅ 已实现
+   - 实时通知推送（SSE）
+   - **通知中心优化（最多5个）**（✅ 新增）
+   - **清除通知显示功能**（✅ 新增）
+   - 通知详情页面
+
+### 15.2 新增功能详细说明
+
+#### 15.2.1 自动发送欢迎邮件
+
+**功能描述：**
+- 用户订阅时自动发送欢迎邮件
+- 重新订阅时发送"欢迎回来"邮件
+- 邮件包含退订链接
+
+**实现位置：**
+- API: `POST /api/public/newsletter/subscribe`
+- 异步发送，不阻塞订阅响应
+
+#### 15.2.2 SSE 实时推送发送进度
+
+**功能描述：**
+- 发送 Newsletter 时实时显示进度
+- SSE 每2秒推送进度更新
+- 用户可离开页面，返回后继续查看进度
+
+**实现位置：**
+- API: `GET /api/admin/newsletter/campaigns/send/stream`
+
+#### 15.2.3 数据同步机制和页面状态恢复
+
+**功能描述：**
+- 页面加载时自动检测遗留的 "sending" 状态 campaign
+- 自动恢复发送进度显示
+- 检测并修复卡住的 campaign
+- 确保状态一致性
+
+**实现机制：**
+
+1. **页面加载时的状态恢复**
+   - 页面加载时调用 `checkActiveCampaign()` 函数
+   - 查询状态为 "sending" 的 campaign
+   - 如果找到，恢复进度显示并重新连接 SSE
+   - 检查 campaign 是否卡住（超过30分钟且没有进度）
+   - 如果卡住，不恢复状态，避免显示错误的发送中状态
+
+2. **遗留 Campaign 检测**
+   - 检查 campaign 创建时间（`created_at`）
+   - 如果创建超过30分钟且 `sent_count === 0 && failed_count === 0`，判定为卡住
+   - 如果所有邮件已处理（`sent_count + failed_count >= total_recipients`）但状态仍为 "sending"，判定为状态不一致
+
+3. **SSE 流自动修复机制**
+   - SSE 流每2秒检查 campaign 状态
+   - 如果检测到所有邮件已处理但状态仍为 "sending"，自动更新状态
+   - 如果检测到 campaign 卡住（超过30分钟且没有进度），自动标记为 "failed"
+   - 发送 `completed` 事件给前端，确保状态同步
+
+4. **状态同步流程**
+   ```
+   页面加载
+     ↓
+   checkActiveCampaign()
+     ↓
+   查询 status='sending' 的 campaign
+     ↓
+   检查是否卡住或状态不一致
+     ↓
+   如果正常：恢复进度显示 + 连接 SSE
+   如果异常：清理状态，不恢复显示
+     ↓
+   SSE 流持续监控
+     ↓
+   检测到状态不一致 → 自动修复
+     ↓
+   发送 completed 事件 → 前端更新状态
+   ```
+
+**关键代码位置：**
+- 前端：`src/app/admin/newsletter/send/page.tsx` - `checkActiveCampaign()` 函数
+- 后端 SSE：`src/app/api/admin/newsletter/campaigns/send/stream/route.ts` - 卡住检测和自动修复逻辑
+
+**错误处理：**
+- 如果 `sendEmailsAsync` 函数执行失败，确保更新 campaign 状态为 "failed"
+- 添加 `.catch()` 处理 Promise rejection
+- 添加详细的日志记录，便于调试和追踪问题
+
+**性能优化：**
+- 页面加载时只查询最新的 "sending" campaign（`limit=1`）
+- SSE 流使用心跳机制保持连接活跃
+- 状态检查使用数据库索引优化查询性能
+- 前端: `/admin/newsletter/send` 页面
+
+#### 15.2.3 通知中心优化
+
+**功能描述：**
+- 最多显示5个最新通知（按时间顺序）
+- 添加"Clear"按钮清除通知显示（不删除数据库）
+- "View all notifications"按钮始终显示
+
+**实现位置：**
+- 组件: `NotificationCenter.tsx`
+- 页面: `/admin/notifications`
+
+## 十六、未来扩展
 
 1. **邮件模板系统**：支持模板变量、条件逻辑
-2. **订阅者分组**：按标签、地区等分组发送
-3. **自动化规则**：基于事件的自动发送（如新课程发布）
-4. **分析统计**：打开率、点击率、退订率等
-5. **A/B 测试**：测试不同主题和内容的效果
-6. **多语言支持**：支持多语言 Newsletter
+2. **自动重试机制**：系统自动重试临时失败的邮件（延迟重试）
+3. **失败邮件通知**：失败率达到阈值时通知管理员
+4. **任务队列系统**：使用专业的任务队列（如 Bull、BullMQ）处理大量异步任务
+5. **邮件发送优先级**：支持设置邮件发送优先级，重要邮件优先发送
+6. **批量操作历史**：记录所有批量操作历史，支持撤销和重做
+7. **WebSocket 实时通知**：未来可考虑使用 WebSocket 替代 SSE，支持双向通信（可选）
+8. **订阅者分组**：按标签、地区等分组发送
+9. **自动化规则**：基于事件的自动发送（如新课程发布）
+10. **分析统计**：打开率、点击率、退订率等
+11. **A/B 测试**：测试不同主题和内容的效果
+12. **多语言支持**：支持多语言 Newsletter
+
+### 5.5 失败邮件管理页面
+
+**路径：** `/admin/newsletter/failed-sends`
+
+**功能：**
+1. 显示所有失败邮件列表
+2. 显示失败原因（error_message）
+3. 支持按 campaign、邮箱、日期范围筛选
+4. 支持批量重发失败邮件
+5. 支持单个邮件重发
+6. 显示失败统计信息
+7. 支持导出失败邮件列表
+
+**UI 组件：**
+- Table（失败邮件列表）
+- Badge（失败原因分类）
+- Button（重发、批量重发、导出）
+- Select（筛选器）
+- DateRangePicker（日期范围选择）
+- Card（统计卡片）
+- Dialog（重发确认）
+- Checkbox（批量选择）
+
+**页面结构：**
+```tsx
+<div>
+  <h1>Failed Email Management</h1>
+  
+  {/* 统计卡片 */}
+  <div className="grid grid-cols-4 gap-4">
+    <Card>
+      <CardHeader>Total Failed</CardHeader>
+      <CardContent>{totalFailed}</CardContent>
+    </Card>
+    <Card>
+      <CardHeader>Retryable</CardHeader>
+      <CardContent>{retryableCount}</CardContent>
+    </Card>
+    <Card>
+      <CardHeader>Permanent Failures</CardHeader>
+      <CardContent>{permanentFailures}</CardContent>
+    </Card>
+    <Card>
+      <CardHeader>Failed Last 7 Days</CardHeader>
+      <CardContent>{recentFailures}</CardContent>
+    </Card>
+  </div>
+
+  {/* 筛选器 */}
+  <div className="flex gap-4">
+    <Select>Campaign</Select>
+    <Input>Email Search</Input>
+    <DateRangePicker />
+    <Select>Error Type</Select>
+  </div>
+
+  {/* 操作栏 */}
+  <div className="flex gap-2">
+    <Button>Retry Selected</Button>
+    <Button>Retry All</Button>
+    <Button>Export CSV</Button>
+  </div>
+
+  {/* 失败邮件列表 */}
+  <Table>
+    <thead>
+      <tr>
+        <th><Checkbox /> Select</th>
+        <th>Campaign</th>
+        <th>Email</th>
+        <th>Failed At</th>
+        <th>Error Message</th>
+        <th>Retry Count</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {failedSends.map(send => (
+        <tr key={send.id}>
+          <td><Checkbox /></td>
+          <td>{send.campaign_subject}</td>
+          <td>{send.email}</td>
+          <td>{formatDate(send.created_at)}</td>
+          <td>
+            <Badge variant="destructive">
+              {send.error_message}
+            </Badge>
+          </td>
+          <td>{send.retry_count}</td>
+          <td>
+            <Button 
+              onClick={() => retrySend(send.id)}
+              disabled={send.is_permanent_failure || send.retry_count >= 3}
+            >
+              Retry
+            </Button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </Table>
+</div>
+```
+
+**失败原因分类：**
+- SMTP 连接错误（超时、拒绝连接等）- 可重试
+- 邮箱地址无效（格式错误、域名不存在等）- 永久失败
+- 邮箱已满 - 可重试
+- DNS 解析失败 - 可重试
+- 订阅者已退订 - 永久失败
+- 其他错误 - 根据具体情况判断
+
+**重发功能：**
+1. **单个重发**：点击单行的 "Retry" 按钮
+2. **批量重发**：选择多个邮件后点击 "Retry Selected"
+3. **全部重发**：重发当前筛选条件下的所有失败邮件
+4. **重发限制**：
+   - 每个邮件最多重试 3 次
+   - 如果订阅者已退订，跳过重发
+   - 如果邮箱地址无效，标记为永久失败
+
+**重发流程：**
+1. 用户选择要重发的邮件
+2. 点击重发按钮
+3. 显示确认对话框（显示将要重发的邮件数量）
+4. 确认后调用重发 API
+5. 显示重发进度（可选）
+6. 显示重发结果（成功/失败数量）
+7. 更新列表状态
+
+**失败统计图表：**
+- 失败原因分布饼图
+- 失败趋势折线图（最近 30 天）
+- Campaign 失败柱状图
+

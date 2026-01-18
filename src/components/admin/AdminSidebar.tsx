@@ -28,6 +28,7 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
+  History,
   ShoppingCart,
   Package,
   Network,
@@ -35,6 +36,7 @@ import {
   Send,
   FileText,
   BarChart3,
+  AlertCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -152,6 +154,16 @@ const newsletterMenuItems = [
     title: "Send Newsletter",
     href: "/admin/newsletter/send",
     icon: Send,
+  },
+  {
+    title: "Campaigns",
+    href: "/admin/newsletter/campaigns",
+    icon: History,
+  },
+  {
+    title: "Failed Sends",
+    href: "/admin/newsletter/failed-sends",
+    icon: AlertCircle,
   },
 ]
 

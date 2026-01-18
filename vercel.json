@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/process-expired-enrollments",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/newsletter-send",
+      "schedule": "* * * * *"
     }
   ]
 }

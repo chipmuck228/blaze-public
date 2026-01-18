@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, MoreVertical, Edit, Trash2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { RichTextEditor } from "@/components/admin/RichTextEditor"
 
 interface NewsletterTemplate {
   id: string
@@ -304,20 +305,32 @@ export default function NewsletterTemplatesPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="content_html">HTML Content *</Label>
-                    <Textarea
-                      id="content_html"
+                    <RichTextEditor
                       value={formData.content_html}
-                      onChange={(e) =>
-                        setFormData({ ...formData, content_html: e.target.value })
+                      onChange={(value) =>
+                        setFormData({ ...formData, content_html: value })
                       }
-                      placeholder="Enter HTML content for the newsletter..."
-                      rows={12}
-                      className="font-mono text-sm"
-                      required
+                      placeholder="Enter newsletter content... You can use variables like {{unsubscribe_link}} for unsubscribe link."
                     />
                     <p className="text-xs text-muted-foreground">
-                      Use HTML format. You can use variables like {"{{unsubscribe_link}}"} for unsubscribe link.
+                      Use the editor above or switch to HTML mode. You can use variables like {"{{unsubscribe_link}}"} for unsubscribe link.
                     </p>
+                    <div className="mt-2">
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                          View/Edit HTML Source
+                        </summary>
+                        <Textarea
+                          value={formData.content_html}
+                          onChange={(e) =>
+                            setFormData({ ...formData, content_html: e.target.value })
+                          }
+                          placeholder="HTML source code..."
+                          rows={8}
+                          className="font-mono text-sm mt-2"
+                        />
+                      </details>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
