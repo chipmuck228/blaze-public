@@ -54,7 +54,7 @@ export const Newsletter = () => {
   }
 
   return (
-    <section id="newsletter" className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900">
+    <section id="newsletter" className="bg-[#0f172a] text-white pt-16 pb-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 sm:py-24">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Section: Promotional Message */}

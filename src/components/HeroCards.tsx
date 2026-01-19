@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy } from "lucide-react"
+import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy, ChevronLeft, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -62,6 +62,7 @@ export const HeroCards = () => {
   const [featuredCategories, setFeaturedCategories] = useState<FeaturedCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fetchFeaturedCategories = async () => {
@@ -87,10 +88,29 @@ export const HeroCards = () => {
     fetchFeaturedCategories()
   }, [])
 
+  const scroll = (direction: 'left' | 'right') => {
+    if (!scrollRef.current) return
+    
+    const scrollAmount = 320 // 卡片宽度 + gap
+    const currentScroll = scrollRef.current.scrollLeft
+    
+    if (direction === 'left') {
+      scrollRef.current.scrollTo({
+        left: currentScroll - scrollAmount,
+        behavior: 'smooth'
+      })
+    } else {
+      scrollRef.current.scrollTo({
+        left: currentScroll + scrollAmount,
+        behavior: 'smooth'
+      })
+    }
+  }
+
   // 如果没有 featured categories，返回 null（或显示默认内容）
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-12 w-full max-w-[700px] mx-auto">
+      <div className="flex justify-center items-center py-12 w-full">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -106,301 +126,116 @@ export const HeroCards = () => {
   }
 
   return (
-    <>
-      {/* Mobile: Vertical stack layout (< 1024px) */}
-      <div className="flex lg:hidden flex-col gap-4 sm:gap-6 w-full max-w-[700px] mx-auto px-4">
-        {featuredCategories.map((category, index) => {
-          const gradient = getCategoryGradient(category.name)
-          const icon = getCategoryIcon(category.name)
-          
-          return (
-            <Card
-              key={category.id}
-              className="w-full drop-shadow-xl shadow-black/10 dark:shadow-white/10 border-0 transition-all duration-300 hover:shadow-2xl"
+    <div className="relative z-10 w-full lg:w-1/2 flex flex-col justify-center bg-slate-900/30 backdrop-blur-sm border-l border-white/5">
+      <div className="p-8 lg:p-12 w-full">
+        <div className="flex justify-between items-end mb-6">
+          <div>
+            <h3 className="text-white text-2xl font-bold">Featured Categories</h3>
+            <p className="text-slate-400 text-sm">Swipe to explore active courses & camps</p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => scroll('left')} 
+              className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
             >
-              {/* Icon for mobile (instead of poster) */}
-              <CardHeader className="flex flex-col items-center pb-2 pt-6">
-                <div
-                  className="w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg mb-4"
-                  style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
-                  }}
-                >
-                  {icon}
-                </div>
-                {category.featured_subtitle ? (
-                  <h3 className="text-center text-lg sm:text-xl font-bold mt-2" style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    textShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    letterSpacing: '0.02em',
-                  }}>
-                    {category.featured_subtitle}
-                  </h3>
-                ) : (
-                  <CardTitle className="text-center text-lg sm:text-xl">
-                    {category.display_name}
-                  </CardTitle>
-                )}
-                {category.featured_slogan && (
-                  <p className="text-center text-sm sm:text-base text-muted-foreground mt-2">
-                    {category.featured_slogan}
-                  </p>
-                )}
-              </CardHeader>
-
-              <CardContent className="text-center pb-4">
-            <Button
-              asChild
-                  className="w-full"
-                  style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
-                  }}
-                >
-                  <Link href={`/programs?category=${category.id}`}>
-                    Explore
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-            </Button>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Desktop Portrait: Vertical stack layout (>= 1024px, portrait) */}
-      <div className="hidden lg:flex hero-cards-desktop-portrait flex-col gap-6 lg:gap-8 w-full max-w-[700px] lg:max-w-[800px] mx-auto px-4">
-        {featuredCategories.map((category, index) => {
-          const gradient = getCategoryGradient(category.name)
-          const icon = getCategoryIcon(category.name)
-          
-          return (
-            <Card
-              key={category.id}
-              className="w-full drop-shadow-xl shadow-black/10 dark:shadow-white/10 border-0 transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]"
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => scroll('right')} 
+              className="p-3 rounded-full bg-[#2563eb] hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20 transition-colors"
             >
-              {/* Poster Image - Desktop Portrait */}
-              {category.poster_url ? (
-                <div className="relative w-full h-64 lg:h-72 overflow-hidden rounded-t-lg group/poster">
-                  <Image
-                    src={category.poster_url}
-                    alt={category.display_name}
-                    fill
-                    className="object-cover"
-                    priority={index < 2}
-                    sizes="(max-width: 1024px) 100vw, 800px"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                  {/* Overlay with description - 蒙版效果，hover 时显示 */}
-                  {category.description && (
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Container */}
+        <div 
+          ref={scrollRef}
+          className="flex gap-6 overflow-x-auto pb-8 snap-x snap-mandatory scrollbar-hide -mr-4 lg:-mr-0 pr-4 lg:pr-0"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {featuredCategories.map((category, index) => {
+            const gradient = getCategoryGradient(category.name)
+            const icon = getCategoryIcon(category.name)
+            
+            return (
+              <div 
+                key={category.id}
+                onClick={() => window.location.href = `/programs?category=${category.id}`}
+                className="min-w-[300px] w-[300px] md:min-w-[340px] md:w-[340px] snap-start bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col"
+              >
+                <div className="h-48 relative overflow-hidden shrink-0">
+                  {category.poster_url ? (
                     <>
-                      {/* 移动设备：始终显示 */}
-                      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/80 to-black/60 lg:hidden">
-                        <p className="text-white text-sm drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] line-clamp-2">
-                          {category.description}
-                        </p>
-                      </div>
-                      {/* 桌面设备：hover 时显示 */}
-                      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/80 to-black/60 hidden lg:block opacity-0 group-hover/poster:opacity-100 transition-opacity duration-300">
-                        <p className="text-white text-sm lg:text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                          {category.description}
-                        </p>
-                      </div>
+                      <Image
+                        src={category.poster_url}
+                        alt={category.display_name}
+                        fill
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                        priority={index < 2}
+                        sizes="(max-width: 768px) 300px, 340px"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
                     </>
+                  ) : (
+                    <div 
+                      className="w-full h-full flex items-center justify-center"
+                      style={{
+                        background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
+                      }}
+                    >
+                      <div className="w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg bg-white/20 backdrop-blur-sm">
+                        {icon}
+                      </div>
+                    </div>
                   )}
-                </div>
-              ) : (
-                <div className="w-full h-48 lg:h-56 flex items-center justify-center bg-gradient-to-br from-muted to-muted/50 rounded-t-lg">
-                  <div
-                    className="w-24 h-24 rounded-full flex items-center justify-center text-white shadow-lg"
-                    style={{
-                      background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
-                    }}
-                  >
-                    {icon}
+                  
+                  {/* Badges */}
+                  <div className="absolute top-4 left-4 flex flex-col gap-2 items-start">
+                    <span 
+                      className="bg-[#2563eb] text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm uppercase tracking-wide"
+                      style={{
+                        background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
+                      }}
+                    >
+                      {category.name}
+                    </span>
+                    {category.featured_subtitle && (
+                      <span className="bg-white/90 backdrop-blur text-slate-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-white/20">
+                        {category.featured_subtitle}
+                      </span>
+                    )}
                   </div>
                 </div>
-              )}
-
-              <CardHeader className="pb-2">
-                {category.featured_subtitle ? (
-                  <h3 className="text-xl lg:text-2xl font-bold" style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    textShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    letterSpacing: '0.02em',
-                  }}>
-                    {category.featured_subtitle}
-                  </h3>
-                ) : (
-                  <CardTitle className="text-xl lg:text-2xl">
+                
+                <div className="p-6 flex flex-col flex-grow">
+                  <h4 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-1">
                     {category.display_name}
-                  </CardTitle>
-                )}
-                {category.featured_slogan && (
-                  <p className="text-sm lg:text-base text-muted-foreground mt-2">
-                    {category.featured_slogan}
-                  </p>
-                )}
-              </CardHeader>
-
-              <CardContent className="pb-4">
-            <Button
-              asChild
-                  className="w-full"
-                  style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
-                  }}
-                >
-                  <Link href={`/programs?category=${category.id}`}>
-                    Explore
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-            </Button>
-              </CardContent>
-      </Card>
-          )
-        })}
-          </div>
-
-      {/* Desktop Landscape: Masonry/Photo Wall layout (>= 1024px, landscape) */}
-      <div className="hidden lg:grid hero-cards-desktop-landscape grid-cols-2 gap-4 lg:gap-6 w-full max-w-[700px] lg:max-w-[900px] mx-auto auto-rows-max">
-        {featuredCategories.map((category, index) => {
-          const gradient = getCategoryGradient(category.name)
-          const icon = getCategoryIcon(category.name)
-          
-          // 照片墙布局：让某些卡片跨越多行，创造错落有致的效果
-          // 策略：根据索引和总数智能分配跨行效果
-          // - 如果有2个：第1个跨行
-          // - 如果有3个：第1个和第3个跨行
-          // - 如果有4个：第1个和第3个跨行
-          // - 如果有更多：交替跨行
-          const totalCategories = featuredCategories.length
-          let shouldSpanRows = false
-          
-          if (totalCategories === 2) {
-            shouldSpanRows = index === 0
-          } else if (totalCategories === 3) {
-            shouldSpanRows = index === 0 || index === 2
-          } else if (totalCategories === 4) {
-            shouldSpanRows = index === 0 || index === 2
-          } else {
-            // 5个或更多：每3个中第1个跨行
-            shouldSpanRows = index % 3 === 0
-          }
-          
-          const rowSpanClass = shouldSpanRows ? 'row-span-2' : ''
-          
-          // 根据位置调整图片高度，创造层次感
-          // 跨行的卡片使用更大的图片，其他卡片使用不同高度创造变化
-          const imageHeightClass = shouldSpanRows 
-            ? 'h-64 lg:h-80 xl:h-96' // 跨行的卡片使用更大的图片
-            : index % 2 === 0
-              ? 'h-52 lg:h-64' // 偶数索引中等高度
-              : 'h-48 lg:h-56' // 奇数索引较小高度
-          
-          return (
-            <Card
-              key={category.id}
-              className={`group w-full drop-shadow-xl shadow-black/10 dark:shadow-white/10 border-0 transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1 ${rowSpanClass}`}
-            >
-              {/* Poster Image - Desktop Landscape with varying heights */}
-              {category.poster_url ? (
-                <div className={`relative w-full ${imageHeightClass} overflow-hidden rounded-t-lg group/poster`}>
-                  <Image
-                    src={category.poster_url}
-                    alt={category.display_name}
-                    fill
-                    className="object-cover transition-transform duration-300 hover:scale-110"
-                    priority={index < 2}
-                    sizes="(max-width: 1024px) 50vw, 450px"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                  {/* Overlay with description - 蒙版效果，hover 时显示 */}
+                  </h4>
                   {category.description && (
-                    <>
-                      {/* 移动设备：始终显示 */}
-                      <div className={`absolute bottom-0 left-0 right-0 p-3 lg:p-4 bg-gradient-to-t from-black/90 via-black/80 to-black/60 lg:hidden`}>
-                        <p className={`text-white text-xs lg:text-sm drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] line-clamp-2 ${shouldSpanRows ? '' : ''}`}>
-                          {category.description}
-                        </p>
-                      </div>
-                      {/* 桌面设备：hover 时显示 */}
-                      <div className={`absolute bottom-0 left-0 right-0 p-3 lg:p-4 bg-gradient-to-t from-black/90 via-black/80 to-black/60 hidden lg:block opacity-0 group-hover/poster:opacity-100 transition-opacity duration-300`}>
-                        <p className={`text-white text-xs lg:text-sm drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${shouldSpanRows ? '' : ''}`}>
-                          {category.description}
-                        </p>
-                      </div>
-                    </>
+                    <p className="text-slate-500 text-sm mb-4 line-clamp-2">{category.description}</p>
                   )}
-                  {/* Overlay gradient for better text readability (only if no description) */}
-                  {!category.description && (
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
-            )}
-          </div>
-              ) : (
-                <div className={`w-full ${imageHeightClass} flex items-center justify-center bg-gradient-to-br from-muted to-muted/50 rounded-t-lg`}>
-                  <div
-                    className="w-20 h-20 lg:w-24 lg:h-24 rounded-full flex items-center justify-center text-white shadow-lg transition-transform duration-300 hover:scale-110"
-                    style={{
-                      background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
-                    }}
-                  >
-                    {icon}
-          </div>
-          </div>
-              )}
-
-              <CardHeader className="pb-2">
-                {category.featured_subtitle ? (
-                  <h3 className={`font-bold ${shouldSpanRows ? 'text-xl lg:text-2xl' : 'text-lg lg:text-xl'}`} style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    textShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    letterSpacing: '0.02em',
-                  }}>
-                    {category.featured_subtitle}
-                  </h3>
-                ) : (
-                  <CardTitle className={`${shouldSpanRows ? 'text-xl lg:text-2xl' : 'text-lg lg:text-xl'}`}>
-                    {category.display_name}
-                  </CardTitle>
-                )}
-                {category.featured_slogan && (
-                  <p className={`text-sm mt-2 text-muted-foreground ${shouldSpanRows ? '' : 'line-clamp-2'}`}>
-                    {category.featured_slogan}
-                  </p>
-                )}
-        </CardHeader>
-
-              <CardContent className="pb-4">
-                <Button
-                  asChild
-                  className="w-full transition-all duration-300 hover:scale-105 hover:shadow-lg"
-                  style={{
-                    background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
-                  }}
-                >
-                  <Link href={`/programs?category=${category.id}`} className="group/button">
-                    Explore
-                    <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover/button:translate-x-1" />
-                  </Link>
-                </Button>
-              </CardContent>
-      </Card>
-          )
-        })}
+                  {category.featured_slogan && (
+                    <p className="text-slate-500 text-sm mb-4 line-clamp-2">{category.featured_slogan}</p>
+                  )}
+                  
+                  <div className="mt-auto">
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                      <span className="text-blue-600 font-bold text-sm flex items-center group-hover:translate-x-1 transition-transform">
+                        Explore <ArrowRight className="w-4 h-4 ml-1" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
-    </>
   )
 }

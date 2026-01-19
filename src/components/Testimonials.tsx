@@ -76,7 +76,7 @@ export const Testimonials = () => {
 
   useEffect(() => {
     const row = rowRef.current;
-    
+
     if (!row) return;
 
     let animation: Animation | null = null;
@@ -148,61 +148,62 @@ export const Testimonials = () => {
   return (
     <section
       id="testimonials"
-      className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-1 sm:py-24"
+      className="py-24 bg-slate-50"
     >
-      <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16"><h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
           How{" "}
           <span className="inline bg-gradient-to-b from-primary/60 to-primary bg-clip-text text-transparent">
             People Love
           </span>{" "}
           Blaze Robotics Academy
         </h2>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          These are some testimonials from our community displayed to showcase the impact of our programs.
-        </p>
-      </div>
-
-      <div className="relative overflow-hidden py-4">
-        {/* 渐变遮罩 - 左侧 */}
-        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none" />
-        {/* 渐变遮罩 - 右侧 */}
-        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none" />
-
-        {/* 滚动行 - 从左到右滚动 */}
-        <div className="flex gap-4 will-change-transform" ref={rowRef}>
-          {duplicatedTestimonials.map((testimonial, index) => (
-            <Card
-              key={`testimonial-${index}`}
-              className="flex-shrink-0 w-[350px] md:w-[400px]"
-            >
-              <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                <Avatar>
-                  <AvatarImage
-                    alt={testimonial.name}
-                    src={testimonial.image}
-                  />
-                  <AvatarFallback>
-                    {testimonial.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()
-                      .slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col">
-                  <CardTitle className="text-base font-semibold">{testimonial.name}</CardTitle>
-                  <CardDescription className="text-sm">{testimonial.userName}</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {testimonial.comment}
-              </CardContent>
-            </Card>
-          ))}
         </div>
 
+
+
+
+        <div className="relative overflow-hidden py-4">
+          {/* 渐变遮罩 - 左侧 */}
+          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none" />
+          {/* 渐变遮罩 - 右侧 */}
+          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none" />
+
+          {/* 滚动行 - 从左到右滚动 */}
+          <div className="flex gap-4 will-change-transform" ref={rowRef}>
+            {duplicatedTestimonials.map((testimonial, index) => (
+              <Card
+                key={`testimonial-${index}`}
+                className="flex-shrink-0 w-[350px] md:w-[400px]"
+              >
+                <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                  <Avatar>
+                    <AvatarImage
+                      alt={testimonial.name}
+                      src={testimonial.image}
+                    />
+                    <AvatarFallback>
+                      {testimonial.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .toUpperCase()
+                        .slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <CardTitle className="text-base font-semibold">{testimonial.name}</CardTitle>
+                    <CardDescription className="text-sm">{testimonial.userName}</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  {testimonial.comment}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+        </div>
       </div>
     </section>
   );
