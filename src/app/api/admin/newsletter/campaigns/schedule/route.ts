@@ -42,6 +42,14 @@ export async function POST(request: Request) {
       )
     }
 
+    // 验证模板是否为 active 状态
+    if (!template.is_active) {
+      return NextResponse.json(
+        { error: "Cannot schedule newsletter using an inactive template. Please activate the template first." },
+        { status: 400 }
+      )
+    }
+
     // 获取活跃订阅者数量
     const { count, error: countError } = await supabaseAdmin
       .from("newsletter_subscribers")

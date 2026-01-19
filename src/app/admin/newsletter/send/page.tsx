@@ -21,6 +21,7 @@ interface NewsletterTemplate {
   name: string
   subject: string
   content_html: string
+  is_active: boolean
 }
 
 export default function NewsletterSendPage() {
@@ -124,7 +125,9 @@ export default function NewsletterSendPage() {
       }
 
       const data = await response.json()
-      setTemplates(data.templates || [])
+      // 只显示 active 的 templates
+      const activeTemplates = (data.templates || []).filter((t: NewsletterTemplate) => t.is_active)
+      setTemplates(activeTemplates)
     } catch (error: any) {
       console.error("Error fetching templates:", error)
       toast.error("Failed to load templates")
