@@ -16,6 +16,12 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Loader2, MapPin, Calendar, Users, Search, Filter, X } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
@@ -326,7 +332,7 @@ function ProgramsPageContent() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background pt-14">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
           {/* Header */}
           <div className="mb-8">
@@ -457,178 +463,188 @@ function ProgramsPageContent() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-8">
+            <Accordion 
+              type="single" 
+              collapsible 
+              className="w-full space-y-4"
+              defaultValue={filteredFranchises.length > 0 ? filteredFranchises[0].id : undefined}
+            >
               {filteredFranchises.map((franchise) => {
                 const programsCount = franchise.programs?.length || 0
                 
                 return (
-                <Card key={franchise.id} className="space-y-6">
-                  {/* Franchise Header */}
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-2xl font-bold">{franchise.name}</CardTitle>
-                        <CardDescription className="mt-1">Franchise Code: {franchise.code}</CardDescription>
+                  <AccordionItem key={franchise.id} value={franchise.id} className="border rounded-lg px-4">
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center justify-between w-full pr-4">
+                        <div className="flex flex-col items-start text-left">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-xl font-semibold">{franchise.name}</h3>
+                            <Badge variant="secondary" className="text-sm">
+                              {programsCount} Program{programsCount !== 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Franchise Code: {franchise.code}
+                          </p>
+                        </div>
                       </div>
-                      <Badge variant="secondary" className="text-sm">
-                        {programsCount} Program{programsCount !== 1 ? 's' : ''}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="space-y-6">
-                    {/* Programs */}
-                    {franchise.programs && franchise.programs.length > 0 ? (
-                      franchise.programs.map((program) => {
-                        const instancesCount = program.instances?.length || 0
-                        
-                        return (
-                          <Card
-                            key={program.id}
-                          >
-                            <CardHeader>
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <CardTitle className="text-xl font-semibold mb-2">
-                                    {program.display_name}
-                                  </CardTitle>
-                                  {program.description && (
-                                    <CardDescription className="mb-2">{program.description}</CardDescription>
-                                  )}
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline">{program.category?.display_name || 'Unknown'}</Badge>
-                                    <Badge variant="secondary" className="text-xs">
-                                      {instancesCount} Instance{instancesCount !== 1 ? 's' : ''}
-                                    </Badge>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="pt-4 space-y-6">
+                        {/* Programs */}
+                        {franchise.programs && franchise.programs.length > 0 ? (
+                          franchise.programs.map((program) => {
+                            const instancesCount = program.instances?.length || 0
+                            
+                            return (
+                              <Card
+                                key={program.id}
+                                className="border"
+                              >
+                                <CardHeader>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <CardTitle className="text-xl font-semibold mb-2">
+                                        {program.display_name}
+                                      </CardTitle>
+                                      {program.description && (
+                                        <CardDescription className="mb-2">{program.description}</CardDescription>
+                                      )}
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline">{program.category?.display_name || 'Unknown'}</Badge>
+                                        <Badge variant="secondary" className="text-xs">
+                                          {instancesCount} Instance{instancesCount !== 1 ? 's' : ''}
+                                        </Badge>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
-                            </CardHeader>
+                                </CardHeader>
 
-                            <CardContent>
-                              {/* Instances */}
-                              {instancesCount === 0 ? (
-                                <div className="py-8 text-center">
-                                  <p className="text-sm text-muted-foreground">No instances available for this program.</p>
-                                </div>
-                              ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  {program.instances.map((instance) => (
-                            <Card key={instance.id} className="hover:shadow-lg transition-shadow">
-                              <CardHeader>
-                                <CardTitle className="text-lg">{instance.course.name}</CardTitle>
-                                <CardDescription className="line-clamp-2">
-                                  {instance.course.description}
-                                </CardDescription>
-                              </CardHeader>
-                              <CardContent className="space-y-4">
-                                {/* Course Info */}
-                                <div className="space-y-2 text-sm">
-                                  {instance.course.grade_level && (
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="secondary">{instance.course.grade_level}</Badge>
+                                <CardContent>
+                                  {/* Instances */}
+                                  {instancesCount === 0 ? (
+                                    <div className="py-8 text-center">
+                                      <p className="text-sm text-muted-foreground">No instances available for this program.</p>
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                      {program.instances.map((instance) => (
+                                        <Card key={instance.id} className="hover:shadow-lg transition-shadow">
+                                          <CardHeader>
+                                            <CardTitle className="text-lg">{instance.course.name}</CardTitle>
+                                            <CardDescription className="line-clamp-2">
+                                              {instance.course.description}
+                                            </CardDescription>
+                                          </CardHeader>
+                                          <CardContent className="space-y-4">
+                                            {/* Course Info */}
+                                            <div className="space-y-2 text-sm">
+                                              {instance.course.grade_level && (
+                                                <div className="flex items-center gap-2">
+                                                  <Badge variant="secondary">{instance.course.grade_level}</Badge>
+                                                </div>
+                                              )}
+                                              {instance.course.age_min && instance.course.age_max && (
+                                                <p className="text-muted-foreground">
+                                                  Ages {instance.course.age_min}-{instance.course.age_max}
+                                                </p>
+                                              )}
+                                            </div>
+
+                                            {/* Schedule */}
+                                            <div className="space-y-2 text-sm">
+                                              <div className="flex items-center gap-2 text-muted-foreground">
+                                                <Calendar className="h-4 w-4" />
+                                                <span>
+                                                  {new Date(instance.start_date).toLocaleDateString()} -{" "}
+                                                  {new Date(instance.end_date).toLocaleDateString()}
+                                                </span>
+                                              </div>
+                                              {instance.start_time && instance.end_time && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                  <span>
+                                                    {instance.start_time} - {instance.end_time}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {instance.location && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                  <MapPin className="h-4 w-4" />
+                                                  <span>{instance.location.name}</span>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Capacity */}
+                                            <div className="flex items-center gap-2 text-sm">
+                                              <Users className="h-4 w-4 text-muted-foreground" />
+                                              <span className="text-muted-foreground">
+                                                {instance.current_students} / {instance.max_students || "N/A"} students
+                                              </span>
+                                              {instance.is_full && (
+                                                <Badge variant="destructive" className="ml-auto">
+                                                  Full
+                                                </Badge>
+                                              )}
+                                              {!instance.is_full && instance.available_spots > 0 && (
+                                                <Badge variant="outline" className="ml-auto">
+                                                  {instance.available_spots} spots left
+                                                </Badge>
+                                              )}
+                                            </div>
+
+                                            {/* Price */}
+                                            {instance.price_override !== null && instance.price_override !== undefined ? (
+                                              <div className="text-lg font-semibold">
+                                                ${instance.price_override.toFixed(2)}
+                                              </div>
+                                            ) : instance.course.base_price ? (
+                                              <div className="text-lg font-semibold">
+                                                ${instance.course.base_price.toFixed(2)}
+                                              </div>
+                                            ) : null}
+
+                                            {/* Actions */}
+                                            <div className="flex gap-2 pt-2">
+                                              <Button
+                                                asChild
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1"
+                                              >
+                                                <Link href={`/course-catalog/${instance.course.slug || instance.course.id}`}>
+                                                  View Details
+                                                </Link>
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                className="flex-1"
+                                                onClick={() => handleEnroll(instance.id)}
+                                                disabled={instance.is_full || instance.status !== "scheduled"}
+                                              >
+                                                {instance.is_full ? "Full" : "Enroll"}
+                                              </Button>
+                                            </div>
+                                          </CardContent>
+                                        </Card>
+                                      ))}
                                     </div>
                                   )}
-                                  {instance.course.age_min && instance.course.age_max && (
-                                    <p className="text-muted-foreground">
-                                      Ages {instance.course.age_min}-{instance.course.age_max}
-                                    </p>
-                                  )}
-                                </div>
-
-                                {/* Schedule */}
-                                <div className="space-y-2 text-sm">
-                                  <div className="flex items-center gap-2 text-muted-foreground">
-                                    <Calendar className="h-4 w-4" />
-                                    <span>
-                                      {new Date(instance.start_date).toLocaleDateString()} -{" "}
-                                      {new Date(instance.end_date).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                  {instance.start_time && instance.end_time && (
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                      <span>
-                                        {instance.start_time} - {instance.end_time}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {instance.location && (
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                      <MapPin className="h-4 w-4" />
-                                      <span>{instance.location.name}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Capacity */}
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Users className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-muted-foreground">
-                                    {instance.current_students} / {instance.max_students || "N/A"} students
-                                  </span>
-                                  {instance.is_full && (
-                                    <Badge variant="destructive" className="ml-auto">
-                                      Full
-                                    </Badge>
-                                  )}
-                                  {!instance.is_full && instance.available_spots > 0 && (
-                                    <Badge variant="outline" className="ml-auto">
-                                      {instance.available_spots} spots left
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                {/* Price */}
-                                {instance.price_override !== null && instance.price_override !== undefined ? (
-                                  <div className="text-lg font-semibold">
-                                    ${instance.price_override.toFixed(2)}
-                                  </div>
-                                ) : instance.course.base_price ? (
-                                  <div className="text-lg font-semibold">
-                                    ${instance.course.base_price.toFixed(2)}
-                                  </div>
-                                ) : null}
-
-                                {/* Actions */}
-                                <div className="flex gap-2 pt-2">
-                                  <Button
-                                    asChild
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1"
-                                  >
-                                    <Link href={`/course-catalog/${instance.course.slug || instance.course.id}`}>
-                                      View Details
-                                    </Link>
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    className="flex-1"
-                                    onClick={() => handleEnroll(instance.id)}
-                                    disabled={instance.is_full || instance.status !== "scheduled"}
-                                  >
-                                    {instance.is_full ? "Full" : "Enroll"}
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        )
-                      })
-                    ) : (
-                      <div className="py-8 text-center">
-                        <p className="text-sm text-muted-foreground">No programs available for this franchise.</p>
+                                </CardContent>
+                              </Card>
+                            )
+                          })
+                        ) : (
+                          <div className="py-8 text-center">
+                            <p className="text-sm text-muted-foreground">No programs available for this franchise.</p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
+                    </AccordionContent>
+                  </AccordionItem>
                 )
               })}
-            </div>
+            </Accordion>
           )}
         </div>
       </div>

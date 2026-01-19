@@ -98,7 +98,6 @@ interface RouteProps {
     const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(false);
     const pathname = usePathname();
     const router = useRouter();
-    const isHomePage = pathname === '/';
     const { data: session, status } = useSession();
 
     // 动态检测当前 location label（从 pathname 中提取 code，然后查找对应的 franchise name）
@@ -121,7 +120,7 @@ interface RouteProps {
     // Helper function to get the correct href
     const getHref = (href: string) => {
       // For hash links, if不在首页则跳转到首页并带上 hash
-      if (href.startsWith("#") && !isHomePage) {
+      if (href.startsWith("#") && pathname !== '/') {
         return `/${href}`;
       }
       return href;
@@ -242,7 +241,7 @@ interface RouteProps {
 
     return (
       <header
-        className="sticky border-b top-0 z-40 w-full mx-auto bg-white dark:border-b-slate-700 dark:bg-background"
+        className="fixed border-b top-0 z-50 w-full mx-auto bg-white dark:border-b-slate-700 dark:bg-background"
       >
         <div className="container mx-auto px-4 h-14 flex items-center justify-between">
           {/* Left: Logo */}

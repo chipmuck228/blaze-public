@@ -40,8 +40,10 @@ export default async function LearningPathDetailPage({
   return (
     <>
       <Navbar />
-      <LearningPathDetail path={path} />
-      <Footer />
+      <div className="pt-14">
+        <LearningPathDetail path={path} />
+        <Footer />
+      </div>
     </>
   )
 }

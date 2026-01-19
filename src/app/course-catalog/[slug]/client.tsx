@@ -37,8 +37,10 @@ export function CourseDetailPageClient({ course }: CourseDetailPageClientProps) 
   return (
     <>
       <Navbar />
-      <CourseDetail course={course} />
-      <Footer />
+      <div className="pt-14">
+        <CourseDetail course={course} />
+        <Footer />
+      </div>
     </>
   );
 }

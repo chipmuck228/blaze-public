@@ -408,7 +408,7 @@ export default function ProfilePage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="pt-14 min-h-screen flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </>
@@ -927,7 +927,8 @@ export default function ProfilePage() {
   return (
     <>
       <Navbar />
-      {content}
+      <div className="pt-14">
+        {content}
       <AddPaymentMethodDialog
         open={isAddPaymentMethodOpen}
         onOpenChange={setIsAddPaymentMethodOpen}
@@ -1114,6 +1115,7 @@ export default function ProfilePage() {
           )}
         </DialogContent>
       </Dialog>
+      </div>
     </>
   );
 }

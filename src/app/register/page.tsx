@@ -97,7 +97,7 @@ export default function RegisterPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="pt-14 min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-muted/20">
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-3xl font-bold">Create Account</CardTitle>

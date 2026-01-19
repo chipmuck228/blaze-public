@@ -187,7 +187,8 @@ export default function Home() {
   return (
     <>
       <Navbar />
-      <Hero />
+      <div className="pt-14">
+        <Hero />
       {/* <RoboticsJourney /> */}
 
       {/* Location selection section */}
@@ -464,6 +465,7 @@ export default function Home() {
       <Faq />
       <Newsletter />
       <Footer />
+      </div>
     </>
   );
 }

@@ -180,7 +180,7 @@ export default function CartPage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="pt-14 min-h-screen flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
         <Footer />
@@ -191,7 +191,7 @@ export default function CartPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-background">
+      <div className="pt-14 min-h-screen bg-background">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-12">
           <div className="mb-8">
             <h1 className="text-3xl font-bold mb-2">Shopping Cart</h1>

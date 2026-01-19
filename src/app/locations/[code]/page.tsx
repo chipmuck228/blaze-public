@@ -159,13 +159,13 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
   return (
     <>
       <Navbar />
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-background pt-14">
         <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 sm:py-20">
           {/* Hero */}
           <div className="grid lg:grid-cols-2 gap-10 items-start">
             <div className="space-y-6">
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold">
-                {heroTitle}abc
+                {heroTitle}
               </h1>
               <p className="text-lg text-muted-foreground">
                 {heroDescription}
@@ -175,7 +175,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
                   <div className="flex items-start gap-2">
                     <MapPin className="h-5 w-5 mt-0.5 text-primary" />
                     <div className="flex-1">
-                      <p className="font-medium text-foreground">{displayName} Campus123</p>
+                      <p className="font-medium text-foreground">{displayName} Campus</p>
                       <div className="flex items-center gap-2">
                         <p>{primaryAddress}</p>
                         <a

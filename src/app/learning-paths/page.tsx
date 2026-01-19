@@ -6,8 +6,10 @@ export default function LearningPathsPage() {
   return (
     <>
       <Navbar />
-      <LearningPathsList />
-      <Footer />
+      <div className="pt-14">
+        <LearningPathsList />
+        <Footer />
+      </div>
     </>
   )
 }

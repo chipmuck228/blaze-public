@@ -7,8 +7,10 @@ export default function CampsPage() {
   return (
     <>
       <Navbar />
-      <AllCamps />
-      <Footer />
+      <div className="pt-14">
+        <AllCamps />
+        <Footer />
+      </div>
     </>
   );
 }

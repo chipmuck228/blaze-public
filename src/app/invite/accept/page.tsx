@@ -136,7 +136,7 @@ function InviteAcceptContent() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="pt-14 min-h-screen flex items-center justify-center bg-background">
           <Card className="w-full max-w-md">
             <CardHeader>
               <CardTitle>Invalid Invitation Link</CardTitle>
@@ -181,7 +181,7 @@ function InviteAcceptContent() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
+      <div className="pt-14 min-h-screen flex items-center justify-center bg-background py-12 px-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Set Your Password</CardTitle>
