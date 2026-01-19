@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
@@ -101,14 +101,22 @@ interface RouteProps {
     const isHomePage = pathname === '/';
     const { data: session, status } = useSession();
 
-    const currentLocationLabel = (() => {
+    // 动态检测当前 location label（从 pathname 中提取 code，然后查找对应的 franchise name）
+    // 使用 useMemo 确保在 franchiseGroups 更新时重新计算
+    const currentLocationLabel = useMemo(() => {
       if (!pathname) return null;
-      if (pathname.startsWith("/locations/bellevue")) return "Bellevue";
-      if (pathname.startsWith("/locations/belred")) return "Bel-Red";
-      if (pathname.startsWith("/locations/issaquah")) return "Issaquah";
-      if (pathname.startsWith("/locations/cherrycrest")) return "Cherry Crest";
-      return null;
-    })();
+      // 匹配 /locations/[code] 格式的路径
+      const locationMatch = pathname.match(/^\/locations\/([^\/]+)/);
+      if (!locationMatch) return null;
+      
+      const locationCode = decodeURIComponent(locationMatch[1]).toLowerCase();
+      // 从 franchiseGroups 中查找匹配的 franchise
+      const matchedFranchise = franchiseGroups.find(
+        (f) => f.code.toLowerCase() === locationCode
+      );
+      
+      return matchedFranchise?.name || null;
+    }, [pathname, franchiseGroups]);
 
     // Helper function to get the correct href
     const getHref = (href: string) => {
