@@ -10,7 +10,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+        montserrat: ["var(--font-montserrat)", "sans-serif"],
+        roboto: ["Roboto", "sans-serif"],
       },
       colors: {
         background: "hsl(var(--background))",

@@ -54,8 +54,13 @@ export const Newsletter = () => {
   }
 
   return (
-    <section id="newsletter" className="bg-[#0f172a] text-white pt-16 pb-8">
+    <section id="newsletter" className="relative bg-[#0f172a]  flex flex-col lg:flex-row bg-[#0f172a] overflow-hidden pt-20 lg:pt-20 items-center justify-center">
+      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
+        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-600 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-600 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4"></div>
+      </div>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 sm:py-24">
+        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Section: Promotional Message */}
           <div className="text-white">

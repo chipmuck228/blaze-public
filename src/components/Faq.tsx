@@ -1,24 +1,11 @@
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+'use client'
+
+import { useState } from "react"
+import { HelpCircle, Plus, Minus } from "lucide-react"
 
 interface FaqItem {
-  question: string;
-  answer: string | React.ReactNode;
-}
-
-interface FaqSection {
-  title: string;
-  items: FaqItem[];
+  question: string
+  answer: string | React.ReactNode
 }
 
 const competitionTeamFaqs: FaqItem[] = [
@@ -97,7 +84,7 @@ const competitionTeamFaqs: FaqItem[] = [
       </div>
     ),
   },
-];
+]
 
 const campsFaqs: FaqItem[] = [
   {
@@ -181,7 +168,7 @@ const campsFaqs: FaqItem[] = [
       </div>
     ),
   },
-];
+]
 
 const coursesFaqs: FaqItem[] = [
   {
@@ -242,77 +229,66 @@ const coursesFaqs: FaqItem[] = [
       </div>
     ),
   },
-];
-
-const faqSections: FaqSection[] = [
-  {
-    title: "Competition Team FAQs",
-    items: competitionTeamFaqs,
-  },
-  {
-    title: "CAMPS FAQs",
-    items: campsFaqs,
-  },
-  {
-    title: "Courses FAQs",
-    items: coursesFaqs,
-  },
-];
+]
 
 export const Faq = () => {
+  // 将所有 FAQ 合并到一个数组中
+  const allFaqs: FaqItem[] = [
+    ...competitionTeamFaqs,
+    ...campsFaqs,
+    ...coursesFaqs,
+  ]
+
+  const [openIndex, setOpenIndex] = useState<number | null>(null)
+
   return (
-    <section id="faq" className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 sm:py-24">
-      <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">
-        Frequently{" "}
-        <span className="inline bg-gradient-to-b from-primary/60 to-primary text-transparent bg-clip-text">
-        Asked Questions
-        </span>
-      </h2>
-      <p className="text-xl text-muted-foreground text-center mb-12">
-        Find answers to common questions about our programs
-      </p>
+    <div className="pb-24 bg-slate-50 min-h-screen">
+      <section className="bg-[#2563eb] py-20 text-white text-center">
+        <div className="max-w-7xl mx-auto px-4">
+          <h1 className="text-5xl font-extrabold mb-4">Frequently Asked Questions</h1>
+          <p className="text-blue-100 text-xl">Answers to common questions about our academy.</p>
+        </div>
+      </section>
 
-      <div className="max-w-4xl mx-auto">
-        <Tabs defaultValue="competition" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 mb-8 h-auto">
-            <TabsTrigger value="competition" className="text-sm sm:text-base">
-              Competition Teams
-            </TabsTrigger>
-            <TabsTrigger value="camps" className="text-sm sm:text-base">
-              Camps
-            </TabsTrigger>
-            <TabsTrigger value="courses" className="text-sm sm:text-base">
-              Courses
-            </TabsTrigger>
-          </TabsList>
-          
-          {faqSections.map((section, sectionIndex) => {
-            const tabValue = section.title.toLowerCase().includes("competition")
-              ? "competition"
-              : section.title.toLowerCase().includes("camp")
-              ? "camps"
-              : "courses";
-            
-            return (
-              <TabsContent key={sectionIndex} value={tabValue} className="mt-0">
-                <Accordion type="single" collapsible className="w-full">
-                  {section.items.map((item, index) => (
-                    <AccordionItem key={index} value={`${tabValue}-${index}`}>
-                      <AccordionTrigger className="text-left">
-                        {item.question}
-                      </AccordionTrigger>
-                      <AccordionContent className="text-muted-foreground">
-                        {item.answer}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </TabsContent>
-            );
-          })}
-        </Tabs>
+      <div className="max-w-3xl mx-auto px-4 py-16">
+        <div className="space-y-4">
+          {allFaqs.map((faq, index) => (
+            <div 
+              key={index} 
+              className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm transition-all duration-200 hover:shadow-md"
+            >
+              <button
+                onClick={() => setOpenIndex(openIndex === index ? null : index)}
+                className="w-full flex items-center justify-between p-6 text-left"
+              >
+                <div className="flex items-center space-x-4">
+                  <HelpCircle className={`w-6 h-6 ${openIndex === index ? 'text-[#2563eb]' : 'text-slate-400'}`} />
+                  <span className={`text-lg font-bold ${openIndex === index ? 'text-[#2563eb]' : 'text-slate-800'}`}>
+                    {faq.question}
+                  </span>
+                </div>
+                {openIndex === index ? (
+                  <Minus className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <Plus className="w-5 h-5 text-slate-400" />
+                )}
+              </button>
+              
+              <div 
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${openIndex === index ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+              >
+                <div className="p-6 pt-0 text-slate-600 leading-relaxed border-t border-slate-50 mt-2">
+                  {typeof faq.answer === 'string' ? (
+                    <p>{faq.answer}</p>
+                  ) : (
+                    faq.answer
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
-  );
-};
-
+    </div>
+  )
+}

@@ -22,7 +22,7 @@ export const Hero = () => {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#38bdf8] to-[#2563eb]">Future.</span>
           </h1>
           <p className="text-lg text-slate-300 mb-8 leading-relaxed">
-            Join Washington's premier robotics academy. From K-2 beginners to world-class VEX competitors, we turn curiosity into engineering mastery.
+            Join Blaze Robotics Academy. From K-2 beginners to world-class VEX competitors, we turn curiosity into engineering mastery.
           </p>
           <div className="flex flex-wrap gap-4">
             <Link

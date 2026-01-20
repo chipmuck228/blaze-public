@@ -1,12 +1,13 @@
 'use client'
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Search, Filter, ArrowRight, Sparkles, MapPin, X } from "lucide-react";
+import { Search, Filter, ArrowRight, Sparkles, MapPin, X, Calendar, Clock, Users } from "lucide-react";
 import Image from "next/image";
 
 interface Course {
@@ -19,11 +20,36 @@ interface Course {
   poster_url?: string | null;
 }
 
+interface Instance {
+  id: string;
+  assignment_id: string;
+  location_id?: string;
+  start_date: string;
+  end_date: string;
+  start_time?: string;
+  end_time?: string;
+  max_students?: number;
+  current_students?: number;
+  available_spots: number;
+  is_full: boolean;
+  status: string;
+  price_override?: number;
+  location?: {
+    id: string;
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+  };
+}
+
 interface ProgramCourse {
   id: string;
   title: string;
   gradeLevel: string;
   slug?: string;
+  instances?: Instance[];
 }
 
 interface Program {
@@ -69,6 +95,7 @@ interface Franchise {
 
 export const AllCourses = () => {
   const router = useRouter();
+  const { data: session } = useSession();
   const [mounted, setMounted] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -79,6 +106,7 @@ export const AllCourses = () => {
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [franchises, setFranchises] = useState<Franchise[]>([]);
   const [isLoadingFranchises, setIsLoadingFranchises] = useState(true);
+  const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const franchise = searchParams.get("franchise");
 
@@ -190,6 +218,39 @@ export const AllCourses = () => {
     setSelectedGrade(null);
   };
 
+  const handleEnroll = async (instanceId: string) => {
+    if (!session?.user) {
+      router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname + window.location.search));
+      return;
+    }
+
+    setIsEnrolling(instanceId);
+    try {
+      const response = await fetch('/api/enrollments/cart', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ instance_id: instanceId }),
+      });
+
+      if (response.ok) {
+        // 成功添加到购物车
+        alert('Course added to cart successfully!');
+        // 可选：刷新购物车数量或跳转到购物车页面
+        router.push('/enrollments/cart');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to add course to cart');
+      }
+    } catch (err) {
+      console.error('Error adding to cart:', err);
+      alert('Failed to add course to cart');
+    } finally {
+      setIsEnrolling(null);
+    }
+  };
+
   const hasActiveFilters = searchQuery || selectedType || selectedGrade;
 
   // Location 筛选器变化处理
@@ -265,21 +326,6 @@ export const AllCourses = () => {
             </p>
           </div>
 
-          {/* Location Badge and Change Button */}
-          <div className="max-w-6xl mx-auto mb-8 flex items-center justify-center gap-3">
-            <Badge variant="secondary" className="px-4 py-2 text-sm">
-              <MapPin className="h-4 w-4 mr-2" />
-              {selectedFranchise?.name || franchiseLabel} Campus
-            </Badge>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleLocationChange("all")}
-              className="text-sm"
-            >
-              Change Location
-            </Button>
-          </div>
 
           <div className="max-w-6xl mx-auto mb-8">
             <div className="bg-muted/50 rounded-lg p-6 space-y-4">
@@ -361,8 +407,8 @@ export const AllCourses = () => {
                         )}
                       </div>
                       <Badge variant="secondary" className="self-start md:self-auto">
-                        {visibleCourses.length}{" "}
-                        {visibleCourses.length === 1 ? "course" : "courses"}
+                        {visibleCourses.reduce((sum, course) => sum + (course.instances?.length || 0), 0)}{" "}
+                        {visibleCourses.reduce((sum, course) => sum + (course.instances?.length || 0), 0) === 1 ? "instance" : "instances"}
                       </Badge>
                     </div>
 
@@ -382,51 +428,149 @@ export const AllCourses = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {visibleCourses.map((course) => (
-                          <Card
-                            key={course.id}
-                            className="flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-                          >
-                            <CardHeader>
-                              <CardTitle className="text-lg leading-tight min-h-[3rem]">
-                                {course.title}
-                              </CardTitle>
-                              {course.gradeLevel && (
-                                <CardDescription className="mt-1">
-                                  Grade level: {course.gradeLevel}
-                                </CardDescription>
-                              )}
-                            </CardHeader>
-                            <CardContent className="flex-1 flex flex-col justify-between">
-                              <div className="mt-2 flex justify-between items-center">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-xs px-2"
-                                  asChild
-                                >
-                                  <a
-                                    href={
-                                      course.slug
-                                        ? `/course-catalog/${encodeURIComponent(
-                                            course.slug
-                                          )}`
-                                        : `/course-catalog?id=${encodeURIComponent(
-                                            course.id
-                                          )}`
-                                    }
-                                  >
-                                    <span className="flex items-center gap-1">
-                                      <span>View Details</span>
-                                      <ArrowRight className="h-3 w-3" />
-                                    </span>
-                                  </a>
-                                </Button>
+                      <div className="space-y-6">
+                        {visibleCourses.map((course) => {
+                          const instances = course.instances || []
+                          const totalInstances = instances.length
+                          
+                          return (
+                            <div key={course.id} className="space-y-3">
+                              {/* Course Header */}
+                              <div className="flex items-start justify-between gap-4 pb-2 border-b">
+                                <div className="flex-1">
+                                  <h3 className="text-lg font-semibold">{course.title}</h3>
+                                  {course.gradeLevel && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      Grade level: {course.gradeLevel}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+
+                              {/* Instances List */}
+                              {instances.length === 0 ? (
+                                <div className="text-center py-4 text-sm text-muted-foreground">
+                                  No instances available for this course.
+                                </div>
+                              ) : (
+                                <div className="grid md:grid-cols-2 gap-4">
+                                  {instances.map((instance) => {
+                                    const formatDate = (dateStr: string) => {
+                                      return new Date(dateStr).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })
+                                    }
+                                    
+                                    const formatTime = (timeStr?: string) => {
+                                      if (!timeStr) return ''
+                                      const [hours, minutes] = timeStr.split(':')
+                                      const hour = parseInt(hours)
+                                      const ampm = hour >= 12 ? 'PM' : 'AM'
+                                      const displayHour = hour % 12 || 12
+                                      return `${displayHour}:${minutes} ${ampm}`
+                                    }
+
+                                    return (
+                                      <Card
+                                        key={instance.id}
+                                        className="hover:shadow-md transition-all duration-200"
+                                      >
+                                        <CardContent className="p-4">
+                                          <div className="space-y-3">
+                                            {/* Date Range */}
+                                            <div className="flex items-center gap-2 text-sm">
+                                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                                              <span className="font-medium">
+                                                {formatDate(instance.start_date)} - {formatDate(instance.end_date)}
+                                              </span>
+                                            </div>
+
+                                            {/* Time */}
+                                            {(instance.start_time || instance.end_time) && (
+                                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Clock className="h-4 w-4" />
+                                                <span>
+                                                  {formatTime(instance.start_time)} - {formatTime(instance.end_time)}
+                                                </span>
+                                              </div>
+                                            )}
+
+                                            {/* Location */}
+                                            {instance.location && (
+                                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <MapPin className="h-4 w-4" />
+                                                <span>{instance.location.name}</span>
+                                              </div>
+                                            )}
+
+                                            {/* Capacity */}
+                                            <div className="flex items-center gap-2 text-sm">
+                                              <Users className="h-4 w-4 text-muted-foreground" />
+                                              <span className={instance.is_full ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+                                                {instance.is_full 
+                                                  ? 'Full' 
+                                                  : `${instance.available_spots} of ${instance.max_students || 0} spots available`
+                                                }
+                                              </span>
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="flex gap-2 pt-2">
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 text-xs"
+                                                asChild
+                                              >
+                                                <a
+                                                  href={
+                                                    (() => {
+                                                      const params = new URLSearchParams()
+                                                      params.set('instance', instance.id)
+                                                      if (franchise) {
+                                                        params.set('franchise', franchise)
+                                                      }
+                                                      const queryString = params.toString()
+                                                      
+                                                      if (course.slug) {
+                                                        return `/course-catalog/${encodeURIComponent(course.slug)}?${queryString}`
+                                                      } else {
+                                                        params.set('id', course.id)
+                                                        return `/course-catalog?${params.toString()}`
+                                                      }
+                                                    })()
+                                                  }
+                                                >
+                                                  View Details
+                                                </a>
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                className="flex-1 text-xs"
+                                                onClick={() => handleEnroll(instance.id)}
+                                                disabled={instance.is_full || instance.status !== "scheduled" || isEnrolling === instance.id}
+                                              >
+                                                {isEnrolling === instance.id ? (
+                                                  'Adding...'
+                                                ) : instance.is_full ? (
+                                                  'Full'
+                                                ) : (
+                                                  'Enroll'
+                                                )}
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

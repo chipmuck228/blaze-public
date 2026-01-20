@@ -23,7 +23,11 @@ export function ModeToggle() {
 
   if (!mounted) {
     return (
-      <Button variant="outline" size="icon">
+      <Button 
+        variant="outline" 
+        size="icon"
+        className="bg-[#0f172a] border-[#0f172a] text-white hover:bg-[#1e293b] hover:text-white"
+      >
         <Sun className="h-[1.2rem] w-[1.2rem]" />
         <span className="sr-only">Toggle theme</span>
       </Button>
@@ -35,7 +39,14 @@ export function ModeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
+        <Button 
+          variant="outline" 
+          size="icon"
+          className={isDark 
+            ? "" 
+            : "bg-[#0f172a] border-[#0f172a] text-white hover:bg-[#1e293b] hover:text-white"
+          }
+        >
           {isDark ? (
             <Moon className="h-[1.2rem] w-[1.2rem]" />
           ) : (

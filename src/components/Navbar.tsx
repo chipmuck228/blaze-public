@@ -34,15 +34,11 @@ interface RouteProps {
       label: "Programs",
     },
     {
-      href: "/learning-paths",
-      label: "Learning Paths",
-    },
-    {
       href: "#about",
       label: "About",
     },
     {
-      href: "#faq",
+      href: "/faq",
       label: "FAQ",
     },
   ];
@@ -80,29 +76,54 @@ interface RouteProps {
     const [filteredFranchiseGroups, setFilteredFranchiseGroups] = useState<FranchiseGroup[]>([]);
     const [searchQuery, setSearchQuery] = useState<string>("");
     const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(false);
+    const [franchiseFromUrl, setFranchiseFromUrl] = useState<string | null>(null);
     const pathname = usePathname();
     const router = useRouter();
     const { data: session, status } = useSession();
 
-    // 动态检测当前 location label（从 pathname 中提取 code，然后查找对应的 franchise name）
+    // 从 URL 中获取 franchise 参数（用于 course-catalog 页面）
+    useEffect(() => {
+      if (typeof window !== 'undefined' && pathname === '/course-catalog') {
+        const params = new URLSearchParams(window.location.search);
+        const franchise = params.get('franchise');
+        setFranchiseFromUrl(franchise);
+      } else {
+        setFranchiseFromUrl(null);
+      }
+    }, [pathname]);
+
+    // 动态检测当前 location label（从 pathname 或 URL 参数中提取 code，然后查找对应的 franchise name）
     // 使用 useMemo 确保在 franchiseGroups 更新时重新计算
     const currentLocationLabel = useMemo(() => {
       if (!pathname) return null;
-      // 匹配 /locations/[code] 格式的路径
-      const locationMatch = pathname.match(/^\/locations\/([^\/]+)/);
-      if (!locationMatch) return null;
       
+      // 1. 检查是否是 /locations/[code] 页面
+      const locationMatch = pathname.match(/^\/locations\/([^\/]+)/);
+      if (locationMatch) {
       const locationCode = decodeURIComponent(locationMatch[1]).toLowerCase();
-      // 从 franchiseGroups 中查找匹配的 franchise
       const matchedFranchise = franchiseGroups.find(
         (f) => f.code.toLowerCase() === locationCode
       );
+        return matchedFranchise?.name || null;
+      }
       
+      // 2. 检查是否是 /course-catalog 页面且 URL 中有 franchise 参数
+      if (pathname === '/course-catalog' && franchiseFromUrl) {
+        const matchedFranchise = franchiseGroups.find(
+          (f) => f.code.toLowerCase() === franchiseFromUrl.toLowerCase()
+        );
       return matchedFranchise?.name || null;
-    }, [pathname, franchiseGroups]);
+      }
+      
+      return null;
+    }, [pathname, franchiseFromUrl, franchiseGroups]);
 
     // Helper function to get the correct href
     const getHref = (href: string) => {
+      // 如果在 location 页面，Programs 链接应该跳转到本页的 #programs
+      if (href === "#programs" && pathname?.startsWith('/locations/')) {
+        return href;
+      }
       // For hash links, if不在首页则跳转到首页并带上 hash
       if (href.startsWith("#") && pathname !== '/') {
         return `/${href}`;

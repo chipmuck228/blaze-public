@@ -15,12 +15,49 @@ function CourseCatalogContent() {
   const router = useRouter();
   const { isNative, isReady } = usePlatform();
   const courseId = searchParams.get('id');
+  const instanceId = searchParams.get('instance');
   const [course, setCourse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 如果有 ?id=xxx 参数，显示单个课程详情
+  // 如果有 ?id=xxx 或 ?instance=xxx 参数，显示单个课程详情
   useEffect(() => {
-    if (courseId) {
+    // 如果有 instance 参数，从 instance API 获取 course 信息
+    if (instanceId) {
+      console.log(`[CourseCatalogPage] Fetching instance ${instanceId} to get course info`);
+      fetch(`/api/public/instances/${instanceId}`)
+        .then(res => {
+          if (!res.ok) {
+            return res.json().then(err => {
+              console.error(`[CourseCatalogPage] Instance API error (${res.status}):`, err);
+              throw new Error(err.error || 'Instance not found');
+            });
+          }
+          return res.json();
+        })
+        .then(data => {
+          console.log(`[CourseCatalogPage] Instance data received:`, {
+            hasCourse: !!data.course,
+            courseId: data.course?.id,
+            courseName: data.course?.name
+          });
+          // instance API 返回的数据中包含 course 信息
+          if (data.course) {
+            setCourse(data.course);
+          } else {
+            console.error('[CourseCatalogPage] Course not found in instance data:', data);
+            throw new Error('Course not found in instance data');
+          }
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          console.error('[CourseCatalogPage] Error loading instance:', err);
+          setIsLoading(false);
+          // 不自动跳转，让用户看到错误信息
+          // router.push('/course-catalog');
+        });
+    } 
+    // 如果有 id 参数，从 course API 获取 course 信息
+    else if (courseId) {
       fetch(`/api/courses/${courseId}`)
         .then(res => {
           if (!res.ok) {
@@ -39,11 +76,11 @@ function CourseCatalogContent() {
     } else {
       setIsLoading(false);
     }
-  }, [courseId, router]);
+  }, [courseId, instanceId, router]);
 
-  // 如果没有 ?id=xxx 参数，显示课程列表
+  // 如果没有 ?id=xxx 或 ?instance=xxx 参数，显示课程列表
   // AllCourses 组件会自己读取 ?franchise=xxx 参数来决定显示哪个校区的课程
-  if (!courseId) {
+  if (!courseId && !instanceId) {
     // 移动端：使用移动端优化的课程列表
     if (isReady && isNative) {
       return <AllCoursesMobile />;

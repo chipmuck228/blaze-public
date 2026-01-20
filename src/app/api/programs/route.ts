@@ -95,7 +95,133 @@ export async function GET(request: Request) {
       })
     }
 
-    // 3. 按 series 分组课程（去重）
+    // 3. 先查询 instances，以便只添加有 instances 的 courses
+    const assignmentIds = Array.from(new Set((assignmentsData || []).map((a: any) => a.id)))
+    let instancesData: any[] = []
+    
+    if (assignmentIds.length > 0) {
+      console.log(`[Programs API] Querying instances for ${assignmentIds.length} assignments:`, assignmentIds)
+      
+      // 先查询所有 instances（不过滤 status 和 franchise_id），以便调试
+      const { data: allInstances, error: allInstancesError } = await supabaseAdmin
+        .from("course_instances")
+        .select(`
+          id,
+          assignment_id,
+          location_id,
+          start_date,
+          end_date,
+          start_time,
+          end_time,
+          max_students,
+          current_students,
+          status,
+          price_override,
+          is_active,
+          franchise_id
+        `)
+        .in("assignment_id", assignmentIds)
+
+      if (allInstancesError) {
+        console.error(`[Programs API] Error fetching all instances:`, allInstancesError)
+      } else {
+        console.log(`[Programs API] Found ${allInstances?.length || 0} total instances (before filtering):`, 
+          (allInstances || []).map((inst: any) => ({
+            id: inst.id,
+            assignment_id: inst.assignment_id,
+            status: inst.status,
+            is_active: inst.is_active,
+            franchise_id: inst.franchise_id,
+            start_date: inst.start_date
+          }))
+        )
+      }
+
+      // 查询 instances，通过 assignment_id 过滤（assignment 已经属于该 franchise 的 series）
+      // 注意：不直接过滤 franchise_id，因为可能有些 instances 的 franchise_id 是 null
+      // 但我们通过 assignment → series 的关系已经确保了它们属于该 franchise
+      const { data: instances, error: instancesError } = await supabaseAdmin
+        .from("course_instances")
+        .select(`
+          id,
+          assignment_id,
+          location_id,
+          start_date,
+          end_date,
+          start_time,
+          end_time,
+          max_students,
+          current_students,
+          status,
+          price_override,
+          is_active,
+          franchise_id,
+          location:course_locations(
+            id,
+            name,
+            address,
+            city,
+            state,
+            zip_code
+          )
+        `)
+        .in("assignment_id", assignmentIds)
+        .eq("is_active", true)
+        .in("status", ["scheduled", "ongoing"])
+        .order("start_date", { ascending: true })
+        .order("start_time", { ascending: true })
+
+      if (instancesError) {
+        console.error(`[Programs API] Error fetching instances:`, instancesError)
+      } else {
+        console.log(`[Programs API] Found ${instances?.length || 0} instances after filtering (is_active=true, status in [scheduled, ongoing]):`,
+          (instances || []).map((inst: any) => ({
+            id: inst.id,
+            assignment_id: inst.assignment_id,
+            status: inst.status,
+            franchise_id: inst.franchise_id
+          }))
+        )
+        
+        instancesData = (instances || []).filter((inst: any) => {
+          // 过滤：只保留 franchise_id 匹配或为 null 的 instances
+          // 如果 franchise_id 为 null，我们通过 assignment → series 的关系已经验证了它属于该 franchise
+          const matches = !inst.franchise_id || inst.franchise_id === franchise.id
+          if (!matches) {
+            console.log(`[Programs API] Filtering out instance ${inst.id}: franchise_id mismatch (${inst.franchise_id} !== ${franchise.id})`)
+          }
+          return matches
+        })
+        console.log(`[Programs API] Final filtered instances: ${instancesData.length} for franchise ${franchise.code}`)
+      }
+    }
+
+    // 4. 将 instances 按 assignment_id 分组
+    const instancesByAssignment = new Map<string, any[]>()
+    for (const instance of instancesData) {
+      const assignmentId = instance.assignment_id
+      if (!instancesByAssignment.has(assignmentId)) {
+        instancesByAssignment.set(assignmentId, [])
+      }
+      instancesByAssignment.get(assignmentId)!.push({
+        id: instance.id,
+        assignment_id: instance.assignment_id,
+        location_id: instance.location_id,
+        start_date: instance.start_date,
+        end_date: instance.end_date,
+        start_time: instance.start_time,
+        end_time: instance.end_time,
+        max_students: instance.max_students,
+        current_students: instance.current_students,
+        available_spots: (instance.max_students || 0) - (instance.current_students || 0),
+        is_full: (instance.current_students || 0) >= (instance.max_students || 0),
+        status: instance.status,
+        price_override: instance.price_override,
+        location: instance.location,
+      })
+    }
+
+    // 5. 按 series 分组课程（只添加有 instances 的 courses）
     const seriesMap = new Map<string, any>()
     for (const s of seriesList as any[]) {
       seriesMap.set(s.id, {
@@ -132,10 +258,17 @@ export async function GET(request: Request) {
       }
       
       // 只返回 published 状态的课程（公开 API 的要求）
-      // 如果课程没有 status 字段，默认不显示（安全起见）
       if (course.status !== 'published') {
         skippedCoursesCount++
         console.log(`[Programs API] Skipping course ${course.id} (${course.name}): status is "${course.status}", not "published"`)
+        continue
+      }
+
+      // 只添加有 instances 的 courses
+      const courseInstances = instancesByAssignment.get(assignment.id) || []
+      if (courseInstances.length === 0) {
+        skippedCoursesCount++
+        console.log(`[Programs API] Skipping course ${course.id} (${course.name}): no instances`)
         continue
       }
 
@@ -153,15 +286,31 @@ export async function GET(request: Request) {
           gradeLevel: (course as any).grade_level || (course as any).target_grades || "",
           slug: course.slug || undefined,
           poster_url: (course as any).poster_url || undefined,
+          instances: courseInstances,
         })
-        console.log(`[Programs API] Added course "${course.name}" (${course.id}) to series "${seriesEntry.display_name}"`)
+        console.log(`[Programs API] Added course "${course.name}" (${course.id}) with ${courseInstances.length} instances to series "${seriesEntry.display_name}"`)
+      } else {
+        // 如果课程已存在（可能有多个 assignments），合并 instances
+        const existingCourse = seriesEntry.courses.get(course.id)
+        const existingInstances = existingCourse.instances || []
+        // 合并并去重 instances（按 id）
+        const instancesMap = new Map()
+        existingInstances.forEach((inst: any) => instancesMap.set(inst.id, inst))
+        courseInstances.forEach((inst: any) => instancesMap.set(inst.id, inst))
+        existingCourse.instances = Array.from(instancesMap.values())
+        console.log(`[Programs API] Merged instances for course "${course.name}" (${course.id}), total: ${existingCourse.instances.length}`)
       }
     }
     
-    console.log(`[Programs API] Course filtering summary: ${publishedCoursesCount} published courses added, ${skippedCoursesCount} courses skipped`)
+    console.log(`[Programs API] Course filtering summary: ${publishedCoursesCount} published courses with instances added, ${skippedCoursesCount} courses skipped`)
 
-    // 4. 将 Map 转为数组返回
-    const result = Array.from(seriesMap.values()).map((entry) => ({
+    // 6. 将 Map 转为数组返回（已经过滤掉没有 instances 的 courses）
+    const result = Array.from(seriesMap.values())
+      .map((entry) => {
+        const coursesWithInstances = Array.from(entry.courses.values())
+          .filter((course: any) => course.instances && course.instances.length > 0)
+        
+        return {
       id: entry.id,
       name: entry.name,
       display_name: entry.display_name,
@@ -169,14 +318,34 @@ export async function GET(request: Request) {
       start_date: entry.start_date,
       end_date: entry.end_date,
       category: entry.category,
-      courses: Array.from(entry.courses.values()),
-    }))
+          courses: coursesWithInstances,
+        }
+      })
+      .filter((program) => program.courses.length > 0) // 过滤掉没有 courses 的 programs
 
     console.log(`[Programs API] Final result: ${result.length} programs with courses:`, result.map((p: any) => ({
       program: p.display_name,
+      program_id: p.id,
       course_count: p.courses.length,
-      courses: p.courses.map((c: any) => c.title)
+      courses: p.courses.map((c: any) => ({
+        title: c.title,
+        id: c.id,
+        instance_count: c.instances?.length || 0
+      }))
     })))
+
+    // 详细日志：检查每个 program 的 courses
+    result.forEach((p: any) => {
+      console.log(`[Programs API] Program "${p.display_name}" (${p.id}):`, {
+        courses_count: p.courses.length,
+        courses: p.courses.map((c: any) => ({
+          id: c.id,
+          title: c.title,
+          instances_count: c.instances?.length || 0,
+          has_instances: !!(c.instances && c.instances.length > 0)
+        }))
+      })
+    })
 
     return NextResponse.json(result, { status: 200 })
   } catch (error: any) {

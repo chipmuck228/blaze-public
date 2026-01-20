@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCourseInstances, getInstanceAvailableCapacity, getFranchiseByCode, getCourseWithDetails } from "@/lib/db"
+import { supabaseAdmin } from "@/lib/supabase"
 
 // GET: 获取课程的所有可用实例（公开 API，只返回已发布课程的实例）
 export async function GET(
@@ -25,22 +26,77 @@ export async function GET(
       return NextResponse.json([], { status: 200 })
     }
 
-    let instances = await getCourseInstances(id)
+    // 获取包含完整层级信息的 instances
+    const { data: assignmentsData } = await supabaseAdmin
+      .from('course_assignments')
+      .select('id')
+      .eq('course_id', id)
+      .eq('is_active', true)
 
-    // 调试日志：记录查询结果
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Course ${id} Instances] After getCourseInstances:`, {
-        instances_count: instances.length,
-        instances: instances.map(inst => ({
-          id: inst.id,
-          assignment_id: inst.assignment_id,
-          franchise_id: inst.franchise_id,
-          start_date: inst.start_date,
-          is_active: inst.is_active,
-        })),
-        franchise_filter: franchiseCode || 'none',
-      })
+    if (!assignmentsData || assignmentsData.length === 0) {
+      return NextResponse.json([])
     }
+
+    const assignmentIds = assignmentsData.map(a => a.id)
+
+    let instancesQuery = supabaseAdmin
+      .from('course_instances')
+      .select(`
+        *,
+        assignment:course_assignments(
+          id,
+          category_id,
+          series_id,
+          category:course_categories(
+            id,
+            name,
+            display_name
+          ),
+          series:course_series(
+            id,
+            name,
+            display_name,
+            franchise_id,
+            franchise:franchises(
+              id,
+              code,
+              name
+            )
+          )
+        ),
+        location:course_locations(
+          id,
+          name,
+          address,
+          city,
+          state,
+          zip_code
+        )
+      `)
+      .in('assignment_id', assignmentIds)
+      .eq('is_active', true)
+      .order('start_date', { ascending: true })
+      .order('start_time', { ascending: true })
+
+    // 如果指定了 franchise，则按 franchise 过滤实例
+    if (franchiseCode) {
+      const franchise = await getFranchiseByCode(franchiseCode)
+      if (!franchise) {
+        return NextResponse.json(
+          { error: "Invalid franchise code" },
+          { status: 400 }
+        )
+      }
+      // 先获取所有 instances，然后根据 franchise_id 或 series.franchise_id 过滤
+    }
+
+    const { data: instancesData, error: instancesError } = await instancesQuery
+
+    if (instancesError) {
+      throw new Error(`Failed to fetch instances: ${instancesError.message}`)
+    }
+
+    let instances = (instancesData || []) as any[]
 
     // 如果指定了 franchise，则按 franchise 过滤实例
     if (franchiseCode) {
@@ -52,55 +108,32 @@ export async function GET(
         )
       }
 
-      // 过滤逻辑：如果 instance.franchise_id 为 null，需要从 assignment → series 推导
-      // 或者允许 franchise_id = null 的实例（表示全局可用）
       instances = instances.filter((instance: any) => {
         // 如果 instance 有 franchise_id，必须匹配
         if (instance.franchise_id !== null && instance.franchise_id !== undefined) {
           return instance.franchise_id === franchise.id
         }
-        // 如果 instance.franchise_id 为 null，暂时允许通过（后续可以从 assignment 推导）
-        // TODO: 从 assignment → series 推导 franchise_id
-        return true
+        // 否则从 assignment → series → franchise 推导
+        const assignment = Array.isArray(instance.assignment) ? instance.assignment[0] : instance.assignment
+        if (assignment?.series) {
+          const series = Array.isArray(assignment.series) ? assignment.series[0] : assignment.series
+          if (series?.franchise_id) {
+            return series.franchise_id === franchise.id
+          }
+        }
+        return false
       })
-      
-      // 调试日志：记录过滤结果
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[Course ${id} Instances] After franchise filter:`, {
-          franchise_code: franchiseCode,
-          franchise_id: franchise.id,
-          instances_count: instances.length,
-          instances: instances.map(inst => ({
-            id: inst.id,
-            franchise_id: inst.franchise_id,
-          })),
-        })
-      }
     }
 
     // 获取每个实例的可用容量
     const instancesWithCapacity = await Promise.all(
-      instances.map(async (instance) => {
+      instances.map(async (instance: any) => {
         const availableCapacity = await getInstanceAvailableCapacity(instance.id)
-        const result = {
+        return {
           ...instance,
           available_capacity: availableCapacity,
           is_full: availableCapacity <= 0,
         }
-        
-        // 调试日志：记录容量计算详情
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[Instance ${instance.id}] Capacity check:`, {
-            instance_id: instance.id,
-            max_students: instance.max_students,
-            current_students: instance.current_students,
-            available_capacity: availableCapacity,
-            is_full: result.is_full,
-            start_date: instance.start_date,
-          })
-        }
-        
-        return result
       })
     )
 

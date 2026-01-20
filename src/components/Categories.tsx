@@ -1,12 +1,10 @@
 'use client'
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
-import { Badge } from "./ui/badge"
 import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 interface Category {
   id: string
@@ -14,6 +12,7 @@ interface Category {
   display_name: string
   description?: string | null
   is_active: boolean
+  poster_url?: string | null
 }
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -21,53 +20,6 @@ const categoryIcons: Record<string, React.ReactNode> = {
   camps: <GraduationCap className="h-8 w-8 stroke-1" />,
   workshops: <Sparkles className="h-8 w-8 stroke-1" />,
   competition: <Trophy className="h-8 w-8 stroke-1" />,
-}
-
-const categoryColors: Record<string, { bg: string; text: string; border: string; hover: string }> = {
-  courses: {
-    bg: 'bg-blue-50 dark:bg-blue-950/20',
-    text: 'text-blue-700 dark:text-blue-300',
-    border: 'border-blue-200 dark:border-blue-800',
-    hover: 'hover:bg-blue-100 dark:hover:bg-blue-950/40',
-  },
-  camps: {
-    bg: 'bg-green-50 dark:bg-green-950/20',
-    text: 'text-green-700 dark:text-green-300',
-    border: 'border-green-200 dark:border-green-800',
-    hover: 'hover:bg-green-100 dark:hover:bg-green-950/40',
-  },
-  workshops: {
-    bg: 'bg-purple-50 dark:bg-purple-950/20',
-    text: 'text-purple-700 dark:text-purple-300',
-    border: 'border-purple-200 dark:border-purple-800',
-    hover: 'hover:bg-purple-100 dark:hover:bg-purple-950/40',
-  },
-  competition: {
-    bg: 'bg-red-50 dark:bg-red-950/20',
-    text: 'text-red-700 dark:text-red-300',
-    border: 'border-red-200 dark:border-red-800',
-    hover: 'hover:bg-red-100 dark:hover:bg-red-950/40',
-  },
-}
-
-const getCategoryStyle = (categoryName: string) => {
-  const normalizedName = categoryName.toLowerCase()
-  if (normalizedName.includes('course')) {
-    return categoryColors.courses
-  } else if (normalizedName.includes('camp')) {
-    return categoryColors.camps
-  } else if (normalizedName.includes('workshop')) {
-    return categoryColors.workshops
-  } else if (normalizedName.includes('competition')) {
-    return categoryColors.competition
-  }
-  // Default style
-  return {
-    bg: 'bg-gray-50 dark:bg-gray-950/20',
-    text: 'text-gray-700 dark:text-gray-300',
-    border: 'border-gray-200 dark:border-gray-800',
-    hover: 'hover:bg-gray-100 dark:hover:bg-gray-950/40',
-  }
 }
 
 const getCategoryIcon = (categoryName: string) => {
@@ -81,7 +33,21 @@ const getCategoryIcon = (categoryName: string) => {
   } else if (normalizedName.includes('competition')) {
     return categoryIcons.competition
   }
-  return <BookOpen className="h-8 w-8" />
+  return categoryIcons.courses // default
+}
+
+const getCategoryGradient = (categoryName: string) => {
+  const normalizedName = categoryName.toLowerCase()
+  if (normalizedName.includes('course')) {
+    return { from: '#3B82F6', to: '#1E40AF' }
+  } else if (normalizedName.includes('camp')) {
+    return { from: '#10B981', to: '#047857' }
+  } else if (normalizedName.includes('workshop')) {
+    return { from: '#8B5CF6', to: '#6D28D9' }
+  } else if (normalizedName.includes('competition')) {
+    return { from: '#F59E0B', to: '#D97706' }
+  }
+  return { from: '#6B7280', to: '#4B5563' } // default
 }
 
 export const Categories = () => {
@@ -147,58 +113,82 @@ export const Categories = () => {
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl flex flex-wrap justify-center gap-6 md:gap-8">
-        {categories.map((category) => {
-          const styles = getCategoryStyle(category.name)
+        {categories.map((category, index) => {
+          const gradient = getCategoryGradient(category.name)
           const icon = getCategoryIcon(category.name)
           
           return (
-            <Card
+            <div
               key={category.id}
-              className={`group relative overflow-hidden transition-all duration-300 shadow-md hover:shadow-2xl hover:-translate-y-1 ${styles.bg} ${styles.border} border-0 w-full md:w-[calc(50%-1rem)] lg:w-[calc(25%-1.5rem)] max-w-sm`}
+              onClick={() => window.location.href = `/programs?category=${category.id}`}
+              className="w-full md:w-[calc(50%-1rem)] lg:w-[calc(25%-1.5rem)] max-w-sm bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col"
             >
-              {/* Decorative background pattern */}
-              <div className="absolute top-0 right-0 w-40 h-40 opacity-5 group-hover:opacity-10 transition-opacity">
-                <div className={`w-full h-full ${styles.text} flex items-center justify-center`}>
+              {/* Image/Gradient Header */}
+              <div className="h-48 relative overflow-hidden shrink-0">
+                {category.poster_url ? (
+                  <>
+                    <Image
+                      src={category.poster_url}
+                      alt={category.display_name}
+                      fill
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      priority={index < 2}
+                      sizes="(max-width: 768px) 100%, (max-width: 1024px) 50%, 25%"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
+                  </>
+                ) : (
+                  <div 
+                    className="w-full h-full flex items-center justify-center"
+                    style={{
+                      background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
+                    }}
+                  >
+                    <div className="w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg bg-white/20 backdrop-blur-sm">
                   {icon}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Badges */}
+                <div className="absolute top-4 left-4 flex flex-col gap-2 items-start">
+                  <span 
+                    className="bg-[#2563eb] text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm uppercase tracking-wide"
+                    style={{
+                      background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
+                    }}
+                  >
+                    {category.name}
+                  </span>
                 </div>
               </div>
               
-              <CardHeader className="relative z-10 pb-4">
-                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl ${styles.bg} ${styles.border} border-0 mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm`}>
-                  <div className={styles.text}>
-                    {icon}
+              {/* Content */}
+              <div className="p-6 flex flex-col flex-grow">
+                <h4 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-1">
+                  {category.display_name}
+                </h4>
+                {category.description && (
+                  <p className="text-slate-500 text-sm mb-4 line-clamp-2">{category.description}</p>
+                )}
+                {!category.description && (
+                  <p className="text-slate-500 text-sm mb-4 line-clamp-2">
+                    Explore our {category.display_name.toLowerCase()} programs designed for all skill levels.
+                  </p>
+                )}
+                
+                <div className="mt-auto">
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                    <span className="text-blue-600 font-bold text-sm flex items-center group-hover:translate-x-1 transition-transform">
+                      Explore <ArrowRight className="w-4 h-4 ml-1" />
+                    </span>
                   </div>
                 </div>
-                <CardTitle className="text-2xl md:text-3xl font-bold mb-3">
-                  {category.display_name}
-                </CardTitle>
-                <CardDescription className="text-base leading-relaxed min-h-[3rem]">
-                  {category.description || `Explore our ${category.display_name.toLowerCase()} programs designed for all skill levels.`}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="relative z-10 pt-0">
-                <div className="flex items-center justify-between pt-4 border-t border-border/50">
-                  <Badge variant="outline" className="text-xs font-medium">
-                    Active Programs
-                  </Badge>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className={`${styles.text} ${styles.hover} group-hover:translate-x-1 transition-all duration-300 font-medium`}
-                  >
-                    <Link href={`/programs#${category.name.toLowerCase()}`}>
-                      Explore
-                      <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                  </Button>
+              </div>
                 </div>
-              </CardContent>
-
-              {/* Decorative gradient overlay on hover */}
-              <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent pointer-events-none`} />
-            </Card>
           )
         })}
       </div>

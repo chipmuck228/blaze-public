@@ -47,7 +47,28 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
           throw new Error("Failed to load programs")
         }
         const data = await response.json()
-        setPrograms(data || [])
+        console.log('[LocationFeaturedCourses] API response:', {
+          franchiseCode,
+          dataLength: data?.length || 0,
+          data: data
+        })
+        // 过滤掉没有 courses 的 programs
+        const programsWithCourses = (data || []).filter(
+          (program: Program) => {
+            const hasCourses = program.courses && program.courses.length > 0
+            console.log(`[LocationFeaturedCourses] Program "${program.display_name}":`, {
+              hasCourses,
+              courseCount: program.courses?.length || 0,
+              courses: program.courses
+            })
+            return hasCourses
+          }
+        )
+        console.log('[LocationFeaturedCourses] Filtered programs:', {
+          total: programsWithCourses.length,
+          programs: programsWithCourses.map((p: Program) => ({ name: p.display_name, courseCount: p.courses?.length || 0 }))
+        })
+        setPrograms(programsWithCourses)
       } catch (err: any) {
         console.error("Error fetching programs:", err)
         setError(err.message || "Failed to load programs")
@@ -64,7 +85,7 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold">
-            Featured Programs at {locationName}
+            Programs at {locationName}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             A snapshot of popular robotics programs currently offered at this campus.
@@ -109,7 +130,7 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
                       {program.display_name || program.name}
                     </CardTitle>
                     {program.category && (
-                      <Badge variant="outline" className="text-[11px] uppercase tracking-wide shrink-0">
+                      <Badge variant="outline" className="text-[11px] uppercase tracking-wide shrink-0 bg-[#2563eb] text-white">
                         {program.category.display_name || program.category.name}
                       </Badge>
                     )}
@@ -142,7 +163,7 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
                       <Link href={`/course-catalog?franchise=${encodeURIComponent(franchiseCode)}`}>
                         <span className="flex items-center gap-1">
                           <BookOpen className="h-3 w-3" />
-                          <span>View Activities</span>
+                          <span>View Instances</span>
                           <ArrowRight className="h-3 w-3" />
                         </span>
                       </Link>

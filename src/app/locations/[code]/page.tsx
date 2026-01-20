@@ -1,20 +1,13 @@
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { MapPin, ArrowRight, Mail, Phone, Clock, ExternalLink } from "lucide-react"
+import { MapPin, Mail, Phone, ExternalLink } from "lucide-react"
 import { notFound } from "next/navigation"
 import { getFranchiseDetailsByCode, getFranchiseLocations } from "@/lib/db"
 import { LocationFeaturedCourses } from "@/components/location/LocationFeaturedCourses"
+import { LocationHero } from "@/components/location/LocationHero"
 import { AIChatButton } from "@/components/location/AIChatButton"
-import { ContactButton } from "@/components/location/ContactButton"
-import type { Franchise, FranchiseBrandingConfig, CourseLocation } from "@/lib/db"
+import { BusinessHours } from "@/components/location/BusinessHours"
+import type { Franchise, CourseLocation } from "@/lib/db"
 
 interface LocationPageProps {
   params: Promise<{ code: string }>
@@ -159,80 +152,29 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
   return (
     <>
       <Navbar />
-      <main className="min-h-screen bg-background pt-14">
+      <main className="min-h-screen bg-background">
+        {/* Hero Section */}
+        <LocationHero
+          heroTitle={heroTitle}
+          heroDescription={heroDescription}
+          displayName={displayName}
+          primaryAddress={primaryAddress}
+          normalizedCode={normalizedCode}
+          highlights={{
+            programs: highlightPrograms,
+            schedule: highlightSchedule,
+            focus: highlightFocus,
+          }}
+        />
+
         <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 sm:py-20">
-          {/* Hero */}
-          <div className="grid lg:grid-cols-2 gap-10 items-start">
-            <div className="space-y-6">
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold">
-                {heroTitle}
-              </h1>
-              <p className="text-lg text-muted-foreground">
-                {heroDescription}
-              </p>
-              {primaryAddress && (
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="h-5 w-5 mt-0.5 text-primary" />
-                    <div className="flex-1">
-                      <p className="font-medium text-foreground">{displayName} Campus</p>
-                      <div className="flex items-center gap-2">
-                        <p>{primaryAddress}</p>
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(primaryAddress)}`}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="text-primary hover:text-primary/80 transition-colors"
-                          aria-label="Open location in Google Maps"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-3">
-                <Button asChild size="lg">
-                  <a href={`/course-catalog?franchise=${encodeURIComponent(normalizedCode)}`}>
-                    View Activities
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </a>
-                </Button>
-                <ContactButton displayName={displayName} />
-              </div>
-            </div>
-
-            {/* Highlights card */}
-            <Card className="shadow-md">
-              <CardHeader>
-                <CardTitle>{displayName} Highlights</CardTitle>
-                <CardDescription>
-                  A quick overview of what students can expect at the {displayName} campus.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <div>
-                  <p className="font-medium text-foreground mb-1">Programs</p>
-                  <p>{highlightPrograms}</p>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground mb-1">Schedule</p>
-                  <p>{highlightSchedule}</p>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground mb-1">Focus</p>
-                  <p>{highlightFocus}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Featured courses for this franchise */}
-          <LocationFeaturedCourses
-            franchiseCode={normalizedCode}
-            locationName={displayName}
-          />
+          <div id="programs">
+            <LocationFeaturedCourses
+              franchiseCode={normalizedCode}
+              locationName={displayName}
+            />
+          </div>
 
           {/* Contact / Info section */}
           <section
@@ -299,44 +241,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
                 For specific class schedules and availability at {displayName}, please view the program
                 catalog or reach out to the local campus team.
               </p>
-              {locations.length > 1 && (
-                <div className="mt-6">
-                  <p className="font-medium text-foreground mb-2">Our Locations</p>
-                  <ul className="space-y-2">
-                    {locations.map((location) => {
-                      const locationAddress = [
-                        location.address,
-                        location.city,
-                        location.state,
-                        location.zip_code
-                      ].filter(Boolean).join(', ')
-                      
-                      return (
-                        <li key={location.id} className="flex items-start gap-2">
-                          <MapPin className="h-4 w-4 mt-0.5 text-primary" />
-                          <div className="flex-1">
-                            <p className="font-medium">{location.name}</p>
-                            {locationAddress && (
-                              <div className="flex items-center gap-2">
-                                <p className="text-xs">{locationAddress}</p>
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationAddress)}`}
-                                  target="_blank"
-                                  rel="noreferrer noopener"
-                                  className="text-primary hover:text-primary/80 transition-colors"
-                                  aria-label={`Open ${location.name} in Google Maps`}
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </div>
-              )}
+              <BusinessHours businessHours={businessHours} />
             </div>
           </section>
         </section>
