@@ -15,8 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, AlertCircle, Loader2, ShoppingCart } from "lucide-react";
+import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, ArrowLeft, AlertCircle, Loader2, ShoppingCart } from "lucide-react";
 import { CourseWithDetails } from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase";
 
 interface CourseDetailProps {
   course: CourseWithDetails;
@@ -94,6 +95,9 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [currentInstance, setCurrentInstance] = useState<InstanceDetails | null>(null);
   const [isLoadingInstance, setIsLoadingInstance] = useState(false);
+  const [programInstances, setProgramInstances] = useState<any[]>([]);
+  const [previousInstance, setPreviousInstance] = useState<any | null>(null);
+  const [nextInstance, setNextInstance] = useState<any | null>(null);
   const [enrollmentStatus, setEnrollmentStatus] = useState<{
     canEnroll: boolean;
     reason?: string;
@@ -133,6 +137,131 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
       }
     }
   }, [searchParams]);
+
+  // 获取同一个 program 的所有 instances
+  const fetchProgramInstances = async (programId: string, currentInstanceId: string) => {
+    try {
+      console.log(`[CourseDetail] Fetching program instances for program ${programId}, current instance: ${currentInstanceId}`);
+      
+      // 通过 program (series) 获取所有 assignments
+      const { data: assignmentsData, error: assignmentsError } = await supabaseAdmin
+        .from('course_assignments')
+        .select('id')
+        .eq('series_id', programId)
+        .eq('is_active', true);
+
+      if (assignmentsError) {
+        console.error('[CourseDetail] Error fetching assignments:', assignmentsError);
+        setPreviousInstance(null);
+        setNextInstance(null);
+        return;
+      }
+
+      if (!assignmentsData || assignmentsData.length === 0) {
+        console.log(`[CourseDetail] No assignments found for program ${programId}`);
+        setPreviousInstance(null);
+        setNextInstance(null);
+        return;
+      }
+
+      console.log(`[CourseDetail] Found ${assignmentsData.length} assignments for program ${programId}`);
+      const assignmentIds = assignmentsData.map((a: any) => a.id);
+
+      // 获取这些 assignments 的所有 instances
+      const { data: instancesData, error: instancesError } = await supabaseAdmin
+        .from('course_instances')
+        .select(`
+          id,
+          start_date,
+          end_date,
+          start_time,
+          end_time,
+          assignment:course_assignments(
+            id,
+            course:courses(
+              id,
+              name,
+              slug
+            )
+          )
+        `)
+        .in('assignment_id', assignmentIds)
+        .eq('is_active', true)
+        .in('status', ['scheduled', 'ongoing'])
+        .order('start_date', { ascending: true })
+        .order('start_time', { ascending: true });
+
+      if (instancesError) {
+        console.error('[CourseDetail] Error fetching instances:', instancesError);
+        setPreviousInstance(null);
+        setNextInstance(null);
+        return;
+      }
+
+      if (!instancesData || instancesData.length === 0) {
+        console.log(`[CourseDetail] No instances found for assignments`);
+        setPreviousInstance(null);
+        setNextInstance(null);
+        return;
+      }
+
+      console.log(`[CourseDetail] Found ${instancesData.length} instances for program ${programId}`);
+
+      const instances = (instancesData || []).map((inst: any) => {
+        const assignment = Array.isArray(inst.assignment) ? inst.assignment[0] : inst.assignment;
+        const course = assignment?.course ? (Array.isArray(assignment.course) ? assignment.course[0] : assignment.course) : null;
+        return {
+          id: inst.id,
+          start_date: inst.start_date,
+          course: course ? { id: course.id, name: course.name, slug: course.slug } : null,
+        };
+      });
+
+      // 找到当前 instance 的位置
+      const currentIndex = instances.findIndex((inst: any) => inst.id === currentInstanceId);
+      
+      console.log(`[CourseDetail] Current instance index: ${currentIndex}, total instances: ${instances.length}`);
+      console.log(`[CourseDetail] Instance IDs:`, instances.map((inst: any) => inst.id));
+      console.log(`[CourseDetail] Looking for instance ID: ${currentInstanceId}`);
+      
+      if (currentIndex === -1) {
+        console.warn(`[CourseDetail] Current instance ${currentInstanceId} not found in instances list`);
+        setPreviousInstance(null);
+        setNextInstance(null);
+        return;
+      }
+      
+      if (currentIndex > 0) {
+        const prevInst = instances[currentIndex - 1];
+        setPreviousInstance(prevInst);
+        console.log(`[CourseDetail] Previous instance set:`, prevInst.id, prevInst.course?.name);
+      } else {
+        setPreviousInstance(null);
+        console.log(`[CourseDetail] No previous instance (currentIndex: ${currentIndex})`);
+      }
+
+      if (currentIndex >= 0 && currentIndex < instances.length - 1) {
+        const nextInst = instances[currentIndex + 1];
+        setNextInstance(nextInst);
+        console.log(`[CourseDetail] Next instance set:`, nextInst.id, nextInst.course?.name);
+      } else {
+        setNextInstance(null);
+        console.log(`[CourseDetail] No next instance (currentIndex: ${currentIndex}, total: ${instances.length})`);
+      }
+      
+      // 验证 state 是否设置成功
+      setTimeout(() => {
+        console.log(`[CourseDetail] State after setting:`, {
+          previousInstance: previousInstance?.id,
+          nextInstance: nextInstance?.id
+        });
+      }, 100);
+    } catch (err: any) {
+      console.error('[CourseDetail] Error fetching program instances:', err);
+      setPreviousInstance(null);
+      setNextInstance(null);
+    }
+  };
 
   // 获取单个 instance 的详细信息
   const fetchInstanceDetails = async (instanceId: string) => {
@@ -184,13 +313,25 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         id: data.id,
         hasCourse: !!data.course,
         hasLocation: !!data.location,
-        hasFranchise: !!data.franchise
+        hasFranchise: !!data.franchise,
+        hasProgram: !!data.program,
+        programId: data.program?.id
       });
       
       setCurrentInstance(data);
       // 如果 instance 有 franchise，更新 selectedFranchise
       if (data.franchise) {
         setSelectedFranchise(data.franchise.code);
+      }
+      
+      // 获取同一个 program 的所有 instances
+      if (data.program?.id) {
+        console.log(`[CourseDetail] Calling fetchProgramInstances with programId: ${data.program.id}, instanceId: ${instanceId}`);
+        fetchProgramInstances(data.program.id, instanceId);
+      } else {
+        console.log(`[CourseDetail] No program ID found, clearing navigation`);
+        setPreviousInstance(null);
+        setNextInstance(null);
       }
     } catch (err: any) {
       // 只记录非 404 错误
@@ -227,6 +368,18 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
     fetchFranchises();
   }, []);
+
+  // 监听 previousInstance 和 nextInstance 的变化
+  useEffect(() => {
+    console.log('[CourseDetail] Navigation state updated:', {
+      hasPrevious: !!previousInstance,
+      hasNext: !!nextInstance,
+      previousId: previousInstance?.id,
+      nextId: nextInstance?.id,
+      previousCourse: previousInstance?.course?.name,
+      nextCourse: nextInstance?.course?.name
+    });
+  }, [previousInstance, nextInstance]);
 
   // 获取课程实例
   useEffect(() => {
@@ -728,6 +881,86 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                       </div>
                     )}
                   </div>
+                  
+                  {/* Navigation: Previous/Next Instance */}
+                  {(() => {
+                    const shouldShow = previousInstance || nextInstance;
+                    console.log('[CourseDetail] Navigation render:', {
+                      shouldShow,
+                      previousInstance: previousInstance?.id,
+                      nextInstance: nextInstance?.id,
+                      currentInstance: currentInstance?.id
+                    });
+                    return shouldShow;
+                  })() && (
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      {previousInstance ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                          className="flex items-center gap-2"
+                        >
+                          <Link
+                            href={
+                              (() => {
+                                const params = new URLSearchParams();
+                                params.set('instance', previousInstance.id);
+                                if (currentInstance?.franchise) {
+                                  params.set('franchise', currentInstance.franchise.code);
+                                }
+                                if (previousInstance.course?.slug) {
+                                  return `/course-catalog/${encodeURIComponent(previousInstance.course.slug)}?${params.toString()}`;
+                                } else if (previousInstance.course?.id) {
+                                  params.set('id', previousInstance.course.id);
+                                  return `/course-catalog?${params.toString()}`;
+                                }
+                                return `/course-catalog?${params.toString()}`;
+                              })()
+                            }
+                          >
+                            <ArrowLeft className="h-4 w-4" />
+                            Previous Session
+                          </Link>
+                        </Button>
+                      ) : (
+                        <div></div>
+                      )}
+                      
+                      {nextInstance ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                          className="flex items-center gap-2"
+                        >
+                          <Link
+                            href={
+                              (() => {
+                                const params = new URLSearchParams();
+                                params.set('instance', nextInstance.id);
+                                if (currentInstance?.franchise) {
+                                  params.set('franchise', currentInstance.franchise.code);
+                                }
+                                if (nextInstance.course?.slug) {
+                                  return `/course-catalog/${encodeURIComponent(nextInstance.course.slug)}?${params.toString()}`;
+                                } else if (nextInstance.course?.id) {
+                                  params.set('id', nextInstance.course.id);
+                                  return `/course-catalog?${params.toString()}`;
+                                }
+                                return `/course-catalog?${params.toString()}`;
+                              })()
+                            }
+                          >
+                            Next Session
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : (
+                        <div></div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
