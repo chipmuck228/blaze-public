@@ -26,7 +26,7 @@ export const Hero = () => {
           </p>
           <div className="flex flex-wrap gap-4">
             <Link
-              href="/courses"
+              href="/programs"
               className="bg-white text-[#0f172a] px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition-all flex items-center shadow-xl hover:shadow-2xl hover:-translate-y-1"
             >
               Find Your Program

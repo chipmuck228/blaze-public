@@ -420,8 +420,8 @@ export default function Home() {
                                       key={loc.id}
                                       onClick={() => setSelectedLocation(loc)}
                                       className={`block p-3 rounded-lg cursor-pointer transition-colors ${isSelected
-                                          ? 'bg-primary/10 border border-primary/20'
-                                          : 'hover:bg-accent/50'
+                                        ? 'bg-primary/10 border border-primary/20'
+                                        : 'hover:bg-accent/50'
                                         }`}
                                     >
                                       <div className="flex items-start gap-3">
@@ -449,8 +449,10 @@ export default function Home() {
             })()
           )}
         </section>
+        <section id="advantages">
+          <Advantages />
 
-        <Advantages />
+        </section>
 
         <RoboticsJourney />
 
@@ -459,7 +461,11 @@ export default function Home() {
           <Categories />
         </section>
 
-        <Testimonials />
+        <section>
+
+          <Testimonials />
+
+        </section>
         {/* <section id="about">
           <Team />
         </section> 

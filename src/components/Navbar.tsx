@@ -34,7 +34,7 @@ interface RouteProps {
       label: "Programs",
     },
     {
-      href: "#about",
+      href: "#advantages",
       label: "About",
     },
     {

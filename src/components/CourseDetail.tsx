@@ -920,7 +920,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                             }
                           >
                             <ArrowLeft className="h-4 w-4" />
-                            Previous Session
+                            Previous Instance
                           </Link>
                         </Button>
                       ) : (
@@ -952,7 +952,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                               })()
                             }
                           >
-                            Next Session
+                            Next Instance
                             <ArrowRight className="h-4 w-4" />
                           </Link>
                         </Button>
@@ -1363,7 +1363,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                 )}
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <Link href="/#courses">
+                <Link href={currentInstance?.franchise ? `/course-catalog?franchise=${currentInstance.franchise.code}` : (selectedFranchise ? `/course-catalog?franchise=${selectedFranchise}` : '/#courses')}>
                   View All Courses
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
