@@ -43,12 +43,6 @@ export async function GET() {
     }))
 
     return NextResponse.json(enrichedData || [], { status: 200 })
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    return NextResponse.json(data || [], { status: 200 })
   } catch (error: any) {
     console.error("Error fetching franchises:", error)
     return NextResponse.json(
