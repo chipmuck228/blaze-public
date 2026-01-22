@@ -51,3 +51,7 @@ android/.idea/
 *.hprof
 .cxx/
 local.properties
+
+# Documentation and SQL scripts (excluded from repository)
+*.md
+*.sql
