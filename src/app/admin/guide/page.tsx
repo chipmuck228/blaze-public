@@ -3,14 +3,19 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { BookOpen, FolderTree, List, Link as LinkIcon, Calendar, ArrowRight, Info, MapPin, Package, ShoppingCart } from "lucide-react"
+import { BookOpen, FolderTree, List, Calendar, ArrowRight, Info, MapPin, Package, ShoppingCart } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const tableOfContents = [
   {
     id: "overview",
-    title: "Course-Series-Assignment-Instance",
+    title: "Offering-Series-Instance",
     icon: Info,
+  },
+  {
+    id: "offering",
+    title: "Offering",
+    icon: Package,
   },
   {
     id: "instance",
@@ -23,8 +28,8 @@ const tableOfContents = [
     icon: MapPin,
   },
   {
-    id: "stock-status",
-    title: "Stock Status",
+    id: "offering-status",
+    title: "Offering Status",
     icon: Package,
   },
   {
@@ -110,7 +115,7 @@ export default function AdminGuidePage() {
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2">Admin Guide</h1>
         <p className="text-muted-foreground text-lg">
-          Understanding the Course-Series-Assignment-Instance relationship and workflow
+          Understanding the Offering-Series-Instance relationship and workflow
         </p>
       </div>
 
@@ -120,26 +125,26 @@ export default function AdminGuidePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Info className="h-5 w-5" />
-              Understanding the Course-Series-Assignment-Instance relationship and workflow
+              Understanding the Offering-Series-Instance relationship and workflow
             </CardTitle>
           <CardDescription>
-            The course system is built on a hierarchical structure that allows maximum flexibility and reusability
+            The course system is built on a simplified hierarchical structure that allows maximum flexibility and reusability
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              The system follows a four-level hierarchy: <strong>Course</strong> → <strong>Series</strong> → <strong>Assignment</strong> → <strong>Instance</strong>.
-              This design allows course content to be created once and reused across different programs, locations, and time periods.
+              The system follows a three-level hierarchy: <strong>Offering</strong> → <strong>Series</strong> → <strong>Instance</strong>.
+              This simplified design allows course content to be created once and reused across different programs, locations, and time periods without the need for an intermediate Assignment layer.
             </p>
             
             <div className="bg-muted p-4 rounded-lg">
               <h3 className="font-semibold mb-2">Key Design Principles:</h3>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li><strong>Course</strong> is completely independent - contains only course content, no binding to categories</li>
+                <li><strong>Offering</strong> is completely independent and global - contains only course content, no binding to categories, franchises, or series</li>
                 <li><strong>Series</strong> must belong to a <strong>Category</strong> - each series is part of a category (e.g., Courses, Camps, Workshops)</li>
-                <li><strong>Assignment</strong> links Course to Category/Series/Location - enables flexible distribution</li>
-                <li><strong>Instance</strong> is the actual class - specific dates, times, and capacity for enrollment</li>
+                <li><strong>Instance</strong> directly links Offering to Series - contains specific dates, times, capacity, and other instance-specific information</li>
+                <li><strong>Cancellation Policy</strong> is managed at the Franchise level - all instances within a franchise share the same policy</li>
               </ul>
             </div>
           </div>
@@ -158,13 +163,13 @@ export default function AdminGuidePage() {
         <CardContent>
           <div className="space-y-4">
             <div className="flex flex-col items-center space-y-3">
-              {/* Level 1: Course */}
+              {/* Level 1: Offering */}
               <div className="flex items-center gap-3 bg-primary/10 p-4 rounded-lg w-full max-w-md">
-                <BookOpen className="h-6 w-6 text-primary" />
+                <Package className="h-6 w-6 text-primary" />
                 <div className="flex-1">
-                  <div className="font-semibold text-lg">Course</div>
-                  <div className="text-sm text-muted-foreground">Course content (name, description, price, etc.)</div>
-                  <Badge variant="outline" className="mt-1">Independent</Badge>
+                  <div className="font-semibold text-lg">Offering</div>
+                  <div className="text-sm text-muted-foreground">Course content (name, description, base price, etc.)</div>
+                  <Badge variant="outline" className="mt-1">Global & Independent</Badge>
                 </div>
               </div>
 
@@ -190,25 +195,13 @@ export default function AdminGuidePage() {
 
               <ArrowRight className="h-5 w-5 text-muted-foreground" />
 
-              {/* Level 3: Assignment */}
-              <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/20 p-4 rounded-lg w-full max-w-md">
-                <LinkIcon className="h-6 w-6 text-green-600" />
-                <div className="flex-1">
-                  <div className="font-semibold text-lg">Assignment</div>
-                  <div className="text-sm text-muted-foreground">Links Course to Category/Series/Location</div>
-                  <Badge variant="outline" className="mt-1">Required: Course + Category + Series</Badge>
-                </div>
-              </div>
-
-              <ArrowRight className="h-5 w-5 text-muted-foreground" />
-
-              {/* Level 4: Instance */}
+              {/* Level 3: Instance */}
               <div className="flex items-center gap-3 bg-purple-50 dark:bg-purple-950/20 p-4 rounded-lg w-full max-w-md">
                 <Calendar className="h-6 w-6 text-purple-600" />
                 <div className="flex-1">
                   <div className="font-semibold text-lg">Instance</div>
                   <div className="text-sm text-muted-foreground">Actual class with dates, times, capacity</div>
-                  <Badge variant="outline" className="mt-1">Students enroll here</Badge>
+                  <Badge variant="outline" className="mt-1">Directly links Offering + Series</Badge>
                 </div>
               </div>
             </div>
@@ -218,27 +211,29 @@ export default function AdminGuidePage() {
 
       {/* Detailed Explanation */}
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        {/* Course */}
+        {/* Offering */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Course
+              <Package className="h-5 w-5" />
+              Offering
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm">
-              A <strong>Course</strong> contains the course content and properties:
+              An <strong>Offering</strong> contains the course content and properties:
             </p>
             <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Course name and description</li>
-              <li>Target audience and age range</li>
+              <li>Offering name and description</li>
+              <li>Target audience description</li>
               <li>Learning outcomes</li>
-              <li>Base price</li>
+              <li>Prerequisites</li>
+              <li>Base price and currency</li>
+              <li>Poster image</li>
               <li>Subcategory tags (optional)</li>
             </ul>
             <div className="bg-muted p-3 rounded text-sm">
-              <strong>Key Point:</strong> Course is completely independent and can be reused across multiple Series and Locations.
+              <strong>Key Point:</strong> Offering is completely independent and global. It can be reused across multiple Series, Categories, and Franchises. Only <strong>published</strong> offerings can be used to create instances.
             </div>
           </CardContent>
         </Card>
@@ -269,29 +264,6 @@ export default function AdminGuidePage() {
           </CardContent>
         </Card>
 
-        {/* Assignment */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LinkIcon className="h-5 w-5" />
-              Assignment
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm">
-              An <strong>Assignment</strong> links a Course to a specific Category/Series combination:
-            </p>
-            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Requires: Course + Category + Series</li>
-              <li>Optional: Location (default campus)</li>
-              <li>Display order within the Series</li>
-            </ul>
-            <div className="bg-muted p-3 rounded text-sm">
-              <strong>Key Point:</strong> One Course can have multiple Assignments to different Series/Locations.
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Instance */}
         <Card>
           <CardHeader>
@@ -305,14 +277,16 @@ export default function AdminGuidePage() {
               An <strong>Instance</strong> is the actual class that students can enroll in:
             </p>
             <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Must be linked to an Assignment</li>
+              <li>Directly links to an Offering (must be published)</li>
+              <li>Must belong to a Series (which belongs to a Category)</li>
               <li>Has specific dates and times</li>
               <li>Has capacity (max students)</li>
-              <li>Can override Assignment's location</li>
-              <li>Can override Course's base price</li>
+              <li>Contains instance-specific information (session count, duration, age range, etc.)</li>
+              <li>Can override Offering's base price</li>
+              <li>Inherits cancellation policy from Franchise</li>
             </ul>
             <div className="bg-muted p-3 rounded text-sm">
-              <strong>Key Point:</strong> This is where students actually enroll and attend classes.
+              <strong>Key Point:</strong> This is where students actually enroll and attend classes. Instance-specific details (like session count, duration, age range) are set here, not in the Offering.
             </div>
           </CardContent>
         </Card>
@@ -334,12 +308,19 @@ export default function AdminGuidePage() {
                 1
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold mb-2">Create a Course</h3>
+                <h3 className="font-semibold mb-2">Create an Offering</h3>
                 <p className="text-sm text-muted-foreground mb-2">
-                  Go to <strong>Stocks</strong> → Click "Add Course" → Fill in course details (name, description, price, etc.)
+                  Go to <strong>Content Admin</strong> → <strong>Offerings</strong> → Click "Add New Offering" → Fill in offering details:
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  <strong>Result:</strong> Course is created but not yet available for enrollment (no Assignment yet)
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
+                  <li>Name, description, poster image</li>
+                  <li>Target audience, learning outcomes, prerequisites</li>
+                  <li>Base price and currency</li>
+                  <li>Offering type (Course, Camp, Workshop, etc.)</li>
+                  <li>Set status to <strong>published</strong> (required to create instances)</li>
+                </ul>
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>Result:</strong> Offering is created and available globally. Only published offerings can be used to create instances.
                 </p>
               </div>
             </div>
@@ -352,11 +333,11 @@ export default function AdminGuidePage() {
               <div className="flex-1">
                 <h3 className="font-semibold mb-2">Create Category and Series</h3>
                 <p className="text-sm text-muted-foreground mb-2">
-                  Go to <strong>Categories</strong> → Create a Category (e.g., "Courses")<br />
-                  Then go to <strong>Series</strong> → Create a Series (e.g., "2025 Winter Courses") and select the Category
+                  Go to <strong>Settings</strong> → <strong>Categories</strong> → Create a Category (e.g., "Courses")<br />
+                  Then go to <strong>Content Admin</strong> → <strong>Programs</strong> → Create a Series (e.g., "2025 Winter Courses") and select the Category
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  <strong>Result:</strong> You now have a Category and Series to organize courses
+                  <strong>Result:</strong> You now have a Category and Series to organize offerings
                 </p>
               </div>
             </div>
@@ -367,42 +348,26 @@ export default function AdminGuidePage() {
                 3
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold mb-2">Create an Assignment</h3>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Go to <strong>Assignments</strong> → Click "Add Assignment" → Select:
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
-                  <li>Course (from Step 1)</li>
-                  <li>Category (from Step 2)</li>
-                  <li>Series (from Step 2, must match Category)</li>
-                  <li>Location (optional, default campus)</li>
-                </ul>
-                <p className="text-sm text-muted-foreground mt-2">
-                  <strong>Result:</strong> Course is now available in the selected Series
-                </p>
-              </div>
-            </div>
-
-            {/* Step 4 */}
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                4
-              </div>
-              <div className="flex-1">
                 <h3 className="font-semibold mb-2">Create Instances</h3>
                 <p className="text-sm text-muted-foreground mb-2">
-                  Go to <strong>Instances</strong> → Click "Add Instance" → Select the Assignment (from Step 3) → Fill in:
+                  Go to <strong>Content Admin</strong> → <strong>Programs</strong> → Find your Series → Click "Add Instance" → Select:
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
-                  <li>Start/end dates</li>
-                  <li>Start/end times</li>
-                  <li>Days of week</li>
-                  <li>Max students</li>
-                  <li>Location (can override Assignment's location)</li>
-                  <li>Price override (optional)</li>
+                  <li>Offering (from Step 1, must be published)</li>
+                  <li>Fill in instance-specific details:
+                    <ul className="list-disc list-inside ml-4 mt-1">
+                      <li>Start/end dates</li>
+                      <li>Start/end times</li>
+                      <li>Days of week</li>
+                      <li>Session count, duration, age range (for Course type)</li>
+                      <li>Max students</li>
+                      <li>Location</li>
+                      <li>Price override (optional)</li>
+                    </ul>
+                  </li>
                 </ul>
                 <p className="text-sm text-muted-foreground mt-2">
-                  <strong>Result:</strong> Students can now enroll in this Instance!
+                  <strong>Result:</strong> Students can now enroll in this Instance! The instance automatically inherits the cancellation policy from the Franchise.
                 </p>
               </div>
             </div>
@@ -425,11 +390,13 @@ export default function AdminGuidePage() {
               
               <div className="space-y-3 text-sm">
                 <div>
-                  <strong>1. Create Course:</strong>
+                  <strong>1. Create Offering:</strong>
                   <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground">
                     <li>Name: "Robotics 101"</li>
                     <li>Description: "Introduction to robotics..."</li>
                     <li>Base Price: $299</li>
+                    <li>Offering Type: "Course"</li>
+                    <li>Status: <strong>Published</strong> (required to create instances)</li>
                     <li>Subcategory: "RoboQuests"</li>
                   </ul>
                 </div>
@@ -443,26 +410,19 @@ export default function AdminGuidePage() {
                 </div>
 
                 <div>
-                  <strong>3. Create Assignment:</strong>
+                  <strong>3. Create Instances:</strong>
                   <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground">
-                    <li>Course: "Robotics 101"</li>
-                    <li>Category: "Courses"</li>
-                    <li>Series: "2025 Winter Courses"</li>
-                    <li>Location: "Bellevue Campus" (optional)</li>
-                  </ul>
-                </div>
-
-                <div>
-                  <strong>4. Create Instances:</strong>
-                  <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground">
-                    <li>Instance A: Mon/Wed/Fri, 9am-12pm, Jan 6 - Feb 28, Max 20 students</li>
-                    <li>Instance B: Tue/Thu, 2pm-5pm, Jan 7 - Feb 27, Max 15 students</li>
+                    <li>Select Offering: "Robotics 101"</li>
+                    <li>Select Series: "2025 Winter Courses"</li>
+                    <li>Instance A: Mon/Wed/Fri, 9am-12pm, Jan 6 - Feb 28, 10 sessions, 3 hours each, Max 20 students</li>
+                    <li>Instance B: Tue/Thu, 2pm-5pm, Jan 7 - Feb 27, 10 sessions, 3 hours each, Max 15 students</li>
                   </ul>
                 </div>
 
                 <div className="bg-background p-3 rounded border-l-4 border-primary">
                   <strong>Result:</strong> Students can now enroll in either Instance A or Instance B. 
-                  Both instances share the same Course content but have different schedules.
+                  Both instances share the same Offering content but have different schedules, session counts, and capacities.
+                  The cancellation policy is inherited from the Franchise.
                 </div>
               </div>
             </div>
@@ -480,29 +440,36 @@ export default function AdminGuidePage() {
             <div className="flex gap-2">
               <Badge variant="outline" className="shrink-0">Note 1</Badge>
               <p className="text-muted-foreground">
-                <strong>One Course, Multiple Uses:</strong> The same Course can be assigned to different Series, 
-                allowing you to offer the same course content in different programs or time periods.
+                <strong>One Offering, Multiple Uses:</strong> The same Offering can be used to create instances in different Series, 
+                Categories, and Franchises, allowing you to offer the same course content across different programs, locations, and time periods.
               </p>
             </div>
             <div className="flex gap-2">
               <Badge variant="outline" className="shrink-0">Note 2</Badge>
               <p className="text-muted-foreground">
-                <strong>Assignment is Required:</strong> You cannot create an Instance without first creating an Assignment. 
-                The Assignment links the Course to a specific Series.
+                <strong>Offering Must Be Published:</strong> Only offerings with status <strong>published</strong> can be used to create instances. 
+                Draft offerings cannot be used until they are published.
               </p>
             </div>
             <div className="flex gap-2">
               <Badge variant="outline" className="shrink-0">Note 3</Badge>
               <p className="text-muted-foreground">
-                <strong>Instance Flexibility:</strong> Each Instance can override the Assignment's location and the Course's base price, 
-                giving you flexibility for special cases.
+                <strong>Instance-Specific Information:</strong> Instance-specific details (like session count, duration, age range, target grades) 
+                are set when creating the instance, not in the offering. This allows the same offering to have different configurations for different instances.
               </p>
             </div>
             <div className="flex gap-2">
               <Badge variant="outline" className="shrink-0">Note 4</Badge>
               <p className="text-muted-foreground">
-                <strong>Series Must Match Category:</strong> When creating an Assignment, the Series must belong to the selected Category. 
-                The system will filter Series options based on the selected Category.
+                <strong>Cancellation Policy:</strong> Cancellation policies are managed at the Franchise level. All instances within a franchise 
+                share the same cancellation policy, ensuring consistency across offerings.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="shrink-0">Note 5</Badge>
+              <p className="text-muted-foreground">
+                <strong>Offering Type Filtering:</strong> When creating an instance from a Series, only offerings that match the Series' Category 
+                offering type are displayed. This ensures consistency between offerings and their parent categories.
               </p>
             </div>
           </div>
@@ -525,20 +492,22 @@ export default function AdminGuidePage() {
             <div>
               <h3 className="font-semibold mb-2">What is an Instance?</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                A <strong>Course Instance</strong> is the actual class that students can enroll in. It represents a specific 
-                occurrence of a course with concrete dates, times, location, and capacity.
+                An <strong>Instance</strong> is the actual class that students can enroll in. It represents a specific 
+                occurrence of an offering with concrete dates, times, location, capacity, and instance-specific information.
               </p>
               
               <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
                 <p><strong>Key Characteristics:</strong></p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Must be linked to a Course Assignment</li>
+                  <li>Directly linked to a published Offering</li>
+                  <li>Must belong to a Series (which belongs to a Category)</li>
                   <li>Has specific start and end dates</li>
                   <li>Has start and end times</li>
                   <li>Has days of week (e.g., Monday, Wednesday, Friday)</li>
+                  <li>Contains instance-specific information (session count, duration, age range, target grades)</li>
                   <li>Has maximum student capacity</li>
-                  <li>Can override the Assignment's default location</li>
-                  <li>Can override the Course's base price</li>
+                  <li>Can override the Offering's base price</li>
+                  <li>Inherits cancellation policy from the Franchise</li>
                   <li>Supports iCalendar rules for recurring schedules</li>
                 </ul>
               </div>
@@ -569,27 +538,35 @@ export default function AdminGuidePage() {
             <div>
               <h3 className="font-semibold mb-2">Creating an Instance</h3>
               <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                <li>Go to <strong>Instances</strong> in the admin menu</li>
-                <li>Click "Add Instance"</li>
-                <li>Select a Course Assignment (required)</li>
-                <li>Fill in the instance details:
+                <li>Go to <strong>Content Admin</strong> → <strong>Programs</strong> in the admin menu</li>
+                <li>Find the Series you want to add an instance to</li>
+                <li>Click "Add Instance" button</li>
+                <li>Select an Offering (must be published):
+                  <ul className="list-disc list-inside ml-6 mt-1">
+                    <li>Only offerings matching the Series' Category offering type are shown</li>
+                    <li>You can filter by offering type or search by name</li>
+                  </ul>
+                </li>
+                <li>Fill in the instance details (fields vary by offering type):
                   <ul className="list-disc list-inside ml-6 mt-1">
                     <li>Start and end dates</li>
                     <li>Start and end times</li>
                     <li>Days of week</li>
+                    <li>Session count, duration, age range (for Course type)</li>
                     <li>Maximum students</li>
-                    <li>Location (optional, can override Assignment's location)</li>
+                    <li>Location</li>
                     <li>Price override (optional)</li>
+                    <li>Other type-specific fields (e.g., drop-in options for Workshops)</li>
                   </ul>
                 </li>
-                <li>Save the instance</li>
+                <li>Confirm and create the instance</li>
               </ol>
             </div>
 
             <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
               <p className="text-sm">
-                <strong>💡 Tip:</strong> You can create multiple instances for the same Assignment, allowing you to offer 
-                the same course at different times or locations. Each instance maintains its own capacity and enrollment.
+                <strong>💡 Tip:</strong> You can create multiple instances for the same Offering in different Series, allowing you to offer 
+                the same course content at different times, locations, or with different configurations. Each instance maintains its own capacity and enrollment.
               </p>
             </div>
           </CardContent>
@@ -633,12 +610,29 @@ export default function AdminGuidePage() {
               <div className="bg-muted p-4 rounded-lg text-sm space-y-2">
                 <div className="font-semibold">Franchise (City/Region)</div>
                 <div className="ml-4">
+                  <div>├── Cancellation Policy (shared by all instances)</div>
                   <div>├── Course Locations (Campuses)</div>
                   <div>├── Course Series (Programs/Sessions)</div>
-                  <div>│   └── Course Assignments</div>
-                  <div>│       └── Course Instances</div>
+                  <div>│   └── Instances</div>
                   <div>└── Enrollments (Student registrations)</div>
                 </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-2">Cancellation Policy</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Each Franchise has its own <strong>cancellation policy</strong> that applies to all instances within that franchise. 
+                This ensures consistency across all offerings and instances.
+              </p>
+              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                <p><strong>Key Points:</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Cancellation policy is managed at the Franchise level</li>
+                  <li>All instances within a franchise share the same policy</li>
+                  <li>Policy is displayed to students when viewing instance details</li>
+                  <li>You can edit the policy in <strong>Settings</strong> → <strong>Franchises</strong></li>
+                </ul>
               </div>
             </div>
 
@@ -658,8 +652,8 @@ export default function AdminGuidePage() {
                   is tied to a specific Franchise.
                 </div>
                 <div>
-                  <strong>4. Instance Inheritance:</strong> Instances inherit Franchise information through their 
-                  Assignment → Series → Franchise chain.
+                  <strong>4. Instance Inheritance:</strong> Instances inherit Franchise information (including cancellation policy) 
+                  through their Series → Franchise relationship.
                 </div>
               </div>
             </div>
@@ -667,7 +661,7 @@ export default function AdminGuidePage() {
             <div>
               <h3 className="font-semibold mb-2">Managing Franchises</h3>
               <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                <li>Go to <strong>Franchises</strong> in the admin menu</li>
+                <li>Go to <strong>Settings</strong> → <strong>Franchises</strong> in the admin menu</li>
                 <li>View all franchises or create a new one</li>
                 <li>Configure franchise settings:
                   <ul className="list-disc list-inside ml-6 mt-1">
@@ -675,6 +669,7 @@ export default function AdminGuidePage() {
                     <li>Timezone</li>
                     <li>Branding configuration (logo, colors, contact info)</li>
                     <li>Primary domain (for subdomain routing)</li>
+                    <li><strong>Cancellation Policy</strong> (important: applies to all instances)</li>
                   </ul>
                 </li>
                 <li>Associate Locations and Series with the Franchise</li>
@@ -691,55 +686,138 @@ export default function AdminGuidePage() {
         </Card>
       </section>
 
-      {/* Stock Status Section */}
-      <section id="stock-status" className="scroll-mt-24 mt-12">
+      {/* Offering Section */}
+      <section id="offering" className="scroll-mt-24 mt-12">
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              Stock Status (Course Status)
+              Offering Management
             </CardTitle>
             <CardDescription>
-              Understanding course statuses and how they affect availability
+              Understanding offerings and how to create and manage them
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <h3 className="font-semibold mb-2">Course Status Types</h3>
+              <h3 className="font-semibold mb-2">What is an Offering?</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                Courses have different statuses that control their visibility and availability in the system.
+                An <strong>Offering</strong> is a global, independent course content template that can be reused across different 
+                Series, Categories, and Franchises. It contains the course description, learning outcomes, prerequisites, and base price.
+              </p>
+              
+              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                <p><strong>Offering Contains:</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Name, description, and poster image</li>
+                  <li>Target audience description</li>
+                  <li>Learning outcomes</li>
+                  <li>Prerequisites</li>
+                  <li>Base price and currency</li>
+                  <li>Offering type (Course, Camp, Workshop, Gift Card, etc.)</li>
+                  <li>Subcategory tags (optional)</li>
+                </ul>
+                <p className="mt-2"><strong>Offering Does NOT Contain:</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Instance-specific information (session count, duration, age range)</li>
+                  <li>Cancellation policy (managed at Franchise level)</li>
+                  <li>Binding to specific Series, Category, or Franchise</li>
+                </ul>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-2">Creating an Offering</h3>
+              <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                <li>Go to <strong>Content Admin</strong> → <strong>Offerings</strong> in the admin menu</li>
+                <li>Click "Add New Offering"</li>
+                <li>Fill in offering details:
+                  <ul className="list-disc list-inside ml-6 mt-1">
+                    <li>Name, slug, description</li>
+                    <li>Poster image (optional)</li>
+                    <li>Offering type (Course, Camp, Workshop, etc.)</li>
+                    <li>Target audience, learning outcomes, prerequisites</li>
+                    <li>Base price and currency</li>
+                    <li>Subcategory tags (optional)</li>
+                  </ul>
+                </li>
+                <li>Set status to <strong>published</strong> to enable instance creation</li>
+                <li>Save the offering</li>
+              </ol>
+            </div>
+
+            <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg">
+              <p className="text-sm">
+                <strong>💡 Tip:</strong> Offerings are global and independent. Once created and published, the same offering 
+                can be used to create instances in different Series, Categories, and Franchises, each with its own specific configuration.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Offering Status Section */}
+      <section id="offering-status" className="scroll-mt-24 mt-12">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Offering Status
+            </CardTitle>
+            <CardDescription>
+              Understanding offering statuses and how they affect availability
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="font-semibold mb-2">Offering Status Types</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Offerings have different statuses that control their visibility and ability to create instances.
               </p>
               
               <div className="grid md:grid-cols-2 gap-3">
                 <div className="border rounded-lg p-4">
                   <Badge variant="outline" className="mb-2">draft</Badge>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Course is being created or edited. Not visible to public.
+                    Offering is being created or edited. Not available for instance creation.
                   </p>
                   <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
                     <li>Can be edited or deleted</li>
                     <li>Not shown in course catalog</li>
-                    <li>Cannot create instances</li>
+                    <li><strong>Cannot create instances</strong></li>
                   </ul>
                 </div>
                 
                 <div className="border rounded-lg p-4">
                   <Badge variant="default" className="mb-2">published</Badge>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Course is live and visible to users. Can be enrolled.
+                    Offering is live and can be used to create instances. Students can enroll.
                   </p>
                   <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
                     <li>Visible in course catalog</li>
-                    <li>Can create instances</li>
-                    <li>Students can enroll</li>
+                    <li><strong>Can create instances</strong></li>
+                    <li>Students can enroll in instances</li>
                     <li>Cannot be deleted (must archive first)</li>
+                  </ul>
+                </div>
+                
+                <div className="border rounded-lg p-4">
+                  <Badge variant="secondary" className="mb-2">suspended</Badge>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Offering is temporarily unavailable. Existing instances remain active.
+                  </p>
+                  <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
+                    <li>Not visible in course catalog</li>
+                    <li>Cannot create new instances</li>
+                    <li>Existing instances remain active</li>
+                    <li>Can be edited and republished</li>
                   </ul>
                 </div>
                 
                 <div className="border rounded-lg p-4">
                   <Badge variant="secondary" className="mb-2">archived</Badge>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Course is no longer active but preserved for historical records.
+                    Offering is no longer active but preserved for historical records.
                   </p>
                   <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
                     <li>Not visible in course catalog</li>
@@ -759,34 +837,44 @@ export default function AdminGuidePage() {
                   <ArrowRight className="h-4 w-4" />
                   <Badge variant="default">published</Badge>
                   <ArrowRight className="h-4 w-4" />
-                  <Badge variant="secondary">archived</Badge>
+                  <Badge variant="secondary">suspended/archived</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Courses typically start as draft, then are published when ready, and finally archived when no longer needed.
+                  Offerings typically start as draft, then are published when ready, and finally suspended or archived when no longer needed.
                 </p>
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold mb-2">Managing Course Status</h3>
+              <h3 className="font-semibold mb-2">Managing Offering Status</h3>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <div>
-                  <strong>Publishing a Course:</strong>
+                  <strong>Publishing an Offering:</strong>
                   <ol className="list-decimal list-inside ml-4 mt-1 space-y-1">
-                    <li>Create or edit a course in <strong>Stocks</strong></li>
+                    <li>Create or edit an offering in <strong>Content Admin</strong> → <strong>Offerings</strong></li>
                     <li>Set status to "published"</li>
-                    <li>Course becomes visible in the catalog</li>
-                    <li>You can now create Assignments and Instances</li>
+                    <li>Offering becomes visible in the catalog</li>
+                    <li>You can now create instances from this offering</li>
                   </ol>
                 </div>
                 <div>
-                  <strong>Archiving a Course:</strong>
+                  <strong>Suspending an Offering:</strong>
                   <ol className="list-decimal list-inside ml-4 mt-1 space-y-1">
-                    <li>Go to the course in <strong>Stocks</strong></li>
+                    <li>Go to the offering in <strong>Content Admin</strong> → <strong>Offerings</strong></li>
+                    <li>Change status to "suspended"</li>
+                    <li>Offering is removed from public catalog</li>
+                    <li>Existing instances remain active</li>
+                    <li>No new instances can be created</li>
+                  </ol>
+                </div>
+                <div>
+                  <strong>Archiving an Offering:</strong>
+                  <ol className="list-decimal list-inside ml-4 mt-1 space-y-1">
+                    <li>Go to the offering in <strong>Content Admin</strong> → <strong>Offerings</strong></li>
                     <li>Change status to "archived"</li>
-                    <li>Course is removed from public catalog</li>
-                    <li>Existing enrollments remain active</li>
-                    <li>No new enrollments can be created</li>
+                    <li>Offering is removed from public catalog</li>
+                    <li>Existing instances remain active</li>
+                    <li>No new instances can be created</li>
                   </ol>
                 </div>
               </div>
@@ -794,8 +882,9 @@ export default function AdminGuidePage() {
 
             <div className="bg-yellow-50 dark:bg-yellow-950/20 p-4 rounded-lg">
               <p className="text-sm">
-                <strong>⚠️ Important:</strong> Only draft courses can be deleted. Published courses must be archived first 
-                before deletion. This prevents accidental loss of data and maintains enrollment history.
+                <strong>⚠️ Important:</strong> Only <strong>published</strong> offerings can be used to create instances. 
+                Draft, suspended, and archived offerings cannot be used for instance creation. Only draft offerings can be deleted. 
+                Published offerings must be archived first before deletion.
               </p>
             </div>
           </CardContent>

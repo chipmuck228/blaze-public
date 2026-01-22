@@ -1747,10 +1747,35 @@ export async function getPublishedCourses(): Promise<Course[]> {
 }
 
 // 根据 franchise code 获取 franchise（用于多租户过滤）
+// 优先从 franchises_v2 查询，如果没有找到则查询旧表（向后兼容）
 export async function getFranchiseByCode(code: string): Promise<Franchise | null> {
   const normalized = code.trim().toLowerCase()
   if (!normalized) return null
 
+  // 优先从 franchises_v2 查询
+  try {
+    const { getFranchiseV2ByCode } = await import("@/lib/db-v2")
+    const franchiseV2 = await getFranchiseV2ByCode(normalized)
+    if (franchiseV2 && franchiseV2.is_active) {
+      // 转换为旧接口格式（向后兼容）
+      return {
+        id: franchiseV2.id,
+        code: franchiseV2.code,
+        name: franchiseV2.name,
+        primary_domain: franchiseV2.primary_domain || null,
+        timezone: franchiseV2.timezone,
+        branding_config: franchiseV2.branding_config,
+        is_active: franchiseV2.is_active,
+        cancellation_policy: franchiseV2.cancellation_policy || null,
+        created_at: franchiseV2.created_at,
+        updated_at: franchiseV2.updated_at,
+      } as Franchise
+    }
+  } catch (error) {
+    console.warn(`[getFranchiseByCode] Error fetching from franchises_v2, falling back to old table:`, error)
+  }
+
+  // 向后兼容：如果新表没有找到，查询旧表
   const { data, error } = await supabaseAdmin
     .from('franchises')
     .select('*')
@@ -3798,19 +3823,37 @@ export async function getInstanceAvailableCapacity(instanceId: string): Promise<
 
   if (error || data === null) {
     // 如果函数不存在或出错，手动计算
-    const instance = await supabaseAdmin
-      .from('course_instances')
+    // 优先从 instance_v2 查询
+    let instance: any = null
+    let maxStudents = 0
+    
+    const { data: instanceV2, error: instanceV2Error } = await supabaseAdmin
+      .from('instance_v2')
       .select('max_students, current_students')
       .eq('id', instanceId)
       .single()
 
-    if (instance.error || !instance.data) {
-      return 0
-    }
+    if (!instanceV2Error && instanceV2) {
+      instance = instanceV2
+      maxStudents = instanceV2.max_students ?? 0
+    } else {
+      // 向后兼容：查询旧表
+      const { data: instanceData, error: instanceError } = await supabaseAdmin
+        .from('course_instances')
+        .select('max_students, current_students')
+        .eq('id', instanceId)
+        .single()
 
-    const maxStudents = instance.data.max_students ?? 0
+      if (instanceError || !instanceData) {
+        return 0
+      }
+
+      instance = instanceData
+      maxStudents = instanceData.max_students ?? 0
+    }
     
     // 统计各种状态的注册数量
+    // course_enrollments.instance_id 可能指向旧表或新表的 instance ID
     const [enrolled, reserved, cart] = await Promise.all([
       supabaseAdmin
         .from('course_enrollments')

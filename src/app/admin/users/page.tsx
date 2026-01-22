@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, XCircle, UserPlus, Plus } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, UserPlus, Plus, Link as LinkIcon } from "lucide-react"
 import { UserEditDialog } from "@/components/admin/UserEditDialog"
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog"
 import Link from "next/link"
@@ -172,21 +172,6 @@ export default function UsersManagementPage() {
     return "Active"
   }
 
-  const getUserStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" | "destructive" => {
-    switch (status) {
-      case "Active":
-        return "default"
-      case "Pending Invitation":
-        return "secondary"
-      case "Unverified":
-        return "outline"
-      case "Test User":
-        return "outline"
-      default:
-        return "outline"
-    }
-  }
-
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -258,22 +243,36 @@ export default function UsersManagementPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {user.email_verified ? (
-                          <Badge variant="default" className="bg-green-500">
-                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                            Verified
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">
-                            <XCircle className="mr-1 h-3 w-3" />
-                            Unverified
-                          </Badge>
+                        {user.email_verified && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getUserStatusBadgeVariant(getUserStatus(user))}>
-                          {getUserStatus(user)}
-                        </Badge>
+                        {(() => {
+                          const status = getUserStatus(user)
+                          const statusLetter = status.charAt(0)
+                          let badgeColor = ""
+                          
+                          switch (status) {
+                            case "Active":
+                              badgeColor = "bg-blue-500 hover:bg-blue-600"
+                              break
+                            case "Test User":
+                              badgeColor = "bg-orange-500 hover:bg-orange-600"
+                              break
+                            case "Pending Invitation":
+                              badgeColor = "bg-purple-500 hover:bg-purple-600"
+                              break
+                            default:
+                              badgeColor = "bg-gray-500 hover:bg-gray-600"
+                          }
+                          
+                          return (
+                            <Badge className={`${badgeColor} text-white`}>
+                              {statusLetter}
+                            </Badge>
+                          )
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -292,10 +291,8 @@ export default function UsersManagementPage() {
                               ? "Coach"
                               : "User"}
                           </Badge>
-                          {user.role === "coach" && (
-                            <Badge variant={user.has_team_profile ? "default" : "outline"}>
-                              {user.has_team_profile ? "Has Team Profile" : "No Team Profile"}
-                            </Badge>
+                          {user.role === "coach" && user.has_team_profile && (
+                            <LinkIcon className="h-4 w-4 text-primary" />
                           )}
                         </div>
                       </TableCell>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -11,13 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -186,6 +185,48 @@ export default function CoursesManagementPage() {
     }
   }
 
+  const getStatusLabel = (status: Course['status']): string => {
+    switch (status) {
+      case 'draft':
+        return 'Draft'
+      case 'published':
+        return 'Published'
+      case 'suspended':
+        return 'Suspended'
+      case 'archived':
+        return 'Archived'
+      default:
+        return status
+    }
+  }
+
+  // 按 status 分组 courses
+  const groupedCourses = useMemo(() => {
+    const groups: Record<string, Course[]> = {}
+    filteredCourses.forEach((course) => {
+      const status = course.status
+      if (!groups[status]) {
+        groups[status] = []
+      }
+      groups[status].push(course)
+    })
+    // 按状态顺序排序：published, draft, suspended, archived
+    const statusOrder = ['published', 'draft', 'suspended', 'archived']
+    const sortedGroups: Record<string, Course[]> = {}
+    statusOrder.forEach(status => {
+      if (groups[status]) {
+        sortedGroups[status] = groups[status]
+      }
+    })
+    // 添加其他状态（如果有）
+    Object.keys(groups).forEach(status => {
+      if (!statusOrder.includes(status)) {
+        sortedGroups[status] = groups[status]
+      }
+    })
+    return sortedGroups
+  }, [filteredCourses])
+
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -198,12 +239,6 @@ export default function CoursesManagementPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Offerings</CardTitle>
-              <CardDescription>
-                A list of all offerings in the system
-              </CardDescription>
-            </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -236,144 +271,211 @@ export default function CoursesManagementPage() {
             </div>
           ) : filteredCourses.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No offerings found matching your search." : "No offerings found."}
+              {searchQuery ? "No courses found matching your search." : "No courses found."}
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Offering Name</TableHead>
-                    <TableHead>Tags</TableHead>
-                    <TableHead>Sessions</TableHead>
-                    <TableHead>Age Range</TableHead>
-                    <TableHead>Grades</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCourses.map((course) => {
-                    const gradesText = course.target_grades && course.target_grades.length > 0
-                      ? `Grades: ${course.target_grades.join(', ')}`
-                      : ''
-                    const slugText = course.slug ? `Slug: ${course.slug}` : ''
-                    const statusText = course.status && course.status !== 'published'
-                      ? `[${course.status}]`
-                      : ''
-                    
-                    return (
-                      <TableRow 
-                        key={course.id}
-                        className={getStatusBackgroundColor(course.status)}
-                      >
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <button
-                              onClick={() => handleView(course)}
-                              className="text-left font-medium hover:text-primary transition-colors cursor-pointer"
-                            >
-                              {course.name}
-                            </button>
-                            {(gradesText || slugText || statusText) && (
-                              <span className="text-xs text-muted-foreground">
-                                {[gradesText, slugText, statusText].filter(Boolean).join(' • ')}
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                          <div className="flex flex-wrap gap-1">
-                            {course.tags && course.tags.length > 0 ? (
-                              course.tags.map((tag) => (
-                                <Badge key={tag.id} variant="outline" className="text-xs">
-                                  {tag.display_name}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-muted-foreground">No tags</span>
-                            )}
-                          </div>
-                        </TableCell>
-                      <TableCell>{course.number_of_sessions || "N/A"}</TableCell>
-                      <TableCell>
-                        {course.target_age_min && course.target_age_max
-                          ? `${course.target_age_min}-${course.target_age_max}`
-                          : course.target_age_min
-                          ? `${course.target_age_min}+`
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        {course.target_grades && course.target_grades.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {course.target_grades.map((grade, idx) => (
-                              <Badge key={idx} variant="outline" className="text-xs">
-                                {grade}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {course.base_price
-                          ? `${course.currency || "USD"} $${course.base_price.toFixed(2)}`
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            course.status === 'published' ? 'default' :
-                            course.status === 'draft' ? 'secondary' :
-                            course.status === 'suspended' ? 'destructive' :
-                            'outline'
-                          }
-                        >
-                          {course.status === 'published' ? 'Published' :
-                           course.status === 'draft' ? 'Draft' :
-                           course.status === 'suspended' ? 'Suspended' :
-                           'Archived'}
+            <div className="space-y-4">
+              {Object.entries(groupedCourses).map(([status, statusCourses]) => {
+                const statusLabel = getStatusLabel(status as Course['status'])
+                return (
+                  <Card key={status} className={getStatusBackgroundColor(status as Course['status'])}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-xl font-semibold">
+                          {statusLabel}
+                        </CardTitle>
+                        <Badge variant="secondary" className="text-sm">
+                          {statusCourses.length} Offering{statusCourses.length !== 1 ? 's' : ''}
                         </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(course.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleView(course)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleEdit(course)}
-                              disabled={course.status === 'archived'}
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit {course.status === 'archived' && '(Archived offerings cannot be edited)'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDelete(course.id)}
-                              disabled={course.status !== 'draft'}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete {course.status !== 'draft' && '(Draft only)'}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Accordion type="multiple" className="w-full">
+                        {statusCourses.map((course) => {
+                          const gradesText = course.target_grades && course.target_grades.length > 0
+                            ? `Grades: ${course.target_grades.join(', ')}`
+                            : ''
+                          const slugText = course.slug ? `Slug: ${course.slug}` : ''
+                          
+                          return (
+                            <AccordionItem key={course.id} value={course.id} className="border rounded-lg px-4 mb-2">
+                              <AccordionTrigger className="hover:no-underline">
+                                <div className="flex items-center justify-between w-full pr-4">
+                                  <div className="flex flex-col items-start text-left">
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-medium">{course.name}</span>
+                                      <Badge
+                                        variant={
+                                          course.status === 'published' ? 'default' :
+                                          course.status === 'draft' ? 'secondary' :
+                                          course.status === 'suspended' ? 'destructive' :
+                                          'outline'
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {statusLabel}
+                                      </Badge>
+                                    </div>
+                                    {(gradesText || slugText) && (
+                                      <span className="text-xs text-muted-foreground mt-1">
+                                        {[gradesText, slugText].filter(Boolean).join(' • ')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="space-y-4 pt-2 pb-4">
+                                  {/* Basic Information */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Description</p>
+                                      <p className="text-sm">{course.description || "No description"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-2">Poster</p>
+                                      {course.poster_url ? (
+                                        <div className="relative w-full h-48 rounded-lg overflow-hidden border">
+                                          <Image
+                                            src={course.poster_url}
+                                            alt={course.name || 'Course poster'}
+                                            fill
+                                            className="object-cover"
+                                            sizes="(max-width: 768px) 100vw, 50vw"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm text-muted-foreground">No poster available</p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Tags */}
+                                  {course.tags && course.tags.length > 0 && (
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-2">Tags</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {course.tags.map((tag) => (
+                                          <Badge key={tag.id} variant="outline" className="text-xs">
+                                            {tag.display_name}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Course Details */}
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Sessions</p>
+                                      <p className="text-sm">{course.number_of_sessions || "N/A"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Age Range</p>
+                                      <p className="text-sm">
+                                        {course.target_age_min && course.target_age_max
+                                          ? `${course.target_age_min}-${course.target_age_max}`
+                                          : course.target_age_min
+                                          ? `${course.target_age_min}+`
+                                          : "N/A"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Grades</p>
+                                      <p className="text-sm">
+                                        {course.target_grades && course.target_grades.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {course.target_grades.map((grade, idx) => (
+                                              <Badge key={idx} variant="outline" className="text-xs">
+                                                {grade}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          "N/A"
+                                        )}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Price</p>
+                                      <p className="text-sm">
+                                        {course.base_price
+                                          ? `${course.currency || "USD"} $${course.base_price.toFixed(2)}`
+                                          : "N/A"}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Additional Information */}
+                                  {(course.target_audience || course.outcomes || course.prerequisites) && (
+                                    <div className="space-y-2">
+                                      {course.target_audience && (
+                                        <div>
+                                          <p className="text-sm font-medium text-muted-foreground mb-1">Target Audience</p>
+                                          <p className="text-sm">{course.target_audience}</p>
+                                        </div>
+                                      )}
+                                      {course.outcomes && (
+                                        <div>
+                                          <p className="text-sm font-medium text-muted-foreground mb-1">Learning Outcomes</p>
+                                          <p className="text-sm whitespace-pre-wrap">{course.outcomes}</p>
+                                        </div>
+                                      )}
+                                      {course.prerequisites && (
+                                        <div>
+                                          <p className="text-sm font-medium text-muted-foreground mb-1">Prerequisites</p>
+                                          <p className="text-sm whitespace-pre-wrap">{course.prerequisites}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Created Date */}
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-1">Created</p>
+                                    <p className="text-sm">{formatDate(course.created_at)}</p>
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-2 pt-2 border-t">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleView(course)}
+                                    >
+                                      <Eye className="mr-2 h-4 w-4" />
+                                      View Details
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleEdit(course)}
+                                      disabled={course.status === 'archived'}
+                                    >
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => handleDelete(course.id)}
+                                      disabled={course.status !== 'draft'}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          )
+                        })}
+                      </Accordion>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </CardContent>

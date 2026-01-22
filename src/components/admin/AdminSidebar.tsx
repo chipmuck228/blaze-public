@@ -37,6 +37,8 @@ import {
   FileText,
   BarChart3,
   AlertCircle,
+  Route,
+  Shapes,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -75,38 +77,18 @@ const menuItems = [
 
 const courseMenuItems = [
   {
-    title: "Offerings",
-    href: "/admin/courses",
-    icon: BookOpen,
-  },
-  {
-    title: "Assignments",
-    href: "/admin/assignments",
-    icon: LinkIcon,
-  },
-  {
-    title: "Instances",
-    href: "/admin/instances",
-    icon: Calendar,
-  },
-  {
-    title: "New Offerings",
-    href: "/admin/offerings",
-    icon: Package,
-  },
-  {
-    title: "New Assignments",
-    href: "/admin/offerings-assignments",
-    icon: Network,
-  },
-]
-
-const settingsMenuItems = [
-  {
     title: "Programs",
     href: "/admin/series",
     icon: List,
   },
+  {
+    title: "Offerings",
+    href: "/admin/offerings",
+    icon: Package,
+  },
+]
+
+const settingsMenuItems = [
   {
     title: "Categories",
     href: "/admin/categories",
@@ -123,19 +105,14 @@ const settingsMenuItems = [
     icon: Network,
   },
   {
-    title: "Subcategories",
-    href: "/admin/subcategories",
-    icon: Tag,
-  },
-  {
     title: "Learning Paths",
     href: "/admin/learning-paths",
-    icon: FolderTree,
+    icon: Route,
   },
   {
     title: "Offering Types",
     href: "/admin/offering-types",
-    icon: Package,
+    icon: Shapes,
   },
 ]
 
@@ -231,7 +208,11 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+          // For Dashboard (/admin), only highlight when pathname exactly matches
+          // For other items, check exact match or if pathname starts with the href
+          const isActive = item.href === "/admin" 
+            ? pathname === item.href
+            : pathname === item.href || pathname?.startsWith(item.href + "/")
           
           return (
             <Link 

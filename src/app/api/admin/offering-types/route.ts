@@ -12,15 +12,28 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const includeInactive = searchParams.get("includeInactive") === "true"
+    const categoryId = searchParams.get("categoryId")  // 新增：支持按 categoryId 筛选
 
     let query = supabaseAdmin
       .from("offering_types")
-      .select("*")
-      .order("display_order", { ascending: true })
+      .select(`
+        *,
+        category:course_categories(
+          id,
+          name,
+          display_name
+        )
+      `)
+      .order("is_bound_to_category", { ascending: false })  // 绑定的在前
       .order("name", { ascending: true })
 
     if (!includeInactive) {
       query = query.eq("is_active", true)
+    }
+
+    // 如果提供了 categoryId，筛选绑定到该 category 的 offering types
+    if (categoryId) {
+      query = query.eq("category_id", categoryId).eq("is_bound_to_category", true)
     }
 
     const { data: offeringTypes, error } = await query

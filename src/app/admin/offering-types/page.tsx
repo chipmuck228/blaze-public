@@ -55,7 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Lock, X } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Lock, X, Link } from "lucide-react"
 import { toast } from "sonner"
 
 interface OfferingType {
@@ -68,6 +68,14 @@ interface OfferingType {
   display_order: number
   is_active: boolean
   is_default: boolean
+  category_id?: string
+  is_bound_to_category: boolean
+  is_system_managed: boolean
+  category?: {
+    id: string
+    name: string
+    display_name: string
+  }
   config_schema?: Record<string, any>
   created_at: string
   updated_at: string
@@ -92,6 +100,8 @@ export default function OfferingTypesManagementPage() {
     display_order: 0,
     is_active: true,
     is_default: false,
+    is_bound_to_category: false,
+    is_system_managed: false,
     config_schema: {},
   })
   const [configSchemaText, setConfigSchemaText] = useState("")
@@ -179,7 +189,8 @@ export default function OfferingTypesManagementPage() {
         (type) =>
           type.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           type.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          type.description?.toLowerCase().includes(searchQuery.toLowerCase())
+          type.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          type.category?.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
       )
       setFilteredTypes(filtered)
     } else {
@@ -193,6 +204,11 @@ export default function OfferingTypesManagementPage() {
 
     if (type.is_default) {
       toast.error("Cannot delete default offering type")
+      return
+    }
+
+    if (type.is_bound_to_category) {
+      toast.error("Cannot delete offering type bound to a category. Delete the category instead.")
       return
     }
 
@@ -229,6 +245,8 @@ export default function OfferingTypesManagementPage() {
       display_order: type.display_order,
       is_active: type.is_active,
       is_default: type.is_default,
+      is_bound_to_category: type.is_bound_to_category || false,
+      is_system_managed: type.is_system_managed || false,
       config_schema: type.config_schema || {},
     })
     
@@ -269,6 +287,8 @@ export default function OfferingTypesManagementPage() {
       display_order: 0,
       is_active: true,
       is_default: false,
+      is_bound_to_category: false,
+      is_system_managed: false,
       config_schema: {},
     })
     
@@ -475,9 +495,6 @@ export default function OfferingTypesManagementPage() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Offering Types Management</h1>
-        <p className="text-muted-foreground mt-2">
-          Configure and manage offering types (Course, Workshop, Camp, etc.)
-        </p>
       </div>
 
       <Card>
@@ -485,9 +502,6 @@ export default function OfferingTypesManagementPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Offering Types</CardTitle>
-              <CardDescription>
-                Manage all offering types in the system
-              </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -528,12 +542,9 @@ export default function OfferingTypesManagementPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Order</TableHead>
+                    <TableHead>Category / Default</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Default</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -541,26 +552,32 @@ export default function OfferingTypesManagementPage() {
                 <TableBody>
                   {filteredTypes.map((type) => (
                     <TableRow key={type.id}>
-                      <TableCell>
-                        <code className="text-sm bg-muted px-2 py-1 rounded">{type.code}</code>
-                      </TableCell>
                       <TableCell className="font-medium">{type.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {type.description || "—"}
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {type.is_bound_to_category && type.category && (
+                            <div title={`Bound to category: ${type.category.display_name}`}>
+                              <Link 
+                                className="h-4 w-4 text-blue-600 dark:text-blue-400" 
+                              />
+                            </div>
+                          )}
+                          {type.is_default && (
+                            <div title="Default offering type">
+                              <Lock 
+                                className="h-4 w-4 text-yellow-600 dark:text-yellow-400" 
+                              />
+                            </div>
+                          )}
+                          {!type.is_bound_to_category && !type.is_default && (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell>{type.display_order}</TableCell>
                       <TableCell>
                         <Badge variant={type.is_active ? "default" : "secondary"}>
                           {type.is_active ? "Active" : "Inactive"}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {type.is_default && (
-                          <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                            <Lock className="h-3 w-3" />
-                            Default
-                          </Badge>
-                        )}
                       </TableCell>
                       <TableCell>{formatDate(type.created_at)}</TableCell>
                       <TableCell className="text-right">
@@ -578,10 +595,11 @@ export default function OfferingTypesManagementPage() {
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => handleDelete(type.id)}
-                              disabled={type.is_default}
+                              disabled={type.is_default || type.is_bound_to_category}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete {type.is_default && "(Default types cannot be deleted)"}
+                              {type.is_bound_to_category && "(Bound types cannot be deleted)"}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -618,21 +636,47 @@ export default function OfferingTypesManagementPage() {
 
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto pr-1 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="code">Code *</Label>
-              <Input
-                id="code"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().trim() })}
-                placeholder="e.g., course, workshop, camp"
-                required
-                disabled={!!editingType} // 编辑时不允许修改 code
-                pattern="[a-z0-9_]+"
-              />
-              <p className="text-xs text-muted-foreground">
-                Lowercase letters, numbers, and underscores only. Cannot be changed after creation.
-              </p>
-            </div>
+            {/* 绑定状态提示 */}
+            {editingType?.is_bound_to_category && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                <div className="flex items-start gap-2">
+                  <Link className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                      Bound to Category
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      This offering type is automatically managed by the system. 
+                      Code and category binding cannot be modified.
+                    </p>
+                    {editingType.category && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                        Category: <strong>{editingType.category.display_name}</strong>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Code 字段：只有独立类型才显示 */}
+            {!editingType?.is_bound_to_category && (
+              <div className="space-y-2">
+                <Label htmlFor="code">Code *</Label>
+                <Input
+                  id="code"
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().trim() })}
+                  placeholder="e.g., course, workshop, camp"
+                  required
+                  disabled={!!editingType} // 编辑时不允许修改 code
+                  pattern="[a-z0-9_]+"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Lowercase letters, numbers, and underscores only. Cannot be changed after creation.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
@@ -685,18 +729,7 @@ export default function OfferingTypesManagementPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="display_order">Display Order</Label>
-              <Input
-                id="display_order"
-                type="number"
-                value={formData.display_order}
-                onChange={(e) =>
-                  setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })
-                }
-                placeholder="0"
-              />
-            </div>
+            {/* Display Order 字段已移除 */}
 
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -715,6 +748,14 @@ export default function OfferingTypesManagementPage() {
               <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
                   ⚠️ This is a default offering type. Some fields cannot be modified.
+                </p>
+              </div>
+            )}
+            
+            {editingType?.is_bound_to_category && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  ⚠️ This offering type is bound to a category. Code and category binding cannot be modified.
                 </p>
               </div>
             )}
@@ -1015,7 +1056,14 @@ export default function OfferingTypesManagementPage() {
               <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !formData.code || !formData.name}>
+              <Button 
+                type="submit" 
+                disabled={
+                  isSubmitting || 
+                  !formData.name || 
+                  (!editingType?.is_bound_to_category && !formData.code)
+                }
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

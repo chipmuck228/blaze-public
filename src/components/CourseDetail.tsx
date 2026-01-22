@@ -18,6 +18,7 @@ import {
 import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, ArrowLeft, AlertCircle, Loader2, ShoppingCart } from "lucide-react";
 import { CourseWithDetails } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
+import { CancellationPolicy } from "./CancellationPolicy";
 
 interface CourseDetailProps {
   course: CourseWithDetails;
@@ -67,6 +68,7 @@ interface InstanceDetails {
     id: string;
     code: string;
     name: string;
+    cancellation_policy?: string | null; // Phase 4: 从 franchise 获取取消政策
   } | null;
   category?: {
     id: string;
@@ -716,8 +718,14 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
   // 使用当前 instance 的课程信息（如果有），否则使用传入的 course
   // 合并两个 course 对象，优先使用 currentInstance.course 的值，但保留原始 course 中可能缺失的字段（如 poster_url）
+  // Phase 4: 优先使用 franchise.cancellation_policy
   const displayCourse = currentInstance?.course 
-    ? { ...course, ...currentInstance.course } 
+    ? { 
+        ...course, 
+        ...currentInstance.course,
+        // Phase 4: 优先使用 franchise 的取消政策
+        cancellation_policy: currentInstance.franchise?.cancellation_policy || currentInstance.course.cancellation_policy || course.cancellation_policy
+      } 
     : course;
 
   return (
@@ -1276,18 +1284,11 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
             ) : null}
 
             {/* Cancellation Policy */}
-            {displayCourse.cancellation_policy && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-xl">Cancellation Policy</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                    {displayCourse.cancellation_policy}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+            {/* Phase 4: 优先使用 franchise 的取消政策 */}
+            <CancellationPolicy policy={
+              currentInstance?.franchise?.cancellation_policy || 
+              displayCourse.cancellation_policy
+            } />
           </section>
 
           {/* ============================================

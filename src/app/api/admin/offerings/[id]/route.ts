@@ -16,17 +16,8 @@ export async function GET(
     const { id } = await params
 
     const { data: offering, error } = await supabaseAdmin
-      .from("offerings")
-      .select(`
-        *,
-        subcategories:course_subcategory_tags(
-          subcategory:course_subcategories(
-            id,
-            name,
-            display_name
-          )
-        )
-      `)
+      .from("offerings_v2")
+      .select("*")
       .eq("id", id)
       .single()
 
@@ -37,12 +28,31 @@ export async function GET(
       throw new Error(error.message)
     }
 
-    // 转换 subcategories 格式
-    const tags = (offering.subcategories || []).map((tag: any) => ({
-      id: tag.subcategory.id,
-      name: tag.subcategory.name,
-      display_name: tag.subcategory.display_name,
-    }))
+    // 查询标签（只查询 offering_id，因为 offerings_v2 表中的 offering 不在 courses 表中）
+    const { data: offeringTagsResult } = await supabaseAdmin
+      .from('course_subcategory_tags')
+      .select('subcategory_id')
+      .eq('offering_id', id)
+    
+    const subcategoryTags = offeringTagsResult || []
+
+    let tags: Array<{ id: string; name: string; display_name: string }> = []
+    if (subcategoryTags && subcategoryTags.length > 0) {
+      const subcategoryIds = subcategoryTags.map(t => t.subcategory_id)
+      const { data: subcategoriesData } = await supabaseAdmin
+        .from('course_subcategories')
+        .select('id, name, display_name')
+        .in('id', subcategoryIds)
+        .eq('is_active', true)
+      
+      if (subcategoriesData) {
+        tags = subcategoriesData.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          display_name: s.display_name,
+        }))
+      }
+    }
 
     return NextResponse.json({
       ...offering,
@@ -77,15 +87,15 @@ export async function PUT(
       target_audience,
       learning_outcomes,
       prerequisites,
-      cancellation_policy,
-      session_count,
-      age_min,
-      age_max,
-      target_grades,
-      grade_level,
+      cancellation_policy, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
+      session_count, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
+      age_min, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
+      age_max, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
+      target_grades, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
+      grade_level, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
       base_price,
       currency,
-      duration_hours,
+      duration_hours, // 注意：offerings_v2 表不包含此字段，但保留以兼容前端
       poster_url,
       offering_type,
       type_config,
@@ -93,7 +103,7 @@ export async function PUT(
       subcategory_ids,
     } = body
 
-    // 更新 offering
+    // 更新 offering_v2（只包含 offerings_v2 表支持的字段）
     const updateData: any = {}
     if (name !== undefined) updateData.name = name
     if (slug !== undefined) updateData.slug = slug
@@ -101,35 +111,18 @@ export async function PUT(
     if (target_audience !== undefined) updateData.target_audience = target_audience
     if (learning_outcomes !== undefined) updateData.learning_outcomes = learning_outcomes
     if (prerequisites !== undefined) updateData.prerequisites = prerequisites
-    if (cancellation_policy !== undefined) updateData.cancellation_policy = cancellation_policy
-    if (session_count !== undefined) {
-      updateData.session_count = session_count
-      updateData.number_of_sessions = session_count // 向后兼容
-    }
-    if (age_min !== undefined) {
-      updateData.age_min = age_min
-      updateData.target_age_min = age_min // 向后兼容
-    }
-    if (age_max !== undefined) {
-      updateData.age_max = age_max
-      updateData.target_age_max = age_max // 向后兼容
-    }
-    if (target_grades !== undefined) updateData.target_grades = target_grades
-    if (grade_level !== undefined) updateData.grade_level = grade_level
+    // cancellation_policy 已移到 franchise 级别，不再存储在 offering 中
+    // session_count, age_min, age_max, target_grades, grade_level, duration_hours 在 instance 级别
     if (base_price !== undefined) updateData.base_price = base_price
     if (currency !== undefined) updateData.currency = currency
-    if (duration_hours !== undefined) updateData.duration_hours = duration_hours
     if (poster_url !== undefined) updateData.poster_url = poster_url
     if (offering_type !== undefined) updateData.offering_type = offering_type
     if (type_config !== undefined) updateData.type_config = type_config
-    if (status !== undefined) {
-      updateData.status = status
-      // 根据 status 更新 is_active
-      updateData.is_active = status === 'published'
-    }
+    if (status !== undefined) updateData.status = status
+    // offerings_v2 表不包含 is_active 字段
 
     const { data: offering, error: updateError } = await supabaseAdmin
-      .from("offerings")
+      .from("offerings_v2")
       .update(updateData)
       .eq("id", id)
       .select()
@@ -141,16 +134,17 @@ export async function PUT(
 
     // 如果有子类标签，更新标签
     if (subcategory_ids !== undefined) {
-      // 先删除所有现有标签
+      // 先删除所有现有标签（只删除 offering_id 的记录）
       await supabaseAdmin
         .from('course_subcategory_tags')
         .delete()
-        .eq('course_id', id)
+        .eq('offering_id', id)
 
-      // 然后添加新标签
+      // 然后添加新标签（使用 offering_id）
       if (Array.isArray(subcategory_ids) && subcategory_ids.length > 0) {
         const tagsToInsert = subcategory_ids.map((subcategoryId: string) => ({
-          course_id: id,
+          offering_id: id,  // 使用 offering_id
+          course_id: null,  // course_id 设为 null
           subcategory_id: subcategoryId,
         }))
 
@@ -160,40 +154,40 @@ export async function PUT(
 
         if (tagsError) {
           console.error("Error updating subcategory tags:", tagsError)
-          // 不抛出错误，继续执行
+          throw new Error(`Failed to update subcategory tags: ${tagsError.message}`)
         }
       }
     }
 
     // 返回完整的 offering 信息（包含标签）
-    const { data: offeringWithTags, error: fetchError } = await supabaseAdmin
-      .from("offerings")
-      .select(`
-        *,
-        subcategories:course_subcategory_tags(
-          subcategory:course_subcategories(
-            id,
-            name,
-            display_name
-          )
-        )
-      `)
-      .eq("id", id)
-      .single()
+    // 只查询 offering_id 的标签（offerings_v2 表中的 offering 不在 courses 表中）
+    const { data: offeringTagsResult } = await supabaseAdmin
+      .from('course_subcategory_tags')
+      .select('subcategory_id')
+      .eq('offering_id', id)
+    
+    const subcategoryTags = offeringTagsResult || []
 
-    if (fetchError) {
-      throw new Error(fetchError.message)
+    let tags: Array<{ id: string; name: string; display_name: string }> = []
+    if (subcategoryTags.length > 0) {
+      const subcategoryIds = subcategoryTags.map(t => t.subcategory_id)
+      const { data: subcategoriesData } = await supabaseAdmin
+        .from('course_subcategories')
+        .select('id, name, display_name')
+        .in('id', subcategoryIds)
+        .eq('is_active', true)
+      
+      if (subcategoriesData) {
+        tags = subcategoriesData.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          display_name: s.display_name,
+        }))
+      }
     }
 
-    // 转换 subcategories 格式
-    const tags = (offeringWithTags?.subcategories || []).map((tag: any) => ({
-      id: tag.subcategory.id,
-      name: tag.subcategory.name,
-      display_name: tag.subcategory.display_name,
-    }))
-
     return NextResponse.json({
-      ...offeringWithTags,
+      ...offering,
       tags,
     }, { status: 200 })
   } catch (error: any) {
@@ -219,7 +213,7 @@ export async function DELETE(
     const { id } = await params
 
     const { error } = await supabaseAdmin
-      .from("offerings")
+      .from("offerings_v2")
       .delete()
       .eq("id", id)
 

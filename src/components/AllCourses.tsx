@@ -7,7 +7,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Search, Filter, ArrowRight, Sparkles, MapPin, X, Calendar, Clock, Users } from "lucide-react";
+import { Search, Filter, ArrowRight, Sparkles, MapPin, X, Calendar, Clock, Users, BookOpen } from "lucide-react";
 import Image from "next/image";
 
 interface Course {
@@ -22,7 +22,7 @@ interface Course {
 
 interface Instance {
   id: string;
-  assignment_id: string;
+  assignment_id?: string;
   location_id?: string;
   start_date: string;
   end_date: string;
@@ -41,6 +41,15 @@ interface Instance {
     city?: string;
     state?: string;
     zip_code?: string;
+  };
+  offering?: {
+    id: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    poster_url?: string | null;
+    offering_type?: string;
+    base_price?: number;
   };
 }
 
@@ -357,7 +366,9 @@ export const AllCourses = () => {
             </div>
           ) : (
             <div className="max-w-6xl mx-auto space-y-10">
-              {programs.map((program) => {
+              {programs
+                .filter((program) => program.id && typeof program.id === 'string' && program.id.trim() !== '')
+                .map((program) => {
                 // 简单搜索过滤：匹配 program 名称或课程标题
                 const q = searchQuery.toLowerCase()
                 const visibleCourses = q
@@ -388,7 +399,7 @@ export const AllCourses = () => {
                 }
 
                 return (
-                  <div key={program.id} className="space-y-4">
+                  <div key={program.id || `program-${program.name}`} className="space-y-4">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                       <div>
                         <h2 className="text-2xl md:text-3xl font-bold">
@@ -429,12 +440,14 @@ export const AllCourses = () => {
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        {visibleCourses.map((course) => {
+                        {visibleCourses
+                          .filter((course) => course.id && typeof course.id === 'string' && course.id.trim() !== '')
+                          .map((course) => {
                           const instances = course.instances || []
                           const totalInstances = instances.length
                           
                           return (
-                            <div key={course.id} className="space-y-3">
+                            <div key={course.id || `course-${course.title}`} className="space-y-3">
                               {/* Course Header */}
                               <div className="flex items-start justify-between gap-4 pb-2 border-b">
                                 <div className="flex-1">
@@ -454,7 +467,9 @@ export const AllCourses = () => {
                                 </div>
                               ) : (
                                 <div className="grid md:grid-cols-2 gap-4">
-                                  {instances.map((instance) => {
+                                  {instances
+                                    .filter((instance) => instance.id && typeof instance.id === 'string' && instance.id.trim() !== '') // 过滤掉没有 id 或空字符串的 instances
+                                    .map((instance, index) => {
                                     const formatDate = (dateStr: string) => {
                                       return new Date(dateStr).toLocaleDateString('en-US', {
                                         month: 'short',
@@ -474,50 +489,70 @@ export const AllCourses = () => {
 
                                     return (
                                       <Card
-                                        key={instance.id}
-                                        className="hover:shadow-md transition-all duration-200"
+                                        key={instance.id || `instance-${index}`}
+                                        className="hover:shadow-md transition-all duration-200 overflow-hidden"
                                       >
                                         <CardContent className="p-4">
-                                          <div className="space-y-3">
-                                            {/* Date Range */}
-                                            <div className="flex items-center gap-2 text-sm">
-                                              <Calendar className="h-4 w-4 text-muted-foreground" />
-                                              <span className="font-medium">
-                                                {formatDate(instance.start_date)} - {formatDate(instance.end_date)}
-                                              </span>
+                                          <div className="flex gap-4">
+                                            {/* Poster Image */}
+                                            <div className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden">
+                                              {instance.offering?.poster_url ? (
+                                                <Image
+                                                  src={instance.offering.poster_url}
+                                                  alt={instance.offering.name || course.title}
+                                                  fill
+                                                  className="object-cover"
+                                                  sizes="96px"
+                                                  loading="lazy"
+                                                />
+                                              ) : (
+                                                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                                                  <BookOpen className="h-8 w-8 text-primary/40" />
+                                                </div>
+                                              )}
                                             </div>
-
-                                            {/* Time */}
-                                            {(instance.start_time || instance.end_time) && (
-                                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <Clock className="h-4 w-4" />
-                                                <span>
-                                                  {formatTime(instance.start_time)} - {formatTime(instance.end_time)}
+                                            
+                                            {/* Instance Details */}
+                                            <div className="flex-1 min-w-0 space-y-3">
+                                              {/* Date Range */}
+                                              <div className="flex items-center gap-2 text-sm">
+                                                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                <span className="font-medium">
+                                                  {formatDate(instance.start_date)} - {formatDate(instance.end_date)}
                                                 </span>
                                               </div>
-                                            )}
 
-                                            {/* Location */}
-                                            {instance.location && (
-                                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <MapPin className="h-4 w-4" />
-                                                <span>{instance.location.name}</span>
+                                              {/* Time */}
+                                              {(instance.start_time || instance.end_time) && (
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                  <Clock className="h-4 w-4 shrink-0" />
+                                                  <span>
+                                                    {formatTime(instance.start_time)} - {formatTime(instance.end_time)}
+                                                  </span>
+                                                </div>
+                                              )}
+
+                                              {/* Location */}
+                                              {instance.location && (
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                  <MapPin className="h-4 w-4 shrink-0" />
+                                                  <span>{instance.location.name}</span>
+                                                </div>
+                                              )}
+
+                                              {/* Capacity */}
+                                              <div className="flex items-center gap-2 text-sm">
+                                                <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                                                <span className={instance.is_full ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+                                                  {instance.is_full 
+                                                    ? 'Full' 
+                                                    : `${instance.available_spots} of ${instance.max_students || 0} spots available`
+                                                  }
+                                                </span>
                                               </div>
-                                            )}
 
-                                            {/* Capacity */}
-                                            <div className="flex items-center gap-2 text-sm">
-                                              <Users className="h-4 w-4 text-muted-foreground" />
-                                              <span className={instance.is_full ? 'text-destructive font-medium' : 'text-muted-foreground'}>
-                                                {instance.is_full 
-                                                  ? 'Full' 
-                                                  : `${instance.available_spots} of ${instance.max_students || 0} spots available`
-                                                }
-                                              </span>
-                                            </div>
-
-                                            {/* Actions */}
-                                            <div className="flex gap-2 pt-2">
+                                              {/* Actions */}
+                                              <div className="flex gap-2 pt-2">
                                               <Button
                                                 variant="outline"
                                                 size="sm"
@@ -560,6 +595,7 @@ export const AllCourses = () => {
                                                   'Enroll'
                                                 )}
                                               </Button>
+                                              </div>
                                             </div>
                                           </div>
                                         </CardContent>
@@ -626,7 +662,9 @@ export const AllCourses = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Locations</SelectItem>
-                        {franchises.map((f) => (
+                        {franchises
+                          .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '' && f.code && typeof f.code === 'string' && f.code.trim() !== '')
+                          .map((f) => (
                           <SelectItem key={f.id} value={f.code}>
                             {f.name}
                           </SelectItem>
@@ -668,7 +706,9 @@ export const AllCourses = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Locations</SelectItem>
-                    {franchises.map((f) => (
+                    {franchises
+                      .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '' && f.code && typeof f.code === 'string' && f.code.trim() !== '')
+                      .map((f) => (
                       <SelectItem key={f.id} value={f.code}>
                         {f.name}
                       </SelectItem>
@@ -763,9 +803,11 @@ export const AllCourses = () => {
               </div>
 
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {courses.map((course) => (
+                {courses
+                  .filter((course) => course.id && typeof course.id === 'string' && course.id.trim() !== '')
+                  .map((course) => (
                   <Card
-                    key={course.id}
+                    key={course.id || `course-${course.title}`}
                     className={`flex flex-col hover:shadow-lg transition-all duration-300 hover:-translate-y-1 overflow-hidden ${
                       course.featured ? 'ring-2 ring-primary/20' : ''
                     }`}

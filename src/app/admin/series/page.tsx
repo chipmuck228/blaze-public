@@ -13,13 +13,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   Dialog,
   DialogContent,
@@ -42,9 +40,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Table2, Network } from "lucide-react"
-import { ChevronRight, ChevronDown, BookOpen } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialog"
 
 interface CourseSeries {
   id: string
@@ -87,34 +85,46 @@ interface HierarchyData {
       name: string
       display_name: string
       description?: string
-      courses: Array<{
+      instances?: Array<{
         id: string
-        name: string
-        slug: string
-        description?: string
+        offering_id: string
+        start_date: string
+        end_date: string
+        start_time?: string
+        end_time?: string
+        max_students?: number
+        current_students?: number
         status: string
-        base_price: number
+        price_override?: number
+        offering?: {
+          id: string
+          name: string
+          slug?: string
+          description?: string
+          base_price?: number
+          offering_type: string
+        }
       }>
     }>
   }>
 }
 
 export default function SeriesManagementPage() {
-  const [viewMode, setViewMode] = useState<"table" | "hierarchy">("table")
+  const router = useRouter()
   const [series, setSeries] = useState<CourseSeries[]>([])
-  const [filteredSeries, setFilteredSeries] = useState<CourseSeries[]>([])
   const [hierarchyData, setHierarchyData] = useState<HierarchyData[]>([])
   const [categories, setCategories] = useState<CourseCategory[]>([])
   const [franchises, setFranchises] = useState<Franchise[]>([])
   const [selectedFranchiseFilter, setSelectedFranchiseFilter] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false)
   const [editingSeries, setEditingSeries] = useState<CourseSeries | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false)
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<Omit<CourseSeries, 'id' | 'created_at' | 'updated_at'>>({
     category_id: "",
@@ -132,38 +142,11 @@ export default function SeriesManagementPage() {
     fetchSeries()
     fetchCategories()
     fetchFranchises()
+    fetchHierarchy()
   }, [])
-
-  useEffect(() => {
-    if (viewMode === "hierarchy") {
-      fetchHierarchy()
-    }
-  }, [viewMode])
-
-  useEffect(() => {
-    let base = [...series]
-
-    if (selectedFranchiseFilter !== "all") {
-      base = base.filter((s) => s.franchise_id === selectedFranchiseFilter)
-    }
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      base = base.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.display_name.toLowerCase().includes(q) ||
-          s.description?.toLowerCase().includes(q)
-      )
-    }
-
-    setFilteredSeries(base)
-  }, [searchQuery, series, selectedFranchiseFilter])
 
   const fetchSeries = async () => {
     try {
-      setIsLoading(true)
-      setError(null)
       const params = new URLSearchParams()
       if (selectedFranchiseFilter !== "all") {
         params.set("franchiseId", selectedFranchiseFilter)
@@ -177,12 +160,9 @@ export default function SeriesManagementPage() {
 
       const data = await response.json()
       setSeries(data)
-      setFilteredSeries(data)
     } catch (err: any) {
       console.error("Error fetching series:", err)
-      setError(err.message || "Failed to load programs")
-    } finally {
-      setIsLoading(false)
+      // Don't set error here as hierarchy is the main view
     }
   }
 
@@ -212,7 +192,7 @@ export default function SeriesManagementPage() {
 
   const fetchHierarchy = async () => {
     try {
-      setIsLoadingHierarchy(true)
+      setIsLoading(true)
       setError(null)
       const response = await fetch("/api/admin/series/hierarchy")
       
@@ -222,37 +202,12 @@ export default function SeriesManagementPage() {
 
       const data = await response.json()
       setHierarchyData(data.hierarchy || [])
-      
-      // 默认展开所有项
-      const allIds = new Set<string>()
-      data.hierarchy?.forEach((franchise: HierarchyData) => {
-        allIds.add(`franchise-${franchise.id}`)
-        franchise.categories.forEach((category) => {
-          allIds.add(`category-${category.id}`)
-          category.series.forEach((series) => {
-            allIds.add(`series-${series.id}`)
-          })
-        })
-      })
-      setExpandedItems(allIds)
     } catch (err: any) {
       console.error("Error fetching hierarchy:", err)
       setError(err.message || "Failed to load hierarchy")
     } finally {
-      setIsLoadingHierarchy(false)
+      setIsLoading(false)
     }
-  }
-
-  const toggleExpanded = (id: string) => {
-    setExpandedItems((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
-      }
-      return newSet
-    })
   }
 
   const handleDelete = async (seriesId: string) => {
@@ -267,10 +222,7 @@ export default function SeriesManagementPage() {
 
       if (response.ok) {
         fetchSeries()
-        // 如果当前是层级视图，也刷新层级数据
-        if (viewMode === "hierarchy") {
-          fetchHierarchy()
-        }
+        fetchHierarchy()
       } else {
         const data = await response.json()
         alert(data.error || "Failed to delete program")
@@ -336,10 +288,7 @@ export default function SeriesManagementPage() {
 
       if (response.ok) {
         fetchSeries()
-        // 如果当前是层级视图，也刷新层级数据
-        if (viewMode === "hierarchy") {
-          fetchHierarchy()
-        }
+        fetchHierarchy()
         // 延迟关闭 Dialog，确保 Select 组件清理完成
         setTimeout(() => {
           setIsEditDialogOpen(false)
@@ -407,65 +356,41 @@ export default function SeriesManagementPage() {
 
       <Card>
         <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Programs</CardTitle>
-                <CardDescription>
-                  A list of all programs in the system
-                </CardDescription>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search programs..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-64"
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "hierarchy")}>
-                  <TabsList>
-                    <TabsTrigger value="table">
-                      <Table2 className="h-4 w-4 mr-2" />
-                      Table View
-                    </TabsTrigger>
-                    <TabsTrigger value="hierarchy">
-                      <Network className="h-4 w-4 mr-2" />
-                      Hierarchy View
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-                {viewMode === "table" && (
-                  <>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search programs..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 w-64"
-                      />
-                    </div>
-                    <Select
-                      value={selectedFranchiseFilter}
-                      onValueChange={setSelectedFranchiseFilter}
-                    >
-                      <SelectTrigger className="w-52">
-                        <SelectValue placeholder="All franchises" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All franchises</SelectItem>
-                        {franchises.map((f) => (
-                          <SelectItem key={f.id} value={f.id}>
-                            {f.name} ({f.code})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </>
-                )}
-                <Button onClick={handleAdd}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Program
-                </Button>
-              </div>
+              <Select
+                value={selectedFranchiseFilter}
+                onValueChange={setSelectedFranchiseFilter}
+              >
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="All franchises" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All franchises</SelectItem>
+                  {franchises.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name} ({f.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleAdd}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Program
+              </Button>
             </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "hierarchy")}>
-            <TabsContent value="table" className="mt-0">
           {isLoading ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -473,258 +398,199 @@ export default function SeriesManagementPage() {
           ) : error ? (
             <div className="text-center py-12 space-y-4">
               <p className="text-destructive text-lg">{error}</p>
-              <Button onClick={fetchSeries}>
+              <Button onClick={fetchHierarchy}>
                 <RefreshCcw className="h-4 w-4 mr-2" />
                 Retry
               </Button>
             </div>
-          ) : filteredSeries.length === 0 ? (
+          ) : hierarchyData.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No programs found matching your search." : "No programs found."}
+              No programs found.
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Display Name</TableHead>
-                    <TableHead>Franchise</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Date Range</TableHead>
-                    <TableHead>Order</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSeries.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell>{s.display_name}</TableCell>
-                      <TableCell>{getFranchiseName(s.franchise_id)}</TableCell>
-                      <TableCell>{getCategoryName(s.category_id)}</TableCell>
-                      <TableCell>
-                        {s.start_date && s.end_date
-                          ? `${formatDate(s.start_date)} - ${formatDate(s.end_date)}`
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>{s.display_order}</TableCell>
-                      <TableCell>
-                        <Badge variant={s.is_active ? "default" : "secondary"}>
-                          {s.is_active ? "Active" : "Inactive"}
+            <div className="space-y-4">
+              {hierarchyData
+                .filter((franchise) => {
+                  if (selectedFranchiseFilter !== "all" && franchise.id !== selectedFranchiseFilter) {
+                    return false
+                  }
+                  // Filter by search query
+                  if (searchQuery) {
+                    const q = searchQuery.toLowerCase()
+                    return franchise.categories.some((category) =>
+                      category.series.some((seriesItem) =>
+                        seriesItem.name.toLowerCase().includes(q) ||
+                        seriesItem.display_name.toLowerCase().includes(q) ||
+                        seriesItem.description?.toLowerCase().includes(q)
+                      )
+                    )
+                  }
+                  return true
+                })
+                .map((franchise) => (
+                  <Card key={franchise.id}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-xl font-semibold">
+                          {franchise.name}
+                        </CardTitle>
+                        <Badge variant="secondary" className="text-sm">
+                          {franchise.categories.length} Categor{franchise.categories.length !== 1 ? 'ies' : 'y'}
                         </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(s.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(s)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDelete(s.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-            </TabsContent>
-            <TabsContent value="hierarchy" className="mt-0">
-              {isLoadingHierarchy ? (
-                <div className="flex justify-center items-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : error ? (
-                <div className="text-center py-12 space-y-4">
-                  <p className="text-destructive text-lg">{error}</p>
-                  <Button onClick={fetchHierarchy}>
-                    <RefreshCcw className="h-4 w-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
-              ) : hierarchyData.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  No hierarchy data found.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                  {hierarchyData.map((franchise) => {
-                    const franchiseId = `franchise-${franchise.id}`
-                    const isFranchiseExpanded = expandedItems.has(franchiseId)
-                    
-                    return (
-                      <Card key={franchise.id} className="overflow-hidden">
-                        <button
-                          onClick={() => toggleExpanded(franchiseId)}
-                          className="w-full"
-                        >
-                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-muted/50 transition-colors">
-                            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                              {isFranchiseExpanded ? (
-                                <ChevronDown className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground shrink-0" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground shrink-0" />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <h3 className="text-base md:text-lg font-semibold truncate">{franchise.name}</h3>
-                                <p className="text-xs md:text-sm text-muted-foreground truncate">Code: {franchise.code}</p>
+                      </div>
+                      <CardDescription>Code: {franchise.code}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Accordion type="multiple" className="w-full">
+                        {franchise.categories.map((category) => (
+                          <AccordionItem key={category.id} value={category.id} className="border rounded-lg px-4 mb-2">
+                            <AccordionTrigger className="hover:no-underline">
+                              <div className="flex items-center justify-between w-full pr-4">
+                                <div className="flex flex-col items-start text-left">
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-medium">{category.display_name}</span>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground mt-1">{category.name}</span>
+                                </div>
+                                <Badge variant="outline" className="text-sm shrink-0">
+                                  {category.series.length} Program{category.series.length !== 1 ? 's' : ''}
+                                </Badge>
                               </div>
-                            </div>
-                            <Badge variant="outline" className="shrink-0 ml-2 text-xs">
-                              {franchise.categories.length} Categor{franchise.categories.length !== 1 ? 'ies' : 'y'}
-                            </Badge>
-                          </div>
-                        </button>
-                        {isFranchiseExpanded && (
-                          <div className="pl-4 md:pl-8 pr-3 md:pr-4 pb-3 md:pb-4 space-y-2 md:space-y-3">
-                            {franchise.categories.map((category) => {
-                              const categoryId = `category-${category.id}`
-                              const isCategoryExpanded = expandedItems.has(categoryId)
-                              
-                              return (
-                                <Card key={category.id} className="border-l-2 border-l-primary/20">
-                                  <button
-                                    onClick={() => toggleExpanded(categoryId)}
-                                    className="w-full"
-                                  >
-                                    <div className="flex items-center justify-between p-2 md:p-3 hover:bg-muted/30 transition-colors">
-                                      <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                                        {isCategoryExpanded ? (
-                                          <ChevronDown className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
-                                        ) : (
-                                          <ChevronRight className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
-                                        )}
-                                        <div className="min-w-0 flex-1">
-                                          <h4 className="font-medium text-sm md:text-base truncate">{category.display_name}</h4>
-                                          <p className="text-xs text-muted-foreground truncate">{category.name}</p>
-                                        </div>
-                                      </div>
-                                      <Badge variant="secondary" className="shrink-0 ml-2 text-xs">
-                                        {category.series.length} Program{category.series.length !== 1 ? 's' : ''}
-                                      </Badge>
-                                    </div>
-                                  </button>
-                                  {isCategoryExpanded && (
-                                    <div className="pl-4 md:pl-8 pr-2 md:pr-3 pb-2 md:pb-3 space-y-2">
-                                      {category.series.map((seriesItem) => {
-                                        const seriesId = `series-${seriesItem.id}`
-                                        const isSeriesExpanded = expandedItems.has(seriesId)
-                                        
-                                        return (
-                                          <Card key={seriesItem.id} className="border-l-2 border-l-secondary/20">
-                                            <div className="flex items-center justify-between p-2 md:p-3">
-                                              <button
-                                                onClick={() => toggleExpanded(seriesId)}
-                                                className="flex-1 flex items-center gap-2 md:gap-3 hover:bg-muted/20 transition-colors rounded-md p-2 -m-2 min-w-0"
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-3 pt-2 pb-4">
+                                {category.series
+                                  .filter((seriesItem) => {
+                                    if (searchQuery) {
+                                      const q = searchQuery.toLowerCase()
+                                      return (
+                                        seriesItem.name.toLowerCase().includes(q) ||
+                                        seriesItem.display_name.toLowerCase().includes(q) ||
+                                        seriesItem.description?.toLowerCase().includes(q)
+                                      )
+                                    }
+                                    return true
+                                  })
+                                  .map((seriesItem) => (
+                                    <Card key={seriesItem.id} className="border-l-2 border-l-primary/20">
+                                      <CardHeader className="pb-3">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex-1">
+                                            <CardTitle className="text-base">{seriesItem.display_name}</CardTitle>
+                                            <CardDescription className="text-xs">{seriesItem.name}</CardDescription>
+                                            {seriesItem.description && (
+                                              <p className="text-sm text-muted-foreground mt-2">{seriesItem.description}</p>
+                                            )}
+                                          </div>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                                                <MoreVertical className="h-4 w-4" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                              <DropdownMenuItem onClick={async () => {
+                                                const foundSeries = series.find((s: CourseSeries) => s.id === seriesItem.id)
+                                                if (foundSeries) {
+                                                  handleEdit(foundSeries)
+                                                } else {
+                                                  await fetchSeries()
+                                                  const found = series.find((s: CourseSeries) => s.id === seriesItem.id)
+                                                  if (found) handleEdit(found)
+                                                }
+                                              }}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                Edit
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                className="text-destructive"
+                                                onClick={() => handleDelete(seriesItem.id)}
                                               >
-                                                {isSeriesExpanded ? (
-                                                  <ChevronDown className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
-                                                ) : (
-                                                  <ChevronRight className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground shrink-0" />
-                                                )}
-                                                <div className="flex-1 text-left min-w-0">
-                                                  <h5 className="font-medium text-xs md:text-sm truncate">{seriesItem.display_name}</h5>
-                                                  <p className="text-xs text-muted-foreground truncate">{seriesItem.name}</p>
-                                                </div>
-                                                <Badge variant="outline" className="text-xs shrink-0 ml-2">
-                                                  {seriesItem.courses.length} Instance{seriesItem.courses.length !== 1 ? 's' : ''}
-                                                </Badge>
-                                              </button>
-                                              <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                  <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 shrink-0">
-                                                    <MoreVertical className="h-3 w-3 md:h-4 md:w-4" />
-                                                 </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                  <DropdownMenuItem onClick={async () => {
-                                                    // 从原始的 series state 中查找
-                                                    const foundSeries = series.find((s: CourseSeries) => s.id === seriesItem.id)
-                                                    if (foundSeries) {
-                                                      handleEdit(foundSeries)
-                                                    } else {
-                                                      // 如果找不到，重新获取数据
-                                                      await fetchSeries()
-                                                      const found = series.find((s: CourseSeries) => s.id === seriesItem.id)
-                                                      if (found) handleEdit(found)
-                                                    }
-                                                  }}>
-                                                    <Edit className="mr-2 h-4 w-4" />
-                                                    Edit
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem
-                                                    className="text-destructive"
-                                                    onClick={() => handleDelete(seriesItem.id)}
-                                                  >
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Delete
-                                                  </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                              </DropdownMenu>
-                                            </div>
-                                            {isSeriesExpanded && (
-                                              <div className="pl-4 md:pl-8 pr-2 md:pr-3 pb-2 md:pb-3 space-y-2">
-                                                {seriesItem.courses.length === 0 ? (
-                                                  <p className="text-xs text-muted-foreground italic pl-4">No courses assigned</p>
-                                                ) : (
-                                                seriesItem.courses.map((course) => (
-                                                  <div
-                                                    key={course.id}
-                                                    className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border border-border/50"
-                                                  >
-                                                    <BookOpen className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                                    <div className="flex-1 min-w-0">
-                                                      <p className="text-xs md:text-sm font-medium truncate">{course.name}</p>
-                                                      <div className="flex items-center gap-1.5 md:gap-2 mt-1 flex-wrap">
-                                                        <Badge variant={course.status === 'published' ? 'default' : 'secondary'} className="text-xs">
-                                                          {course.status}
-                                                        </Badge>
-                                                        {course.base_price && (
-                                                          <span className="text-xs text-muted-foreground">
-                                                            ${course.base_price.toFixed(2)}
-                                                          </span>
-                                                        )}
-                                                      </div>
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Delete
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </div>
+                                      </CardHeader>
+                                      <CardContent>
+                                        {/* Display Instances */}
+                                        {seriesItem.instances && seriesItem.instances.length > 0 ? (
+                                          <div className="space-y-2">
+                                            <p className="text-sm font-medium text-muted-foreground mb-2">
+                                              Instances ({seriesItem.instances.length})
+                                            </p>
+                                            <div className="space-y-2">
+                                              {seriesItem.instances.map((instance: any) => (
+                                                <div
+                                                  key={instance.id}
+                                                  className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border"
+                                                >
+                                                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                                  <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate">
+                                                      {instance.offering?.name || 'Unknown Offering'}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                      <Badge variant={instance.status === 'scheduled' ? 'default' : 'secondary'} className="text-xs">
+                                                        {instance.status}
+                                                      </Badge>
+                                                      {instance.start_date && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                          {new Date(instance.start_date).toLocaleDateString()}
+                                                        </span>
+                                                      )}
+                                                      {instance.max_students && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                          {instance.current_students || 0}/{instance.max_students} students
+                                                        </span>
+                                                      )}
+                                                      {(instance.price_override || instance.offering?.base_price) && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                          ${(instance.price_override || instance.offering?.base_price || 0).toFixed(2)}
+                                                        </span>
+                                                      )}
                                                     </div>
                                                   </div>
-                                                ))
-                                                )}
-                                              </div>
-                                            )}
-                                          </Card>
-                                        )
-                                      })}
-                                    </div>
-                                  )}
-                                </Card>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </Card>
-                    )
-                  })}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <p className="text-sm text-muted-foreground italic">No instances created yet</p>
+                                        )}
+                                        <div className="mt-4 pt-4 border-t">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedSeriesId(seriesItem.id)
+                                              // Find categoryId from hierarchyData
+                                              const categoryId = hierarchyData
+                                                .flatMap((f) => f.categories)
+                                                .find((c) => c.series.some((s: any) => s.id === seriesItem.id))?.id
+                                              setSelectedCategoryId(categoryId || null)
+                                              setIsInstanceDialogOpen(true)
+                                            }}
+                                            className="w-full"
+                                          >
+                                            <Calendar className="mr-2 h-4 w-4" />
+                                            Add Instance
+                                          </Button>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -872,6 +738,28 @@ export default function SeriesManagementPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Instance Create Dialog */}
+      {selectedSeriesId && (
+        <InstanceCreateDialog
+          open={isInstanceDialogOpen}
+          onOpenChange={(open) => {
+            setIsInstanceDialogOpen(open)
+            if (!open) {
+              setSelectedSeriesId(null)
+              setSelectedCategoryId(null)
+            }
+          }}
+          seriesId={selectedSeriesId}
+          categoryId={selectedCategoryId || undefined}
+          onSuccess={() => {
+            fetchHierarchy()
+            setIsInstanceDialogOpen(false)
+            setSelectedSeriesId(null)
+            setSelectedCategoryId(null)
+          }}
+        />
+      )}
     </div>
   )
 }

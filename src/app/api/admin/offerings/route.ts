@@ -18,17 +18,8 @@ export async function GET(request: Request) {
     // 如果提供了 offeringId，返回单个 offering 的详细信息
     if (offeringId) {
       const { data: offering, error } = await supabaseAdmin
-        .from("offerings")
-        .select(`
-          *,
-          subcategories:course_subcategory_tags(
-            subcategory:course_subcategories(
-              id,
-              name,
-              display_name
-            )
-          )
-        `)
+        .from("offerings_v2")
+        .select("*")
         .eq("id", offeringId)
         .single()
 
@@ -40,12 +31,31 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Offering not found" }, { status: 404 })
       }
 
-      // 转换 subcategories 格式
-      const tags = (offering.subcategories || []).map((tag: any) => ({
-        id: tag.subcategory.id,
-        name: tag.subcategory.name,
-        display_name: tag.subcategory.display_name,
-      }))
+      // 查询标签（只查询 offering_id，因为 offerings_v2 表中的 offering 不在 courses 表中）
+      const { data: offeringTagsResult } = await supabaseAdmin
+        .from('course_subcategory_tags')
+        .select('subcategory_id')
+        .eq('offering_id', offeringId)
+      
+      const subcategoryTags = offeringTagsResult || []
+
+      let tags: Array<{ id: string; name: string; display_name: string }> = []
+      if (subcategoryTags && subcategoryTags.length > 0) {
+        const subcategoryIds = subcategoryTags.map(t => t.subcategory_id)
+        const { data: subcategoriesData } = await supabaseAdmin
+          .from('course_subcategories')
+          .select('id, name, display_name')
+          .in('id', subcategoryIds)
+          .eq('is_active', true)
+        
+        if (subcategoriesData) {
+          tags = subcategoriesData.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            display_name: s.display_name,
+          }))
+        }
+      }
 
       return NextResponse.json({
         ...offering,
@@ -53,9 +63,9 @@ export async function GET(request: Request) {
       }, { status: 200 })
     }
 
-    // 获取所有 offerings
+    // 获取所有 offerings（从 offerings_v2 表）
     let query = supabaseAdmin
-      .from("offerings")
+      .from("offerings_v2")
       .select("*")
       .order("created_at", { ascending: false })
 
@@ -85,10 +95,13 @@ export async function GET(request: Request) {
     // 为每个 offering 加载 tags (subcategories)
     const offeringsWithTags = await Promise.all(
       filteredOfferings.map(async (offering) => {
-        const { data: subcategoryTags } = await supabaseAdmin
+        // 只查询 offering_id 的标签（offerings_v2 表中的 offering 不在 courses 表中）
+        const { data: offeringTagsResult } = await supabaseAdmin
           .from('course_subcategory_tags')
           .select('subcategory_id')
-          .eq('course_id', offering.id) // 使用 course_id 字段（向后兼容）
+          .eq('offering_id', offering.id)
+        
+        const subcategoryTags = offeringTagsResult || []
 
         let tags: Array<{ id: string; name: string; display_name: string }> = []
         if (subcategoryTags && subcategoryTags.length > 0) {
@@ -170,9 +183,11 @@ export async function POST(request: Request) {
       )
     }
 
-    // 创建 offering（默认状态为 draft）
+    // 创建 offering_v2（默认状态为 draft）
+    // 注意：offerings_v2 表是简化版本，不包含 session_count, age_min, age_max 等字段
+    // 这些字段应该在 instance 级别设置
     const { data: offering, error: createError } = await supabaseAdmin
-      .from("offerings")
+      .from("offerings_v2")
       .insert({
         name,
         slug,
@@ -180,23 +195,18 @@ export async function POST(request: Request) {
         target_audience,
         learning_outcomes,
         prerequisites,
-        cancellation_policy,
-        session_count,
-        number_of_sessions: session_count, // 向后兼容
-        age_min,
-        age_max,
-        target_age_min: age_min, // 向后兼容
-        target_age_max: age_max, // 向后兼容
-        target_grades,
-        grade_level,
+        // cancellation_policy 已移到 franchise 级别，不再存储在 offering 中
         base_price,
         currency: currency || "USD",
-        duration_hours,
         poster_url: poster_url || null,
         offering_type,
         type_config: type_config || {},
         status: 'draft',  // 新创建的 offering 默认为 draft 状态
-        is_active: false, // draft 状态时 is_active 为 false
+        // 注意：offerings_v2 表不包含以下字段（这些字段在 instance 级别）：
+        // - session_count, duration_hours (在 instance 级别)
+        // - age_min, age_max (在 instance 级别)
+        // - target_grades, grade_level (在 instance 级别)
+        // - cancellation_policy (在 franchise 级别)
       })
       .select()
       .single()
@@ -205,52 +215,77 @@ export async function POST(request: Request) {
       throw new Error(createError.message)
     }
 
-    // 如果有子类标签，添加标签（使用 course_id 字段，向后兼容）
+    // 如果有子类标签，添加标签（使用 offering_id 字段）
     if (subcategory_ids && Array.isArray(subcategory_ids) && subcategory_ids.length > 0) {
-      const tagsToInsert = subcategory_ids.map((subcategoryId: string) => ({
-        course_id: offering.id,
-        subcategory_id: subcategoryId,
-      }))
+      try {
+        // 首先尝试使用 offering_id（新架构）
+        const tagsToInsert = subcategory_ids.map((subcategoryId: string) => ({
+          offering_id: offering.id,
+          course_id: null,
+          subcategory_id: subcategoryId,
+        }))
 
-      const { error: tagsError } = await supabaseAdmin
-        .from('course_subcategory_tags')
-        .insert(tagsToInsert)
+        const { error: tagsError } = await supabaseAdmin
+          .from('course_subcategory_tags')
+          .insert(tagsToInsert)
 
-      if (tagsError) {
-        console.error("Error adding subcategory tags:", tagsError)
-        // 不抛出错误，继续执行
+        if (tagsError) {
+          // 如果 offering_id 字段不存在，尝试使用 course_id（向后兼容）
+          if (tagsError.message.includes('column') && tagsError.message.includes('offering_id')) {
+            console.warn("offering_id column not found, using course_id as fallback")
+            const fallbackTagsToInsert = subcategory_ids.map((subcategoryId: string) => ({
+              course_id: offering.id,
+              subcategory_id: subcategoryId,
+            }))
+
+            const { error: fallbackError } = await supabaseAdmin
+              .from('course_subcategory_tags')
+              .insert(fallbackTagsToInsert)
+
+            if (fallbackError) {
+              console.error("Error adding subcategory tags (fallback):", fallbackError)
+              // 不抛出错误，允许继续执行（标签是可选的）
+            }
+          } else {
+            console.error("Error adding subcategory tags:", tagsError)
+            // 不抛出错误，允许继续执行（标签是可选的）
+          }
+        }
+      } catch (err: any) {
+        console.error("Error adding subcategory tags:", err)
+        // 不抛出错误，允许继续执行（标签是可选的）
       }
     }
 
     // 返回完整的 offering 信息（包含标签）
-    const { data: offeringWithTags, error: fetchError } = await supabaseAdmin
-      .from("offerings")
-      .select(`
-        *,
-        subcategories:course_subcategory_tags(
-          subcategory:course_subcategories(
-            id,
-            name,
-            display_name
-          )
-        )
-      `)
-      .eq("id", offering.id)
-      .single()
+    // 新创建的 offering 在 offerings_v2 表中，只查询 offering_id 的标签
+    const { data: offeringTagsResult } = await supabaseAdmin
+      .from('course_subcategory_tags')
+      .select('subcategory_id')
+      .eq('offering_id', offering.id)
+    
+    const subcategoryTags = offeringTagsResult || []
 
-    if (fetchError) {
-      throw new Error(fetchError.message)
+    let tags: Array<{ id: string; name: string; display_name: string }> = []
+    if (subcategoryTags.length > 0) {
+      const subcategoryIds = subcategoryTags.map(t => t.subcategory_id)
+      const { data: subcategoriesData } = await supabaseAdmin
+        .from('course_subcategories')
+        .select('id, name, display_name')
+        .in('id', subcategoryIds)
+        .eq('is_active', true)
+      
+      if (subcategoriesData) {
+        tags = subcategoriesData.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          display_name: s.display_name,
+        }))
+      }
     }
 
-    // 转换 subcategories 格式
-    const tags = (offeringWithTags?.subcategories || []).map((tag: any) => ({
-      id: tag.subcategory.id,
-      name: tag.subcategory.name,
-      display_name: tag.subcategory.display_name,
-    }))
-
     return NextResponse.json({
-      ...offeringWithTags,
+      ...offering,
       tags,
     }, { status: 201 })
   } catch (error: any) {

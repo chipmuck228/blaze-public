@@ -10,10 +10,39 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data, error } = await supabaseAdmin
+    // Phase 2: Try to get from franchises_v2 first, then fallback to franchises
+    const { getFranchiseV2ByLegacyId } = await import("@/lib/db-v2")
+    
+    // Get from old table
+    const { data: oldData, error: oldError } = await supabaseAdmin
       .from("franchises")
       .select("id, code, name, primary_domain, timezone, branding_config, is_active")
       .order("name", { ascending: true })
+
+    if (oldError) {
+      throw new Error(oldError.message)
+    }
+
+    // Try to enrich with cancellation_policy from franchises_v2
+    const enrichedData = await Promise.all((oldData || []).map(async (franchise: any) => {
+      try {
+        const franchiseV2 = await getFranchiseV2ByLegacyId(franchise.id)
+        if (franchiseV2) {
+          return {
+            ...franchise,
+            cancellation_policy: franchiseV2.cancellation_policy || null,
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching franchise_v2 for ${franchise.id}:`, error)
+      }
+      return {
+        ...franchise,
+        cancellation_policy: null,
+      }
+    }))
+
+    return NextResponse.json(enrichedData || [], { status: 200 })
 
     if (error) {
       throw new Error(error.message)

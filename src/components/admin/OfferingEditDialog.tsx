@@ -106,15 +106,10 @@ export function OfferingEditDialog({
     target_audience: "",
     learning_outcomes: "",
     prerequisites: "",
-    cancellation_policy: "",
-    session_count: undefined,
-    age_min: undefined,
-    age_max: undefined,
-    target_grades: [],
-    grade_level: "",
+    // Removed Instance-specific fields: cancellation_policy, session_count, age_min, age_max, target_grades, duration_hours
+    // These fields are now managed at the Instance level, not the Offering level
     base_price: undefined,
     currency: "USD",
-    duration_hours: undefined,
     poster_url: null,
     offering_type: "course",
     type_config: {},
@@ -164,15 +159,9 @@ export function OfferingEditDialog({
       target_audience: "",
       learning_outcomes: "",
       prerequisites: "",
-      cancellation_policy: "",
-      session_count: undefined,
-      age_min: undefined,
-      age_max: undefined,
-      target_grades: [],
-      grade_level: "",
+      // Removed Instance-specific fields
       base_price: undefined,
       currency: "USD",
-      duration_hours: undefined,
       poster_url: null,
       offering_type: "course", // 临时默认值，会在 types 加载后更新
       type_config: {},
@@ -218,15 +207,9 @@ export function OfferingEditDialog({
         target_audience: currentOffering.target_audience || "",
         learning_outcomes: currentOffering.learning_outcomes || "",
         prerequisites: currentOffering.prerequisites || "",
-        cancellation_policy: currentOffering.cancellation_policy || "",
-        session_count: currentOffering.session_count || currentOffering.number_of_sessions,
-        age_min: currentOffering.age_min || currentOffering.target_age_min,
-        age_max: currentOffering.age_max || currentOffering.target_age_max,
-        target_grades: currentOffering.target_grades || [],
-        grade_level: currentOffering.grade_level || "",
+        // Removed Instance-specific fields - these are now managed at Instance level
         base_price: currentOffering.base_price,
         currency: currentOffering.currency || "USD",
-        duration_hours: currentOffering.duration_hours,
         poster_url: currentOffering.poster_url || null,
         offering_type: currentOffering.offering_type || "course",
         type_config: currentOffering.type_config || {},
@@ -234,7 +217,7 @@ export function OfferingEditDialog({
       })
       setPosterUrl(currentOffering.poster_url || null)
       setSelectedSubcategoryIds(currentOffering.tags?.map(t => t.id) || [])
-      setTargetGradesInput(currentOffering.target_grades?.join("; ") || "")
+      setTargetGradesInput("") // Removed - no longer used
       setSlugManuallyEdited(!!currentOffering.slug)
       setTypeConfig(currentOffering.type_config || {})
     } else {
@@ -762,24 +745,11 @@ export function OfferingEditDialog({
         submitData.poster_url = posterUrl
       }
 
-      // 教育相关字段
+      // 教育相关字段（保留 target_audience, learning_outcomes, prerequisites）
+      // Removed Instance-specific fields: age_min, age_max, target_grades, session_count, duration_hours
+      // These are now managed at the Instance level
       if (!visibleFields || visibleFields.education?.target_audience !== false) {
         submitData.target_audience = formData.target_audience || null
-      }
-      if (!visibleFields || visibleFields.education?.age_min !== false) {
-        submitData.age_min = formData.age_min || null
-      }
-      if (!visibleFields || visibleFields.education?.age_max !== false) {
-        submitData.age_max = formData.age_max || null
-      }
-      if (!visibleFields || visibleFields.education?.target_grades !== false) {
-        submitData.target_grades = parseGrades(targetGradesInput)
-      }
-      if (!visibleFields || visibleFields.education?.session_count !== false) {
-        submitData.session_count = formData.session_count || null
-      }
-      if (!visibleFields || visibleFields.education?.duration_hours !== false) {
-        submitData.duration_hours = formData.duration_hours || null
       }
       if (!visibleFields || visibleFields.education?.learning_outcomes !== false) {
         submitData.learning_outcomes = formData.learning_outcomes || null
@@ -796,10 +766,7 @@ export function OfferingEditDialog({
         submitData.currency = formData.currency || "USD"
       }
 
-      // 政策相关字段
-      if (!visibleFields || visibleFields.policy?.cancellation_policy !== false) {
-        submitData.cancellation_policy = formData.cancellation_policy || null
-      }
+      // Removed cancellation_policy - now managed at Franchise level
 
       // 分类标签
       if (!visibleFields || visibleFields.tags?.subcategory_tags !== false) {
@@ -1083,7 +1050,7 @@ export function OfferingEditDialog({
           )}
 
           {/* Subcategory Tags */}
-          {isFieldVisible('tags.subcategory_tags') && (
+          {offering && isFieldVisible('tags.subcategory_tags') && (
           <div className="space-y-2">
             <Label>Subcategory Tags (Optional)</Label>
             <div className="border rounded-md p-3 min-h-[100px] max-h-[200px] overflow-y-auto">
@@ -1149,113 +1116,12 @@ export function OfferingEditDialog({
           )}
 
           {/* Education Information Section */}
-          {hasAnyEducationField() && (
+          {/* Removed Instance-specific fields: session_count, age_min, age_max, target_grades, duration_hours */}
+          {/* These fields are now managed at the Instance level when creating instances */}
+          {(isFieldVisible('education.target_audience') || 
+            isFieldVisible('education.learning_outcomes') || 
+            isFieldVisible('education.prerequisites')) && (
           <>
-          {/* Number of Sessions */}
-          {isFieldVisible('education.session_count') && (
-          <div className="space-y-2">
-            <Label htmlFor="sessions">Number of Sessions</Label>
-            <Input
-              id="sessions"
-              type="number"
-              value={formData.session_count || ""}
-              onChange={(e) => {
-                if (isArchived) return
-                setFormData({
-                  ...formData,
-                  session_count: e.target.value ? parseInt(e.target.value) : undefined,
-                })
-              }}
-              placeholder="10"
-              disabled={isArchived}
-            />
-          </div>
-          )}
-
-          {/* Age Range */}
-          {(isFieldVisible('education.age_min') || isFieldVisible('education.age_max')) && (
-          <div className={`grid grid-cols-1 ${isFieldVisible('education.age_min') && isFieldVisible('education.age_max') ? 'md:grid-cols-2' : ''} gap-4`}>
-            {isFieldVisible('education.age_min') && (
-            <div className="space-y-2">
-              <Label htmlFor="ageMin">Min Age</Label>
-              <Input
-                id="ageMin"
-                type="number"
-                value={formData.age_min || ""}
-                onChange={(e) => {
-                  if (isArchived) return
-                  setFormData({
-                    ...formData,
-                    age_min: e.target.value ? parseInt(e.target.value) : undefined,
-                  })
-                }}
-                placeholder="5"
-                disabled={isArchived}
-              />
-            </div>
-            )}
-
-            {isFieldVisible('education.age_max') && (
-            <div className="space-y-2">
-              <Label htmlFor="ageMax">Max Age</Label>
-              <Input
-                id="ageMax"
-                type="number"
-                value={formData.age_max || ""}
-                onChange={(e) => {
-                  if (isArchived) return
-                  setFormData({
-                    ...formData,
-                    age_max: e.target.value ? parseInt(e.target.value) : undefined,
-                  })
-                }}
-                placeholder="8"
-                disabled={isArchived}
-              />
-            </div>
-            )}
-          </div>
-          )}
-
-          {/* Target Grades */}
-          {isFieldVisible('education.target_grades') && (
-          <div className="space-y-2">
-            <Label htmlFor="targetGrades">Target Grades</Label>
-            <Input
-              id="targetGrades"
-              value={targetGradesInput}
-              onChange={(e) => handleTargetGradesChange(e.target.value)}
-              placeholder="e.g., K-2; 3-5; 6 (use semicolon to separate multiple grades)"
-              disabled={isArchived}
-            />
-            <p className="text-xs text-muted-foreground">
-              Enter grades separated by semicolons (;). Example: K-2; 3-5; 6
-            </p>
-          </div>
-          )}
-
-          {/* Duration Hours */}
-          {isFieldVisible('education.duration_hours') && (
-          <div className="space-y-2">
-            <Label htmlFor="duration_hours">Duration (Hours)</Label>
-            <Input
-              id="duration_hours"
-              type="number"
-              step="0.5"
-              value={formData.duration_hours || ""}
-              onChange={(e) => {
-                if (isArchived) return
-                setFormData({
-                  ...formData,
-                  duration_hours: e.target.value ? parseFloat(e.target.value) : undefined,
-                })
-              }}
-              placeholder="1.5"
-              disabled={isArchived}
-            />
-          </div>
-          )}
-
           {/* Target Audience */}
           {isFieldVisible('education.target_audience') && (
           <div className="space-y-2">
@@ -1360,23 +1226,7 @@ export function OfferingEditDialog({
           </div>
           )}
 
-          {/* Cancellation Policy */}
-          {isFieldVisible('policy.cancellation_policy') && (
-          <div className="space-y-2">
-            <Label htmlFor="policy">Cancellation Policy</Label>
-            <Textarea
-              id="policy"
-              value={formData.cancellation_policy || ""}
-              onChange={(e) => {
-                if (isArchived) return
-                setFormData({ ...formData, cancellation_policy: e.target.value })
-              }}
-              placeholder="Refund policy details"
-              rows={2}
-              disabled={isArchived}
-            />
-          </div>
-          )}
+          {/* Removed Cancellation Policy - now managed at Franchise level */}
 
           {/* Offering Status */}
           {isFieldVisible('general.status') && (

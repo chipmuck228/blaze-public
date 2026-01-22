@@ -3,13 +3,13 @@ import { supabaseAdmin } from "@/lib/supabase"
 
 // GET /api/public/instances?category=xxx
 // 返回所有可用的 instances，按 franchise -> series -> instances 组织
-// 即使没有 instances，也返回 franchise 和 programs 信息
+// 使用新表：instance_v2 和 offerings_v2
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const categoryId = searchParams.get("category")
 
-    // 使用更直接的方式：通过 series 的 franchise_id 来组织数据
+    // 使用新表：instance_v2 和 offerings_v2
     // 1. 获取所有活跃的 series/programs（包含 franchise 信息）
     let seriesQuery = supabaseAdmin
       .from("course_series")
@@ -24,11 +24,6 @@ export async function GET(request: Request) {
           id,
           name,
           display_name
-        ),
-        franchise:franchises!inner(
-          id,
-          code,
-          name
         )
       `)
       .eq("is_active", true)
@@ -55,53 +50,14 @@ export async function GET(request: Request) {
     const seriesIds = seriesData.map((s: any) => s.id)
     console.log(`[Public Instances API] Series IDs:`, seriesIds)
 
-    // 3. 获取这些 series 下的所有 assignments
-    const { data: assignmentsData, error: assignmentsError } = await supabaseAdmin
-      .from("course_assignments")
+    // 3. 获取这些 series 下的所有 instances（从 instance_v2 表）
+    const { data: instancesV2Data, error: instancesV2Error } = await supabaseAdmin
+      .from("instance_v2")
       .select(`
         id,
         series_id,
-        course:courses(
-          id,
-          name,
-          slug,
-          description,
-          target_grades,
-          target_age_min,
-          target_age_max,
-          base_price,
-          status
-        ),
-        category:course_categories(
-          id,
-          name,
-          display_name
-        )
-      `)
-      .eq("is_active", true)
-      .in("series_id", seriesIds)
-
-    if (assignmentsError) {
-      throw new Error(assignmentsError.message)
-    }
-
-    console.log(`[Public Instances API] Found ${assignmentsData?.length || 0} active assignments`)
-
-    // 只保留已发布课程的 assignments
-    const publishedAssignments = (assignmentsData || []).filter((a: any) => {
-      // Supabase 嵌套查询可能返回数组或对象
-      const course = Array.isArray(a.course) ? a.course[0] : a.course
-      return course?.status === "published"
-    })
-
-    const assignmentIds = publishedAssignments.map((a: any) => a.id)
-    console.log(`[Public Instances API] Published assignment IDs:`, assignmentIds)
-
-    // 4. 获取这些 assignments 下的所有活跃 instances
-    let instancesQuery = supabaseAdmin
-      .from("course_instances")
-      .select(`
-        id,
+        category_id,
+        franchise_id,
         start_date,
         end_date,
         start_time,
@@ -110,72 +66,147 @@ export async function GET(request: Request) {
         current_students,
         status,
         price_override,
-        assignment_id,
+        age_min,
+        age_max,
+        target_grades,
+        location_id,
         location:course_locations(
           id,
           name,
           address,
           city,
           state
+        ),
+        offering:offerings_v2(
+          id,
+          name,
+          slug,
+          description,
+          status,
+          base_price,
+          target_audience,
+          learning_outcomes,
+          prerequisites
         )
       `)
       .eq("is_active", true)
       .in("status", ["scheduled", "ongoing"])
-
-    if (assignmentIds.length > 0) {
-      instancesQuery = instancesQuery.in("assignment_id", assignmentIds)
-    } else {
-      // 如果没有 published assignments，返回空 instances
-      instancesQuery = instancesQuery.eq("assignment_id", "00000000-0000-0000-0000-000000000000") // 不存在的 ID，确保返回空
-    }
-
-    instancesQuery = instancesQuery
+      .in("series_id", seriesIds)
       .order("start_date", { ascending: true })
       .order("start_time", { ascending: true })
 
-    const { data: instancesData, error: instancesError } = await instancesQuery
-
-    if (instancesError) {
-      throw new Error(instancesError.message)
+    if (instancesV2Error) {
+      throw new Error(instancesV2Error.message)
     }
 
-    console.log(`[Public Instances API] Found ${instancesData?.length || 0} active instances`)
+    console.log(`[Public Instances API] Found ${instancesV2Data?.length || 0} active instances from instance_v2`)
 
-    const instances = instancesData || []
+    const instancesV2 = instancesV2Data || []
 
-    // 按 franchise -> series -> instances 组织数据
+    // 4. 获取所有相关的 franchises
+    // course_series.franchise_id 可能指向旧表的 franchises.id，需要映射到新表
+    const franchiseIds = new Set<string>()
+    seriesData.forEach((s: any) => {
+      if (s.franchise_id) {
+        franchiseIds.add(s.franchise_id)
+      }
+    })
+    instancesV2.forEach((inst: any) => {
+      if (inst.franchise_id) {
+        franchiseIds.add(inst.franchise_id)
+      }
+    })
+
+    // 创建 franchise 映射：旧表 ID -> 新表 franchise 对象
     const franchiseMap = new Map<string, any>()
+    
+    // 首先尝试从 franchises_v2 获取
+    const { data: franchisesV2Data } = await supabaseAdmin
+      .from("franchises_v2")
+      .select("id, code, name, legacy_franchise_id")
+      .in("id", Array.from(franchiseIds))
+      .eq("is_active", true)
 
-    // 创建 assignment 到 series 的映射
-    const assignmentToSeriesMap = new Map<string, any>()
-    for (const assignment of publishedAssignments) {
-      assignmentToSeriesMap.set(assignment.id, assignment.series_id)
+    if (franchisesV2Data && franchisesV2Data.length > 0) {
+      franchisesV2Data.forEach((f: any) => {
+        franchiseMap.set(f.id, f)
+        // 如果 legacy_franchise_id 存在，也建立映射
+        if (f.legacy_franchise_id) {
+          franchiseMap.set(f.legacy_franchise_id, f)
+        }
+      })
     }
 
-    // 创建 series 到 franchise 的映射
-    const seriesToFranchiseMap = new Map<string, any>()
-    for (const series of seriesData) {
-      // Supabase 嵌套查询可能返回数组或对象，需要处理两种情况
-      const franchise = Array.isArray(series.franchise) ? series.franchise[0] : series.franchise
-      if (franchise) {
-        seriesToFranchiseMap.set(series.id, franchise)
+    // 对于未找到的 franchise_id，尝试通过 legacy_franchise_id 映射
+    const missingFranchiseIds = Array.from(franchiseIds).filter(id => !franchiseMap.has(id))
+    if (missingFranchiseIds.length > 0) {
+      try {
+        const { getFranchiseV2ByLegacyId } = await import("@/lib/db-v2")
+        for (const legacyId of missingFranchiseIds) {
+          const franchiseV2 = await getFranchiseV2ByLegacyId(legacyId)
+          if (franchiseV2) {
+            // 使用新表的 ID 作为 key，但保留旧表 ID 的映射
+            franchiseMap.set(legacyId, {
+              id: franchiseV2.id,
+              code: franchiseV2.code,
+              name: franchiseV2.name,
+            })
+            franchiseMap.set(franchiseV2.id, {
+              id: franchiseV2.id,
+              code: franchiseV2.code,
+              name: franchiseV2.name,
+            })
+          } else {
+            // 如果新表没有，尝试从旧表获取（向后兼容）
+            const { data: legacyFranchise } = await supabaseAdmin
+              .from("franchises")
+              .select("id, code, name")
+              .eq("id", legacyId)
+              .eq("is_active", true)
+              .single()
+            
+            if (legacyFranchise) {
+              franchiseMap.set(legacyId, legacyFranchise)
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`[Public Instances API] Error fetching franchises:`, error)
       }
     }
 
+    // 按 franchise -> series -> instances 组织数据
+    const resultFranchiseMap = new Map<string, any>()
+
     // 1. 先添加所有 series/programs（即使没有 instances）
     for (const series of seriesData) {
-      // Supabase 嵌套查询可能返回数组或对象
-      const franchise = Array.isArray(series.franchise) ? series.franchise[0] : series.franchise
-      const category = Array.isArray(series.category) ? series.category[0] : series.category
-      
-      if (!franchise) continue
+      // 确保 series.id 不为空
+      if (!series.id || series.id.trim() === '') {
+        console.warn(`[Public Instances API] Skipping series with empty id`)
+        continue
+      }
 
-      const franchiseId = franchise.id
-      const seriesId = series.id
+      const category = Array.isArray(series.category) ? series.category[0] : series.category
+      const franchiseId = series.franchise_id
+      
+      if (!franchiseId || franchiseId.trim() === '') continue
+
+      // 获取 franchise 信息（可能来自新表或旧表）
+      let franchise = franchiseMap.get(franchiseId)
+      if (!franchise) {
+        // 如果 franchise_id 是新表 ID，但数据在旧表，需要映射
+        continue
+      }
+
+      // 确保 franchise.id 不为空
+      if (!franchise.id || franchise.id.trim() === '') {
+        console.warn(`[Public Instances API] Skipping franchise with empty id: ${franchiseId}`)
+        continue
+      }
 
       // 初始化 franchise
-      if (!franchiseMap.has(franchiseId)) {
-        franchiseMap.set(franchiseId, {
+      if (!resultFranchiseMap.has(franchiseId)) {
+        resultFranchiseMap.set(franchiseId, {
           id: franchise.id,
           code: franchise.code,
           name: franchise.name,
@@ -183,11 +214,11 @@ export async function GET(request: Request) {
         })
       }
 
-      const franchiseData = franchiseMap.get(franchiseId)!
+      const franchiseData = resultFranchiseMap.get(franchiseId)!
 
       // 添加 series/program（即使没有 instances）
-      if (!franchiseData.programs.has(seriesId)) {
-        franchiseData.programs.set(seriesId, {
+      if (!franchiseData.programs.has(series.id)) {
+        franchiseData.programs.set(series.id, {
           id: series.id,
           name: series.name,
           display_name: series.display_name,
@@ -203,31 +234,44 @@ export async function GET(request: Request) {
     }
 
     // 2. 然后添加 instances
-    for (const instance of instances) {
-      const assignmentId = instance.assignment_id
-      if (!assignmentId) continue
+    for (const instance of instancesV2) {
+      // 确保 instance.id 不为空
+      if (!instance.id || instance.id.trim() === '') {
+        console.warn(`[Public Instances API] Skipping instance with empty id`)
+        continue
+      }
 
-      // 通过 assignment_id 找到对应的 series_id
-      const seriesId = assignmentToSeriesMap.get(assignmentId)
-      if (!seriesId) continue
+      const seriesId = instance.series_id
+      if (!seriesId || seriesId.trim() === '') continue
 
-      // 通过 series_id 找到对应的 franchise
-      const franchise = seriesToFranchiseMap.get(seriesId)
-      if (!franchise) continue
+      // 获取 offering 信息
+      const offering = Array.isArray(instance.offering) ? instance.offering[0] : instance.offering
+      if (!offering || offering.status !== 'published') {
+        continue
+      }
 
-      const franchiseId = franchise.id
+      // 确保 offering.id 不为空
+      if (!offering.id || offering.id.trim() === '') {
+        console.warn(`[Public Instances API] Skipping instance with empty offering.id: instance.id=${instance.id}`)
+        continue
+      }
 
-      // 找到对应的 assignment 和 course
-      const assignment = publishedAssignments.find((a: any) => a.id === assignmentId)
-      if (!assignment) continue
+      // 找到对应的 series
+      const series = seriesData.find((s: any) => s.id === seriesId)
+      if (!series) continue
 
-      // Supabase 嵌套查询可能返回数组或对象
-      const course = Array.isArray(assignment.course) ? assignment.course[0] : assignment.course
-      if (!course) continue
+      const franchiseId = series.franchise_id
+      if (!franchiseId) continue
+
+      // 获取 franchise 信息
+      let franchise = franchiseMap.get(franchiseId)
+      if (!franchise) {
+        continue
+      }
 
       // 确保 franchise 和 series 在 map 中
-      if (!franchiseMap.has(franchiseId)) {
-        franchiseMap.set(franchiseId, {
+      if (!resultFranchiseMap.has(franchiseId)) {
+        resultFranchiseMap.set(franchiseId, {
           id: franchise.id,
           code: franchise.code,
           name: franchise.name,
@@ -235,30 +279,33 @@ export async function GET(request: Request) {
         })
       }
 
-      const franchiseData = franchiseMap.get(franchiseId)!
+      const franchiseData = resultFranchiseMap.get(franchiseId)!
 
       if (!franchiseData.programs.has(seriesId)) {
         // 如果 series 不在 map 中，从 seriesData 中查找
-        const series = seriesData.find((s: any) => s.id === seriesId)
-        if (series) {
-          const category = Array.isArray(series.category) ? series.category[0] : series.category
-          franchiseData.programs.set(seriesId, {
-            id: series.id,
-            name: series.name,
-            display_name: series.display_name,
-            description: series.description,
-            category: {
-              id: category?.id,
-              name: category?.name,
-              display_name: category?.display_name,
-            },
-            instances: [],
-          })
-        }
+        const category = Array.isArray(series.category) ? series.category[0] : series.category
+        franchiseData.programs.set(seriesId, {
+          id: series.id,
+          name: series.name,
+          display_name: series.display_name,
+          description: series.description,
+          category: {
+            id: category?.id,
+            name: category?.name,
+            display_name: category?.display_name,
+          },
+          instances: [],
+        })
       }
 
       const targetSeries = franchiseData.programs.get(seriesId)
       if (!targetSeries) continue
+
+      // 确保 instance.id 和 offering.id 不为空
+      if (!instance.id || instance.id.trim() === '' || !offering.id || offering.id.trim() === '') {
+        console.warn(`[Public Instances API] Skipping instance with empty id: instance.id=${instance.id}, offering.id=${offering.id}`)
+        continue
+      }
 
       // 添加 instance
       targetSeries.instances.push({
@@ -273,23 +320,27 @@ export async function GET(request: Request) {
         price_override: instance.price_override,
         location: instance.location,
         course: {
-          id: course.id,
-          name: course.name,
-          slug: course.slug,
-          description: course.description,
-          grade_level: Array.isArray(course.target_grades) ? course.target_grades[0] : course.target_grades || null,
-          target_grades: Array.isArray(course.target_grades) ? course.target_grades : (course.target_grades ? [course.target_grades] : null),
-          age_min: course.target_age_min || null,
-          age_max: course.target_age_max || null,
-          base_price: course.base_price,
+          id: offering.id,
+          name: offering.name,
+          slug: offering.slug,
+          description: offering.description,
+          grade_level: Array.isArray(instance.target_grades) && instance.target_grades.length > 0 
+            ? instance.target_grades[0] 
+            : (instance.target_grades || null),
+          target_grades: Array.isArray(instance.target_grades) 
+            ? instance.target_grades 
+            : (instance.target_grades ? [instance.target_grades] : null),
+          age_min: instance.age_min || null,
+          age_max: instance.age_max || null,
+          base_price: offering.base_price,
         },
-        available_spots: Math.max(0, (instance.max_students || 0) - instance.current_students),
-        is_full: (instance.max_students || 0) <= instance.current_students,
+        available_spots: Math.max(0, (instance.max_students || 0) - (instance.current_students || 0)),
+        is_full: (instance.max_students || 0) <= (instance.current_students || 0),
       })
     }
 
     // 转换为数组格式，只返回有 programs 的 franchises
-    const result = Array.from(franchiseMap.values())
+    const result = Array.from(resultFranchiseMap.values())
       .filter((franchise) => franchise.programs.size > 0)
       .map((franchise: any) => ({
         id: franchise.id,
@@ -328,4 +379,3 @@ export async function GET(request: Request) {
     )
   }
 }
-

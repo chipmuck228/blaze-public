@@ -36,6 +36,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, FileText } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { FranchiseContentEditDialog } from "@/components/admin/FranchiseContentEditDialog"
 import type { FranchiseBrandingConfig } from "@/lib/db"
 
@@ -46,6 +47,7 @@ interface Franchise {
   primary_domain?: string | null
   timezone?: string | null
   branding_config?: FranchiseBrandingConfig | null
+  cancellation_policy?: string | null
   is_active: boolean
 }
 
@@ -66,6 +68,7 @@ export default function FranchisesManagementPage() {
     name: "",
     primary_domain: "",
     timezone: "",
+    cancellation_policy: "",
     is_active: true,
   })
 
@@ -148,6 +151,7 @@ export default function FranchisesManagementPage() {
       name: franchise.name,
       primary_domain: franchise.primary_domain || "",
       timezone: franchise.timezone || "",
+      cancellation_policy: franchise.cancellation_policy || "",
       is_active: franchise.is_active,
     })
     setIsEditDialogOpen(true)
@@ -160,6 +164,7 @@ export default function FranchisesManagementPage() {
       name: "",
       primary_domain: "",
       timezone: "",
+      cancellation_policy: "",
       is_active: true,
     })
     setIsEditDialogOpen(true)
@@ -426,6 +431,21 @@ export default function FranchisesManagementPage() {
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cancellation_policy">Cancellation Policy</Label>
+              <Textarea
+                id="cancellation_policy"
+                value={formData.cancellation_policy || ""}
+                onChange={(e) => setFormData({ ...formData, cancellation_policy: e.target.value })}
+                placeholder="Enter cancellation policy for this franchise..."
+                rows={6}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                This policy will be displayed to users when they view instances for this franchise.
+              </p>
             </div>
 
             </div>

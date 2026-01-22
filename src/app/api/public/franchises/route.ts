@@ -1,18 +1,45 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { getFranchiseV2ByLegacyId } from "@/lib/db-v2"
 
 // Public endpoint: 获取所有 active franchises（带 location 数量）
+// 使用新表：franchises_v2
 export async function GET() {
   try {
-    // 获取所有 active franchises
-    const { data: franchises, error: franchisesError } = await supabaseAdmin
-      .from("franchises")
-      .select("id, code, name, is_active")
+    // 优先从 franchises_v2 获取所有 active franchises
+    const { data: franchisesV2, error: franchisesV2Error } = await supabaseAdmin
+      .from("franchises_v2")
+      .select("id, code, name, is_active, legacy_franchise_id")
       .eq("is_active", true)
       .order("name", { ascending: true })
 
-    if (franchisesError) {
-      throw new Error(franchisesError.message)
+    let franchises: any[] = []
+    
+    if (franchisesV2Error) {
+      console.warn("Error fetching franchises_v2, falling back to old table:", franchisesV2Error)
+      // 向后兼容：查询旧表
+      const { data: oldFranchises, error: oldError } = await supabaseAdmin
+        .from("franchises")
+        .select("id, code, name, is_active")
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+      
+      if (oldError) {
+        throw new Error(oldError.message)
+      }
+      franchises = oldFranchises || []
+    } else {
+      franchises = franchisesV2 || []
+    }
+
+    // 创建映射：legacy_franchise_id -> franchises_v2.id
+    const legacyToNewMap = new Map<string, string>()
+    if (franchisesV2) {
+      for (const fv2 of franchisesV2) {
+        if (fv2.legacy_franchise_id) {
+          legacyToNewMap.set(fv2.legacy_franchise_id, fv2.id)
+        }
+      }
     }
 
     // 获取每个 franchise 的 location 数量
@@ -26,19 +53,24 @@ export async function GET() {
     }
 
     // 计算每个 franchise 的 location 数量
+    // 需要处理 franchise_id 可能是旧表 ID 的情况
     const locationCounts = new Map<string, number>()
     locations?.forEach((loc) => {
       if (loc.franchise_id) {
+        // 如果 franchise_id 是旧表 ID，映射到新表 ID
+        const franchiseId = legacyToNewMap.get(loc.franchise_id) || loc.franchise_id
         locationCounts.set(
-          loc.franchise_id,
-          (locationCounts.get(loc.franchise_id) || 0) + 1
+          franchiseId,
+          (locationCounts.get(franchiseId) || 0) + 1
         )
       }
     })
 
     // 为每个 franchise 添加 location_count
-    const franchisesWithCounts = (franchises || []).map((franchise) => ({
-      ...franchise,
+    const franchisesWithCounts = franchises.map((franchise) => ({
+      id: franchise.id,
+      code: franchise.code,
+      name: franchise.name,
       location_count: locationCounts.get(franchise.id) || 0,
     }))
 

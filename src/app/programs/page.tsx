@@ -205,10 +205,17 @@ function ProgramsPageContent() {
       franchise.programs.forEach((program) => {
         program.instances.forEach((instance) => {
           // 支持 grade_level 或 target_grades
-          if (instance.course.grade_level) {
-            gradeSet.add(instance.course.grade_level)
+          if (instance.course.grade_level && typeof instance.course.grade_level === 'string') {
+            const grade = instance.course.grade_level.trim()
+            if (grade !== '') {
+              gradeSet.add(grade)
+            }
           } else if (instance.course.target_grades && Array.isArray(instance.course.target_grades)) {
-            instance.course.target_grades.forEach((grade: string) => gradeSet.add(grade))
+            instance.course.target_grades.forEach((grade: any) => {
+              if (typeof grade === 'string' && grade.trim() !== '') {
+                gradeSet.add(grade.trim())
+              }
+            })
           }
         })
       })
@@ -369,7 +376,9 @@ function ProgramsPageContent() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Franchises</SelectItem>
-                      {allFranchises.map((franchise) => (
+                      {allFranchises
+                        .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
+                        .map((franchise) => (
                         <SelectItem key={franchise.id} value={franchise.id}>
                           {franchise.name}
                         </SelectItem>
@@ -395,7 +404,9 @@ function ProgramsPageContent() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Categories</SelectItem>
-                      {allCategoriesFromData.map((category) => (
+                      {allCategoriesFromData
+                        .filter((c) => c.id && typeof c.id === 'string' && c.id.trim() !== '')
+                        .map((category) => (
                         <SelectItem key={category.id} value={category.id}>
                           {category.display_name}
                         </SelectItem>
@@ -413,7 +424,9 @@ function ProgramsPageContent() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Grades</SelectItem>
-                      {allGrades.map((grade) => (
+                      {allGrades
+                        .filter((g) => g && typeof g === 'string' && g.trim() !== '')
+                        .map((grade) => (
                         <SelectItem key={grade} value={grade}>
                           {grade}
                         </SelectItem>
@@ -469,11 +482,13 @@ function ProgramsPageContent() {
               className="w-full space-y-4"
               defaultValue={filteredFranchises.length > 0 ? filteredFranchises[0].id : undefined}
             >
-              {filteredFranchises.map((franchise) => {
+              {filteredFranchises
+                .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
+                .map((franchise) => {
                 const programsCount = franchise.programs?.length || 0
                 
                 return (
-                  <AccordionItem key={franchise.id} value={franchise.id} className="border rounded-lg px-4">
+                  <AccordionItem key={franchise.id || `franchise-${franchise.code}`} value={franchise.id} className="border rounded-lg px-4">
                     <AccordionTrigger className="hover:no-underline">
                       <div className="flex items-center justify-between w-full pr-4">
                         <div className="flex flex-col items-start text-left">
@@ -493,12 +508,14 @@ function ProgramsPageContent() {
                       <div className="pt-4 space-y-6">
                         {/* Programs */}
                         {franchise.programs && franchise.programs.length > 0 ? (
-                          franchise.programs.map((program) => {
+                          franchise.programs
+                            .filter((p) => p.id && typeof p.id === 'string' && p.id.trim() !== '')
+                            .map((program) => {
                             const instancesCount = program.instances?.length || 0
                             
                             return (
                               <Card
-                                key={program.id}
+                                key={program.id || `program-${program.display_name}`}
                                 className="border"
                               >
                                 <CardHeader>
@@ -528,8 +545,10 @@ function ProgramsPageContent() {
                                     </div>
                                   ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                      {program.instances.map((instance) => (
-                                        <Card key={instance.id} className="hover:shadow-lg transition-shadow">
+                                      {program.instances
+                                        .filter((instance) => instance.id && typeof instance.id === 'string' && instance.id.trim() !== '') // 过滤掉没有 id 或空字符串的 instances
+                                        .map((instance, index) => (
+                                        <Card key={instance.id || `instance-${index}`} className="hover:shadow-lg transition-shadow">
                                           <CardHeader>
                                             <CardTitle className="text-lg">{instance.course.name}</CardTitle>
                                             <CardDescription className="line-clamp-2">
@@ -612,7 +631,21 @@ function ProgramsPageContent() {
                                                 size="sm"
                                                 className="flex-1"
                                               >
-                                                <Link href={`/course-catalog/${instance.course.slug || instance.course.id}`}>
+                                                <Link 
+                                                  href={
+                                                    (() => {
+                                                      const params = new URLSearchParams();
+                                                      params.set('instance', instance.id);
+                                                      params.set('franchise', franchise.code);
+                                                      if (instance.course.slug) {
+                                                        return `/course-catalog/${encodeURIComponent(instance.course.slug)}?${params.toString()}`;
+                                                      } else {
+                                                        params.set('id', instance.course.id);
+                                                        return `/course-catalog?${params.toString()}`;
+                                                      }
+                                                    })()
+                                                  }
+                                                >
                                                   View Details
                                                 </Link>
                                               </Button>

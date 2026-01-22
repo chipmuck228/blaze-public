@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
-// 获取层级数据：Franchise -> Category -> Series -> Courses
+// 获取层级数据：Franchise -> Category -> Series -> Instances
 export async function GET(request: Request) {
   try {
     const session = await auth()
@@ -53,27 +53,37 @@ export async function GET(request: Request) {
       throw new Error(seriesError.message)
     }
 
-    // 4. 获取所有活跃的 assignments（包含 course 信息）
-    const { data: assignmentsData, error: assignmentsError } = await supabaseAdmin
-      .from("course_assignments")
+    // 4. 获取所有活跃的 instances_v2（新表）
+    const { data: instancesV2Data, error: instancesV2Error } = await supabaseAdmin
+      .from("instance_v2")
       .select(`
         id,
         series_id,
-        course_id,
+        offering_id,
+        start_date,
+        end_date,
+        start_time,
+        end_time,
+        max_students,
+        current_students,
+        status,
+        price_override,
         is_active,
-        course:courses(
+        offering:offerings_v2(
           id,
           name,
           slug,
           description,
-          status,
-          base_price
+          base_price,
+          offering_type
         )
       `)
       .eq("is_active", true)
+      .in("status", ["scheduled", "ongoing"])
 
-    if (assignmentsError) {
-      throw new Error(assignmentsError.message)
+    if (instancesV2Error) {
+      console.warn("Error fetching instances_v2:", instancesV2Error)
+      // 不抛出错误，继续处理（向后兼容）
     }
 
     // 5. 组织层级结构
@@ -122,30 +132,41 @@ export async function GET(request: Request) {
 
       const categoryData = franchise.categories.get(categoryId)
       if (categoryData) {
-        // 获取该 series 下的所有 courses（通过 assignments）
-        const courses = (assignmentsData || [])
-          .filter((a) => a.series_id === series.id)
-          .map((a) => {
-            const course = Array.isArray(a.course) ? a.course[0] : a.course
-            return course
-              ? {
-                  id: course.id,
-                  name: course.name,
-                  slug: course.slug,
-                  description: course.description,
-                  status: course.status,
-                  base_price: course.base_price,
-                }
-              : null
+        // 获取该 series 下的所有 instances_v2（新表）
+        const instancesV2 = (instancesV2Data || [])
+          .filter((inst) => inst.series_id === series.id)
+          .map((inst) => {
+            const offering = Array.isArray(inst.offering) ? inst.offering[0] : inst.offering
+            return {
+              id: inst.id,
+              offering_id: inst.offering_id,
+              start_date: inst.start_date,
+              end_date: inst.end_date,
+              start_time: inst.start_time,
+              end_time: inst.end_time,
+              max_students: inst.max_students,
+              current_students: inst.current_students,
+              status: inst.status,
+              price_override: inst.price_override,
+              offering: offering
+                ? {
+                    id: offering.id,
+                    name: offering.name,
+                    slug: offering.slug,
+                    description: offering.description,
+                    base_price: offering.base_price,
+                    offering_type: offering.offering_type,
+                  }
+                : null,
+            }
           })
-          .filter(Boolean)
 
         categoryData.series.push({
           id: series.id,
           name: series.name,
           display_name: series.display_name,
           description: series.description,
-          courses: courses,
+          instances: instancesV2,
         })
       }
     }

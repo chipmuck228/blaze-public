@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -11,13 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -224,6 +223,19 @@ export default function OfferingsManagementPage() {
     return offeringTypes.find(t => t.code === type)?.name || type
   }
 
+  // 按 offering_type 分组 offerings
+  const groupedOfferings = useMemo(() => {
+    const groups: Record<string, Offering[]> = {}
+    filteredOfferings.forEach((offering) => {
+      const type = offering.offering_type
+      if (!groups[type]) {
+        groups[type] = []
+      }
+      groups[type].push(offering)
+    })
+    return groups
+  }, [filteredOfferings])
+
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -236,12 +248,6 @@ export default function OfferingsManagementPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Offerings</CardTitle>
-              <CardDescription>
-                A list of all offerings in the system
-              </CardDescription>
-            </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -292,133 +298,196 @@ export default function OfferingsManagementPage() {
                 : "No offerings found."}
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Offering Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Tags</TableHead>
-                    <TableHead>Sessions</TableHead>
-                    <TableHead>Age Range</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredOfferings.map((offering) => {
-                    const gradesText = offering.target_grades && offering.target_grades.length > 0
-                      ? `Grades: ${offering.target_grades.join(', ')}`
-                      : ''
-                    const slugText = offering.slug ? `Slug: ${offering.slug}` : ''
-                    const statusText = offering.status && offering.status !== 'published'
-                      ? `[${offering.status}]`
-                      : ''
-                    
-                    return (
-                      <TableRow 
-                        key={offering.id}
-                        className={getStatusBackgroundColor(offering.status)}
-                      >
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <button
-                              onClick={() => handleView(offering)}
-                              className="text-left font-medium hover:text-primary transition-colors cursor-pointer"
-                            >
-                              {offering.name}
-                            </button>
-                            {(gradesText || slugText || statusText) && (
-                              <span className="text-xs text-muted-foreground">
-                                {[gradesText, slugText, statusText].filter(Boolean).join(' • ')}
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {getOfferingTypeLabel(offering.offering_type)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                          <div className="flex flex-wrap gap-1">
-                            {offering.tags && offering.tags.length > 0 ? (
-                              offering.tags.map((tag) => (
-                                <Badge key={tag.id} variant="outline" className="text-xs">
-                                  {tag.display_name}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-muted-foreground">No tags</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{offering.session_count || offering.number_of_sessions || "N/A"}</TableCell>
-                        <TableCell>
-                          {(offering.age_min || offering.target_age_min) && (offering.age_max || offering.target_age_max)
-                            ? `${offering.age_min || offering.target_age_min}-${offering.age_max || offering.target_age_max}`
-                            : (offering.age_min || offering.target_age_min)
-                            ? `${offering.age_min || offering.target_age_min}+`
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          {offering.base_price
-                            ? `${offering.currency || "USD"} $${offering.base_price.toFixed(2)}`
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              offering.status === 'published' ? 'default' :
-                              offering.status === 'draft' ? 'secondary' :
-                              offering.status === 'suspended' ? 'destructive' :
-                              'outline'
-                            }
-                          >
-                            {offering.status === 'published' ? 'Published' :
-                             offering.status === 'draft' ? 'Draft' :
-                             offering.status === 'suspended' ? 'Suspended' :
-                             'Archived'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(offering.created_at)}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleView(offering)}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleEdit(offering)}
-                                disabled={offering.status === 'archived'}
-                              >
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit {offering.status === 'archived' && '(Archived offerings cannot be edited)'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDelete(offering.id)}
-                                disabled={offering.status !== 'draft'}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete {offering.status !== 'draft' && '(Draft only)'}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+            <div className="space-y-4">
+              {Object.entries(groupedOfferings).map(([type, typeOfferings]) => {
+                const typeLabel = getOfferingTypeLabel(type as Offering['offering_type'])
+                return (
+                  <Card key={type} className={getStatusBackgroundColor('published')}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-xl font-semibold">
+                          {typeLabel}
+                        </CardTitle>
+                        <Badge variant="secondary" className="text-sm">
+                          {typeOfferings.length} Offering{typeOfferings.length !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Accordion type="multiple" className="w-full">
+                        {typeOfferings.map((offering) => {
+                          const gradesText = offering.target_grades && offering.target_grades.length > 0
+                            ? `Grades: ${offering.target_grades.join(', ')}`
+                            : ''
+                          const slugText = offering.slug ? `Slug: ${offering.slug}` : ''
+                          const statusText = offering.status && offering.status !== 'published'
+                            ? `[${offering.status}]`
+                            : ''
+                          
+                          return (
+                            <AccordionItem key={offering.id} value={offering.id} className="border rounded-lg px-4 mb-2">
+                              <AccordionTrigger className="hover:no-underline">
+                                <div className="flex items-center justify-between w-full pr-4">
+                                  <div className="flex flex-col items-start text-left">
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-medium">{offering.name}</span>
+                                      <Badge
+                                        variant={
+                                          offering.status === 'published' ? 'default' :
+                                          offering.status === 'draft' ? 'secondary' :
+                                          offering.status === 'suspended' ? 'destructive' :
+                                          'outline'
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {offering.status === 'published' ? 'Published' :
+                                         offering.status === 'draft' ? 'Draft' :
+                                         offering.status === 'suspended' ? 'Suspended' :
+                                         'Archived'}
+                                      </Badge>
+                                    </div>
+                                    {(gradesText || slugText || statusText) && (
+                                      <span className="text-xs text-muted-foreground mt-1">
+                                        {[gradesText, slugText, statusText].filter(Boolean).join(' • ')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="space-y-4 pt-2 pb-4">
+                                  {/* Basic Information */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Description</p>
+                                      <p className="text-sm">{offering.description || "No description"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-2">Poster</p>
+                                      {offering.poster_url ? (
+                                        <div className="relative w-full h-48 rounded-lg overflow-hidden border">
+                                          <Image
+                                            src={offering.poster_url}
+                                            alt={offering.name || 'Offering poster'}
+                                            fill
+                                            className="object-cover"
+                                            sizes="(max-width: 768px) 100vw, 50vw"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm text-muted-foreground">No poster available</p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Tags */}
+                                  {offering.tags && offering.tags.length > 0 && (
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-2">Tags</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {offering.tags.map((tag) => (
+                                          <Badge key={tag.id} variant="outline" className="text-xs">
+                                            {tag.display_name}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Course Details */}
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Sessions</p>
+                                      <p className="text-sm">{offering.session_count || offering.number_of_sessions || "N/A"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Age Range</p>
+                                      <p className="text-sm">
+                                        {(offering.age_min || offering.target_age_min) && (offering.age_max || offering.target_age_max)
+                                          ? `${offering.age_min || offering.target_age_min}-${offering.age_max || offering.target_age_max}`
+                                          : (offering.age_min || offering.target_age_min)
+                                          ? `${offering.age_min || offering.target_age_min}+`
+                                          : "N/A"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Price</p>
+                                      <p className="text-sm">
+                                        {offering.base_price
+                                          ? `${offering.currency || "USD"} $${offering.base_price.toFixed(2)}`
+                                          : "N/A"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground mb-1">Created</p>
+                                      <p className="text-sm">{formatDate(offering.created_at)}</p>
+                                    </div>
+                                  </div>
+
+                                  {/* Additional Information */}
+                                  {(offering.target_audience || offering.learning_outcomes || offering.prerequisites) && (
+                                    <div className="space-y-2">
+                                      {offering.target_audience && (
+                                        <div>
+                                          <p className="text-sm font-medium text-muted-foreground mb-1">Target Audience</p>
+                                          <p className="text-sm">{offering.target_audience}</p>
+                                        </div>
+                                      )}
+                                      {offering.learning_outcomes && (
+                                        <div>
+                                          <p className="text-sm font-medium text-muted-foreground mb-1">Learning Outcomes</p>
+                                          <p className="text-sm whitespace-pre-wrap">{offering.learning_outcomes}</p>
+                                        </div>
+                                      )}
+                                      {offering.prerequisites && (
+                                        <div>
+                                          <p className="text-sm font-medium text-muted-foreground mb-1">Prerequisites</p>
+                                          <p className="text-sm whitespace-pre-wrap">{offering.prerequisites}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-2 pt-2 border-t">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleView(offering)}
+                                    >
+                                      <Eye className="mr-2 h-4 w-4" />
+                                      View Details
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleEdit(offering)}
+                                      disabled={offering.status === 'archived'}
+                                    >
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => handleDelete(offering.id)}
+                                      disabled={offering.status !== 'draft'}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          )
+                        })}
+                      </Accordion>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </CardContent>
