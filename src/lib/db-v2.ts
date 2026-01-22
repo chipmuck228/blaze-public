@@ -293,13 +293,14 @@ export async function createInstanceV2(
   
   let finalRRULE = instance.icalendar_rrule
   if (!finalRRULE && instance.days_of_week && instance.days_of_week.length > 0) {
-    finalRRULE = autoGenerateRRULE({
+    const generatedRRULE = autoGenerateRRULE({
       start_date: instance.start_date,
       end_date: instance.end_date,
       days_of_week: instance.days_of_week,
       start_time: instance.start_time,
       timezone: instance.timezone || 'America/Los_Angeles',
     } as any)
+    finalRRULE = generatedRRULE || null
   }
 
   const instanceWithRRULE = {
