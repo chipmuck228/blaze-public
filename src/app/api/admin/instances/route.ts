@@ -199,6 +199,7 @@ export async function POST(request: Request) {
       instructor_id,
       instructor_name,
       max_students,
+      current_students = 0, // 默认值为 0
       price_override,
       status,
       notes,
