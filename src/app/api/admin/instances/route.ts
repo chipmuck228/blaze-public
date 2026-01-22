@@ -203,6 +203,7 @@ export async function POST(request: Request) {
       price_override,
       status,
       notes,
+      is_active = true, // 默认值为 true
       // iCalendar 字段
       icalendar_rrule,
       icalendar_exdates,
