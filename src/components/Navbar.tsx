@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X } from "lucide-react";
+import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
 import Link from "next/link";
 
@@ -30,16 +30,8 @@ interface RouteProps {
   
   const routeList: RouteProps[] = [
     {
-      href: "#programs",
-      label: "Programs",
-    },
-    {
-      href: "#advantages",
-      label: "About",
-    },
-    {
-      href: "/faq",
-      label: "FAQ",
+      href: "/about",
+      label: "About Us",
     },
   ];
 
@@ -66,16 +58,28 @@ interface RouteProps {
     state?: string;
     zip_code?: string;
   }
+
+  interface Category {
+    id: string;
+    name: string;
+    display_name: string;
+    description?: string | null;
+    poster_url?: string | null;
+  }
   
   export const Navbar = () => {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [isLocationsOpen, setIsLocationsOpen] = useState<boolean>(false);
+    const [isProgramsOpen, setIsProgramsOpen] = useState<boolean>(false);
+    const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
     const [cartCount, setCartCount] = useState<number>(0);
     const [locations, setLocations] = useState<Location[]>([]);
     const [franchiseGroups, setFranchiseGroups] = useState<FranchiseGroup[]>([]);
     const [filteredFranchiseGroups, setFilteredFranchiseGroups] = useState<FranchiseGroup[]>([]);
     const [searchQuery, setSearchQuery] = useState<string>("");
     const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(false);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false);
     const [franchiseFromUrl, setFranchiseFromUrl] = useState<string | null>(null);
     const pathname = usePathname();
     const router = useRouter();
@@ -219,6 +223,26 @@ interface RouteProps {
       fetchLocations();
     }, []);
 
+    // Fetch categories
+    useEffect(() => {
+      const fetchCategories = async () => {
+        try {
+          setIsLoadingCategories(true);
+          const response = await fetch('/api/public/categories');
+          if (response.ok) {
+            const data = await response.json();
+            setCategories(data.categories || []);
+          }
+        } catch (error) {
+          console.error('Error fetching categories:', error);
+        } finally {
+          setIsLoadingCategories(false);
+        }
+      };
+
+      fetchCategories();
+    }, []);
+
     // Filter franchise groups based on search query
     useEffect(() => {
       if (!searchQuery.trim()) {
@@ -260,28 +284,25 @@ interface RouteProps {
                   <span className="text-xs uppercase tracking-widest text-[#94a3b8]">Academy</span>
                 </div>
               </Link>
-              {currentLocationLabel && (
-                <span className="hidden sm:inline-flex items-center text-xs font-medium px-2 py-2 rounded-full bg-[#2563eb] text-white ml-3">
-                  {currentLocationLabel}
-                </span>
-              )}
             </div>
 
             {/* Desktop Nav */}
             <div className="hidden md:flex items-center space-x-8">
-              <Link 
-                href="/" 
-                className={`text-sm font-semibold transition-colors hover:text-[#38bdf8] ${isActive('/') ? 'text-[#38bdf8]' : 'text-gray-300'}`}
-              >
-                Home
-              </Link>
-
               {/* Locations Dropdown */}
               <div className="relative group h-full flex items-center">
                 <button 
                   className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${isLocationActive ? 'text-[#38bdf8]' : 'text-gray-300'}`}
                 >
-                  <span>Locations</span>
+                  {currentLocationLabel ? (
+                    <>
+                      <MapPin className="w-4 h-4" />
+                      <span>{currentLocationLabel}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Locations</span>
+                    </>
+                  )}
                   <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
                 </button>
                 
@@ -350,6 +371,105 @@ interface RouteProps {
                 </div>
               </div>
 
+              {/* Programs Dropdown */}
+              <div className="relative group h-full flex items-center">
+                <button 
+                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${pathname === '/programs' ? 'text-[#38bdf8]' : 'text-gray-300'}`}
+                >
+                  <span>Catalogs</span>
+                  <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
+                </button>
+                
+                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-80 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
+                  <div className="bg-[#1e293b] rounded-xl shadow-xl border border-slate-700 overflow-hidden ring-1 ring-black/5">
+                    {/* Categories List */}
+                    <div className="max-h-[400px] overflow-y-auto">
+                      {isLoadingCategories ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      ) : categories.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-gray-400">
+                          No categories available
+                        </div>
+                      ) : (
+                        <div className="py-2">
+                          {categories.map((category) => {
+                            const href = `/programs?category=${encodeURIComponent(category.id)}`;
+                            const isCategoryActive = pathname === '/programs' && new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('category') === category.id;
+
+                            return (
+                              <Link
+                                key={category.id}
+                                href={href}
+                                className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors border-b border-slate-800 last:border-0 ${isCategoryActive ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium">{category.display_name || category.name}</div>
+                                    {category.description && (
+                                      <div className="text-xs text-gray-400 mt-1 line-clamp-2">
+                                        {category.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resources Dropdown */}
+              <div className="relative group h-full flex items-center">
+                <button 
+                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${pathname === '/resources' || pathname?.startsWith('/teacher-portal') ? 'text-[#38bdf8]' : 'text-gray-300'}`}
+                >
+                  <span>Resources</span>
+                  <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
+                </button>
+                
+                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
+                  <div className="bg-[#1e293b] rounded-xl shadow-xl border border-slate-700 overflow-hidden ring-1 ring-black/5">
+                    <div className="py-2">
+                      <Link
+                        href="/resources"
+                        className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors border-b border-slate-800 ${pathname === '/resources' ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">Resource Library</div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Software, manuals, and guides
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/teacher-portal/login"
+                        className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors ${pathname?.startsWith('/teacher-portal') ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">Teacher Portal</div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Instructor workspace and tools
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Other menu items */}
               {routeList.map((route: RouteProps) => {
                 const href = getHref(route.href);
@@ -364,6 +484,17 @@ interface RouteProps {
                   </Link>
                 );
               })}
+
+              {/* Book Free Trial Button */}
+              <button 
+                className="bg-[#2563eb] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 active:scale-95 transition-transform hover:bg-blue-600 hidden md:block"
+                onClick={() => {
+                  // TODO: Add action for Book Free Trial
+                  // Could open a dialog, navigate to a page, or trigger an event
+                }}
+              >
+                Book Free Trial
+              </button>
 
               {/* CTA Button or User Menu */}
               {status === "loading" ? (
@@ -499,21 +630,16 @@ interface RouteProps {
           {/* Mobile Menu */}
           {isOpen && (
             <div className="md:hidden bg-[#1e293b] border-t border-slate-800 px-4 pt-2 pb-6 space-y-1 overflow-y-auto max-h-[calc(100vh-80px)]">
-              <Link
-                href="/"
-                onClick={() => setIsOpen(false)}
-                className={`block px-3 py-4 text-base font-medium rounded-md ${isActive('/') ? 'text-[#38bdf8]' : 'text-gray-300 hover:text-white hover:bg-slate-800'}`}
-              >
-                Home
-              </Link>
-
               {/* Mobile Locations Accordion */}
               <div>
                 <button
                   onClick={() => setIsLocationsOpen(!isLocationsOpen)}
-                  className="flex items-center justify-between w-full px-3 py-4 text-base font-medium text-gray-300 hover:text-white hover:bg-slate-800 rounded-md"
+                  className={`flex items-center justify-between w-full px-3 py-4 text-base font-medium rounded-md ${isLocationActive ? 'text-[#38bdf8] hover:text-[#60a5fa]' : 'text-gray-300 hover:text-white'} hover:bg-slate-800`}
                 >
-                  <span>Locations</span>
+                  <div className="flex items-center gap-2">
+                    {currentLocationLabel && <MapPin className="w-5 h-5" />}
+                    <span>{currentLocationLabel || 'Locations'}</span>
+                  </div>
                   <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isLocationsOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <div className={`overflow-hidden transition-all duration-200 ${isLocationsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
@@ -578,6 +704,110 @@ interface RouteProps {
                 </div>
               </div>
 
+              {/* Mobile Programs Accordion */}
+              <div>
+                <button
+                  onClick={() => setIsProgramsOpen(!isProgramsOpen)}
+                  className="flex items-center justify-between w-full px-3 py-4 text-base font-medium text-gray-300 hover:text-white hover:bg-slate-800 rounded-md"
+                >
+                  <span>Programs</span>
+                  <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isProgramsOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`overflow-hidden transition-all duration-200 ${isProgramsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="pl-4 space-y-1 bg-slate-900/50 rounded-lg mt-1 mb-2 py-2">
+                    {isLoadingCategories ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    ) : categories.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-400">
+                        No categories available
+                      </div>
+                    ) : (
+                      categories.map((category) => {
+                        const href = `/programs?category=${encodeURIComponent(category.id)}`;
+                        const isCategoryActive = pathname === '/programs' && new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('category') === category.id;
+
+                        return (
+                          <Link
+                            key={category.id}
+                            href={href}
+                            onClick={() => {
+                              setIsOpen(false);
+                              setIsProgramsOpen(false);
+                            }}
+                            className={`block px-3 py-3 text-sm font-medium rounded-md ${isCategoryActive ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div>{category.display_name || category.name}</div>
+                                {category.description && (
+                                  <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                    {category.description}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Link>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile Resources Accordion */}
+              <div>
+                <button
+                  onClick={() => setIsResourcesOpen(!isResourcesOpen)}
+                  className="flex items-center justify-between w-full px-3 py-4 text-base font-medium text-gray-300 hover:text-white hover:bg-slate-800 rounded-md"
+                >
+                  <span>Resources</span>
+                  <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isResourcesOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`overflow-hidden transition-all duration-200 ${isResourcesOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="pl-4 space-y-1 bg-slate-900/50 rounded-lg mt-1 mb-2 py-2">
+                    <Link
+                      href="/resources"
+                      onClick={() => {
+                        setIsOpen(false);
+                        setIsResourcesOpen(false);
+                      }}
+                      className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/resources' ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div>Resource Library</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Software, manuals, and guides
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                    <Link
+                      href="/teacher-portal/login"
+                      onClick={() => {
+                        setIsOpen(false);
+                        setIsResourcesOpen(false);
+                      }}
+                      className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname?.startsWith('/teacher-portal') ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div>Teacher Portal</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Instructor workspace and tools
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
               {/* Other menu items */}
               {routeList.map(({ href, label }: RouteProps) => {
                 const linkHref = getHref(href);
@@ -593,6 +823,20 @@ interface RouteProps {
                   </Link>
                 );
               })}
+
+              {/* Book Free Trial Button - Mobile */}
+              <div className="pt-4 px-3 pb-2">
+                <button 
+                  className="w-full bg-[#2563eb] text-white px-6 py-4 rounded-xl font-bold text-base shadow-lg shadow-blue-500/20 active:scale-95 transition-transform"
+                  onClick={() => {
+                    setIsOpen(false);
+                    // TODO: Add action for Book Free Trial
+                    // Could open a dialog, navigate to a page, or trigger an event
+                  }}
+                >
+                  Book Free Trial
+                </button>
+              </div>
 
               {/* User Section */}
               <div className="pt-4 border-t border-slate-800">

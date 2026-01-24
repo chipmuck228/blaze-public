@@ -39,8 +39,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Calendar, Eye, Clock, Users, DollarSign, MapPin } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialog"
 
@@ -521,39 +526,167 @@ export default function SeriesManagementPage() {
                                               Instances ({seriesItem.instances.length})
                                             </p>
                                             <div className="space-y-2">
-                                              {seriesItem.instances.map((instance: any) => (
-                                                <div
-                                                  key={instance.id}
-                                                  className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border"
-                                                >
-                                                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                                  <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium truncate">
-                                                      {instance.offering?.name || 'Unknown Offering'}
-                                                    </p>
-                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                      <Badge variant={instance.status === 'scheduled' ? 'default' : 'secondary'} className="text-xs">
-                                                        {instance.status}
-                                                      </Badge>
-                                                      {instance.start_date && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                          {new Date(instance.start_date).toLocaleDateString()}
-                                                        </span>
-                                                      )}
-                                                      {instance.max_students && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                          {instance.current_students || 0}/{instance.max_students} students
-                                                        </span>
-                                                      )}
-                                                      {(instance.price_override || instance.offering?.base_price) && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                          ${(instance.price_override || instance.offering?.base_price || 0).toFixed(2)}
-                                                        </span>
-                                                      )}
+                                              {seriesItem.instances.map((instance: any) => {
+                                                const formatTime = (time?: string) => {
+                                                  if (!time) return ''
+                                                  const [hours, minutes] = time.split(':')
+                                                  const hour = parseInt(hours)
+                                                  const ampm = hour >= 12 ? 'PM' : 'AM'
+                                                  const displayHour = hour % 12 || 12
+                                                  return `${displayHour}:${minutes} ${ampm}`
+                                                }
+
+                                                return (
+                                                  <div
+                                                    key={instance.id}
+                                                    className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border"
+                                                  >
+                                                    <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                      <p className="text-sm font-medium truncate">
+                                                        {instance.offering?.name || 'Unknown Offering'}
+                                                      </p>
+                                                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                        <Badge variant={instance.status === 'scheduled' ? 'default' : 'secondary'} className="text-xs">
+                                                          {instance.status}
+                                                        </Badge>
+                                                        {instance.start_date && (
+                                                          <span className="text-xs text-muted-foreground">
+                                                            {new Date(instance.start_date).toLocaleDateString()}
+                                                          </span>
+                                                        )}
+                                                        {instance.max_students && (
+                                                          <span className="text-xs text-muted-foreground">
+                                                            {instance.current_students || 0}/{instance.max_students} students
+                                                          </span>
+                                                        )}
+                                                        {(instance.price_override || instance.offering?.base_price) && (
+                                                          <span className="text-xs text-muted-foreground">
+                                                            ${(instance.price_override || instance.offering?.base_price || 0).toFixed(2)}
+                                                          </span>
+                                                        )}
+                                                      </div>
                                                     </div>
+                                                    <Popover>
+                                                      <PopoverTrigger asChild>
+                                                        <Button variant="outline" size="sm" className="h-8 shrink-0">
+                                                          <Eye className="h-3.5 w-3.5 mr-1" />
+                                                          View
+                                                        </Button>
+                                                      </PopoverTrigger>
+                                                      <PopoverContent className="w-80" align="end">
+                                                        <div className="space-y-4">
+                                                          <div>
+                                                            <h4 className="font-semibold text-sm mb-2">Instance Details</h4>
+                                                            <div className="space-y-2 text-sm">
+                                                              <div className="flex items-start gap-2">
+                                                                <span className="text-muted-foreground min-w-[100px]">ID:</span>
+                                                                <span className="font-mono text-xs break-all">{instance.id}</span>
+                                                              </div>
+                                                              <div className="flex items-start gap-2">
+                                                                <span className="text-muted-foreground min-w-[100px]">Offering:</span>
+                                                                <span className="font-medium">{instance.offering?.name || 'Unknown'}</span>
+                                                              </div>
+                                                              {instance.offering?.description && (
+                                                                <div className="flex items-start gap-2">
+                                                                  <span className="text-muted-foreground min-w-[100px]">Description:</span>
+                                                                  <span className="text-xs">{instance.offering.description}</span>
+                                                                </div>
+                                                              )}
+                                                              <div className="flex items-start gap-2">
+                                                                <span className="text-muted-foreground min-w-[100px]">Status:</span>
+                                                                <Badge variant={instance.status === 'scheduled' ? 'default' : 'secondary'} className="text-xs">
+                                                                  {instance.status}
+                                                                </Badge>
+                                                              </div>
+                                                            </div>
+                                                          </div>
+
+                                                          <div className="border-t pt-3">
+                                                            <h5 className="font-semibold text-xs mb-2 text-muted-foreground uppercase tracking-wider">Schedule</h5>
+                                                            <div className="space-y-2 text-sm">
+                                                              {instance.start_date && (
+                                                                <div className="flex items-center gap-2">
+                                                                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                  <span className="text-muted-foreground">Start:</span>
+                                                                  <span>{new Date(instance.start_date).toLocaleDateString('en-US', { 
+                                                                    year: 'numeric', 
+                                                                    month: 'short', 
+                                                                    day: 'numeric' 
+                                                                  })}</span>
+                                                                </div>
+                                                              )}
+                                                              {instance.end_date && (
+                                                                <div className="flex items-center gap-2">
+                                                                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                  <span className="text-muted-foreground">End:</span>
+                                                                  <span>{new Date(instance.end_date).toLocaleDateString('en-US', { 
+                                                                    year: 'numeric', 
+                                                                    month: 'short', 
+                                                                    day: 'numeric' 
+                                                                  })}</span>
+                                                                </div>
+                                                              )}
+                                                              {instance.start_time && (
+                                                                <div className="flex items-center gap-2">
+                                                                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                  <span className="text-muted-foreground">Start Time:</span>
+                                                                  <span>{formatTime(instance.start_time)}</span>
+                                                                </div>
+                                                              )}
+                                                              {instance.end_time && (
+                                                                <div className="flex items-center gap-2">
+                                                                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                  <span className="text-muted-foreground">End Time:</span>
+                                                                  <span>{formatTime(instance.end_time)}</span>
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          </div>
+
+                                                          <div className="border-t pt-3">
+                                                            <h5 className="font-semibold text-xs mb-2 text-muted-foreground uppercase tracking-wider">Enrollment</h5>
+                                                            <div className="space-y-2 text-sm">
+                                                              {instance.max_students !== undefined && (
+                                                                <div className="flex items-center gap-2">
+                                                                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                  <span className="text-muted-foreground">Capacity:</span>
+                                                                  <span>{instance.current_students || 0} / {instance.max_students} students</span>
+                                                                </div>
+                                                              )}
+                                                              {(instance.price_override !== undefined || instance.offering?.base_price !== undefined) && (
+                                                                <div className="flex items-center gap-2">
+                                                                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                  <span className="text-muted-foreground">Price:</span>
+                                                                  <span className="font-semibold">
+                                                                    ${(instance.price_override || instance.offering?.base_price || 0).toFixed(2)}
+                                                                    {instance.price_override && instance.offering?.base_price && (
+                                                                      <span className="text-xs text-muted-foreground ml-1">
+                                                                        (override, base: ${instance.offering.base_price.toFixed(2)})
+                                                                      </span>
+                                                                    )}
+                                                                  </span>
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          </div>
+
+                                                          {instance.offering?.offering_type && (
+                                                            <div className="border-t pt-3">
+                                                              <div className="flex items-center gap-2 text-sm">
+                                                                <span className="text-muted-foreground">Type:</span>
+                                                                <Badge variant="outline" className="text-xs">
+                                                                  {instance.offering.offering_type}
+                                                                </Badge>
+                                                              </div>
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      </PopoverContent>
+                                                    </Popover>
                                                   </div>
-                                                </div>
-                                              ))}
+                                                )
+                                              })}
                                             </div>
                                           </div>
                                         ) : (

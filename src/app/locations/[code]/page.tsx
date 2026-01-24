@@ -1,12 +1,15 @@
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { MapPin, Mail, Phone, ExternalLink } from "lucide-react"
 import { notFound } from "next/navigation"
 import { getFranchiseDetailsByCode, getFranchiseLocations } from "@/lib/db"
 import { LocationFeaturedCourses } from "@/components/location/LocationFeaturedCourses"
 import { LocationHero } from "@/components/location/LocationHero"
+import { LocationFeatures } from "@/components/location/LocationFeatures"
+import { RoboticsJourney } from "@/components/RoboticsJourney"
+import { Advantages } from "@/components/Advantages"
+import { Testimonials } from "@/components/Testimonials"
+import { Newsletter } from "@/components/Newsletter"
 import { AIChatButton } from "@/components/location/AIChatButton"
-import { BusinessHours } from "@/components/location/BusinessHours"
 import type { Franchise, CourseLocation } from "@/lib/db"
 
 interface LocationPageProps {
@@ -37,32 +40,6 @@ function getHeroDescription(franchise: Franchise): string {
   return `Local robotics, coding, and engineering programs for students in the ${locationName} area.`
 }
 
-function getHighlightPrograms(franchise: Franchise): string {
-  return franchise.branding_config?.highlights?.programs || 
-    'Age-appropriate robotics, coding, and STEM programs designed for local students.'
-}
-
-function getHighlightSchedule(franchise: Franchise): string {
-  return franchise.branding_config?.highlights?.schedule || 
-    'After-school and weekend offerings during the school year, plus camps during breaks.'
-}
-
-function getHighlightFocus(franchise: Franchise): string {
-  return franchise.branding_config?.highlights?.focus || 
-    'Hands-on learning, teamwork, and preparing students for real-world robotics challenges.'
-}
-
-function getContactEmail(franchise: Franchise, locations: CourseLocation[]): string | null {
-  return franchise.branding_config?.contact?.email || 
-    locations.find(l => l.email)?.email || 
-    null
-}
-
-function getContactPhone(franchise: Franchise, locations: CourseLocation[]): string | null {
-  return franchise.branding_config?.contact?.phone || 
-    locations.find(l => l.phone)?.phone || 
-    null
-}
 
 function getPrimaryAddress(franchise: Franchise, locations: CourseLocation[]): string {
   const configAddress = franchise.branding_config?.contact?.address
@@ -128,26 +105,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     normalizedCode
   const heroTitle = getHeroTitle(franchise)
   const heroDescription = getHeroDescription(franchise)
-  const highlightPrograms = getHighlightPrograms(franchise)
-  const highlightSchedule = getHighlightSchedule(franchise)
-  const highlightFocus = getHighlightFocus(franchise)
-  const contactEmail = getContactEmail(franchise, locations)
-  const contactPhone = getContactPhone(franchise, locations)
   const primaryAddress = getPrimaryAddress(franchise, locations)
-  const businessHours = franchise.branding_config?.contact?.businessHours
-
-  // 调试：检查解析后的值
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[LocationPage] Parsed values:', {
-      heroTitle,
-      heroDescription,
-      highlightPrograms,
-      contactEmail,
-      contactPhone,
-      primaryAddress,
-      hasBusinessHours: !!businessHours,
-    })
-  }
 
   return (
     <>
@@ -160,91 +118,34 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
           displayName={displayName}
           primaryAddress={primaryAddress}
           normalizedCode={normalizedCode}
-          highlights={{
-            programs: highlightPrograms,
-            schedule: highlightSchedule,
-            focus: highlightFocus,
-          }}
         />
 
-        <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-16 sm:py-20">
-          {/* Featured courses for this franchise */}
-          <div id="programs">
-            <LocationFeaturedCourses
-              franchiseCode={normalizedCode}
-              locationName={displayName}
-            />
-          </div>
+        {/* Features Section */}
+        <LocationFeatures franchiseCode={normalizedCode} />
 
-          {/* Contact / Info section */}
-          <section
-            id="contact"
-            className="mt-16 grid md:grid-cols-2 gap-10 items-start"
-          >
-            <div className="space-y-4">
-              <h2 className="text-2xl font-semibold">Campus Information</h2>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                This campus serves families in and around {displayName}. 
-                {locations.length > 1 && ` We have ${locations.length} locations in the area.`}
-              </p>
-              
-              {/* Contact Information */}
-              {(contactEmail || contactPhone || primaryAddress) && (
-                <div className="space-y-3 mt-6">
-                  {primaryAddress && (
-                    <div className="flex items-start gap-3">
-                      <MapPin className="h-5 w-5 mt-0.5 text-primary" />
-                      <div className="flex-1">
-                        <p className="font-medium text-foreground">Address</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm text-muted-foreground">{primaryAddress}</p>
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(primaryAddress)}`}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="text-primary hover:text-primary/80 transition-colors"
-                            aria-label="Open location in Google Maps"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {contactPhone && (
-                    <div className="flex items-start gap-3">
-                      <Phone className="h-5 w-5 mt-0.5 text-primary" />
-                      <div>
-                        <p className="font-medium text-foreground">Phone</p>
-                        <a href={`tel:${contactPhone}`} className="text-sm text-muted-foreground hover:text-primary">
-                          {contactPhone}
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                  {contactEmail && (
-                    <div className="flex items-start gap-3">
-                      <Mail className="h-5 w-5 mt-0.5 text-primary" />
-                      <div>
-                        <p className="font-medium text-foreground">Email</p>
-                        <a href={`mailto:${contactEmail}`} className="text-sm text-muted-foreground hover:text-primary">
-                          {contactEmail}
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+        {/* Featured Courses Section */}
+        <section className="bg-[#0f172a] dark:bg-slate-900 py-16 sm:py-20 lg:py-24">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div id="programs">
+              <LocationFeaturedCourses
+                franchiseCode={normalizedCode}
+                locationName={displayName}
+              />
             </div>
-            <div className="space-y-4 text-sm text-muted-foreground">
-              <p>
-                For specific class schedules and availability at {displayName}, please view the program
-                catalog or reach out to the local campus team.
-              </p>
-              <BusinessHours businessHours={businessHours} />
-            </div>
-          </section>
+          </div>
         </section>
+
+        {/* Robotics Journey Section */}
+        <RoboticsJourney />
+
+        {/* Advantages Section */}
+        <Advantages />
+
+        {/* Testimonials Section */}
+        <Testimonials franchiseCode={normalizedCode} locationName={displayName} />
+
+        {/* Newsletter Section */}
+        <Newsletter />
       </main>
       <Footer />
       <AIChatButton

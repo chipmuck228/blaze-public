@@ -29,13 +29,16 @@ import {
   Loader2,
   FileText,
   ExternalLink,
-  Send
+  Send,
+  Bell,
+  ShieldCheck
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { UserAnalytics } from "@/components/UserAnalytics"
 import { AddPaymentMethodDialog } from "@/components/payment/AddPaymentMethodDialog"
 import { Trash2, Star } from "lucide-react"
+import { Footer } from "@/components/Footer"
 
 interface UserProfile {
   id: string
@@ -419,28 +422,150 @@ export default function ProfilePage() {
     return null
   }
 
+  // Calculate stats from enrollments
+  const activeStudents = enrollments.filter(e => e.status === 'enrolled').length
+  const nextClass = enrollments
+    .filter(e => e.status === 'enrolled' && e.instance?.start_date)
+    .sort((a, b) => {
+      const dateA = new Date(a.instance!.start_date).getTime()
+      const dateB = new Date(b.instance!.start_date).getTime()
+      return dateA - dateB
+    })[0]
+  
+  const formatNextClass = () => {
+    if (!nextClass?.instance) return 'No upcoming classes'
+    const date = new Date(nextClass.instance.start_date)
+    const time = nextClass.instance.start_time 
+      ? formatTime(nextClass.instance.start_time)
+      : ''
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' })
+    return `${dayName}${time ? ` at ${time}` : ''}`
+  }
+
+  const quickLinks = [
+    { 
+      title: 'My Students', 
+      icon: <User className="w-6 h-6" />, 
+      desc: 'Manage student profiles and enrollment.',
+      onClick: () => {} // Can be linked to a students page
+    },
+    { 
+      title: 'Attendance', 
+      icon: <Calendar className="w-6 h-6" />, 
+      desc: 'View class schedules and check-in history.',
+      onClick: () => {} // Can be linked to attendance page
+    },
+    { 
+      title: 'Progress Reports', 
+      icon: <BookOpen className="w-6 h-6" />, 
+      desc: 'Review instructor feedback and skill badges.',
+      onClick: () => {} // Can be linked to progress page
+    },
+    { 
+      title: 'Billing', 
+      icon: <CreditCard className="w-6 h-6" />, 
+      desc: 'Manage payments and view invoices.',
+      onClick: () => {
+        const paymentTab = document.querySelector('[value="payment"]') as HTMLElement
+        paymentTab?.click()
+      }
+    },
+    { 
+      title: 'Announcements', 
+      icon: <Bell className="w-6 h-6" />, 
+      desc: 'Stay updated with academy-wide news.',
+      onClick: () => {} // Can be linked to announcements page
+    },
+    { 
+      title: 'Safety & Waivers', 
+      icon: <ShieldCheck className="w-6 h-6" />, 
+      desc: 'Review documentation and policies.',
+      onClick: () => {} // Can be linked to safety page
+    },
+  ]
+
   const content = (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 sm:py-12">
-      <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Profile</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your personal information, course enrollments, and payment methods
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      {/* Hero Section */}
+      <section className="bg-[#0f172a] dark:bg-slate-950 py-20 text-white relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <span className="text-blue-400 font-bold uppercase tracking-widest text-xs">Family Dashboard</span>
+          <h1 className="text-5xl font-black mt-2 mb-6">Parent Portal</h1>
+          <p className="text-slate-400 text-lg max-w-2xl">
+            Welcome back, {profile.name}! Access your student's progress, manage registrations, and stay connected with our community.
           </p>
         </div>
+        <div className="absolute right-0 top-0 w-1/3 h-full bg-blue-600/10 blur-[100px] rounded-full"></div>
+      </section>
 
-        <Tabs defaultValue="personal" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="personal">Personal Info</TabsTrigger>
-              <TabsTrigger value="enrollments">My Courses</TabsTrigger>
-              <TabsTrigger value="analytics">Analytics</TabsTrigger>
-              <TabsTrigger value="payment">Payment</TabsTrigger>
-            </TabsList>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-10">
+        {/* User Stats/Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center space-x-4">
+            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <User className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Active Enrollments</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">{activeStudents} {activeStudents === 1 ? 'Course' : 'Courses'}</p>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center space-x-4">
+            <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-2xl flex items-center justify-center text-green-600 dark:text-green-400">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Next Class</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">{formatNextClass()}</p>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center space-x-4">
+            <div className="w-12 h-12 bg-orange-50 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center text-orange-600 dark:text-orange-400">
+              <Bell className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Unread Alerts</p>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">0 Notifications</p>
+            </div>
+          </div>
+        </div>
 
-            {/* Personal Information Tab */}
-            <TabsContent value="personal" className="space-y-6">
-              <Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-12">
+          {/* Main Content Area */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Quick Links */}
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-8">Dashboard Overview</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+                {quickLinks.map((link, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={link.onClick}
+                    className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl transition-all group cursor-pointer"
+                  >
+                    <div className="w-12 h-12 bg-slate-50 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-900 dark:text-white group-hover:bg-blue-600 group-hover:text-white mb-4 transition-colors">
+                      {link.icon}
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{link.title}</h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{link.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tabs Section */}
+            <div>
+              <Tabs defaultValue="personal" className="space-y-6">
+                <TabsList className="grid w-full grid-cols-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <TabsTrigger value="personal" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Personal Info</TabsTrigger>
+                  <TabsTrigger value="enrollments" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">My Courses</TabsTrigger>
+                  <TabsTrigger value="analytics" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Analytics</TabsTrigger>
+                  <TabsTrigger value="payment" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Payment</TabsTrigger>
+                </TabsList>
+
+                {/* Personal Information Tab */}
+                <TabsContent value="personal" className="space-y-6">
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -557,9 +682,9 @@ export default function ProfilePage() {
               </Card>
             </TabsContent>
 
-            {/* Enrollments Tab */}
-            <TabsContent value="enrollments" className="space-y-6">
-              <Card>
+                {/* Enrollments Tab */}
+                <TabsContent value="enrollments" className="space-y-6">
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle>My Courses</CardTitle>
                   <CardDescription>
@@ -663,9 +788,9 @@ export default function ProfilePage() {
               </Card>
             </TabsContent>
 
-            {/* Analytics Tab */}
-            <TabsContent value="analytics" className="space-y-6">
-              <Card>
+                {/* Analytics Tab */}
+                <TabsContent value="analytics" className="space-y-6">
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle>Learning Analytics</CardTitle>
                   <CardDescription>
@@ -678,9 +803,9 @@ export default function ProfilePage() {
               </Card>
             </TabsContent>
 
-            {/* Payment Methods Tab */}
-            <TabsContent value="payment" className="space-y-6">
-              <Card>
+                {/* Payment Methods Tab */}
+                <TabsContent value="payment" className="space-y-6">
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -780,8 +905,8 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
 
-              {/* Billing History */}
-              <Card>
+                  {/* Billing History */}
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle>Billing History</CardTitle>
                   <CardDescription>
@@ -903,10 +1028,78 @@ export default function ProfilePage() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-8">
+            {/* Schedule Card */}
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-blue-600 dark:text-blue-400" />
+                This Week's Schedule
+              </h3>
+              <div className="space-y-4">
+                {enrollments
+                  .filter(e => e.status === 'enrolled' && e.instance?.start_date)
+                  .slice(0, 2)
+                  .map((enrollment) => {
+                    const startDate = enrollment.instance?.start_date
+                    const startTime = enrollment.instance?.start_time
+                    const courseName = enrollment.instance?.assignment?.course?.name || 'Course'
+                    const location = enrollment.instance?.assignment?.location?.name || enrollment.instance?.location?.name || 'Location'
+                    
+                    if (!startDate) return null
+                    
+                    const date = new Date(startDate)
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' })
+                    const time = startTime ? formatTime(startTime) : ''
+                    
+                    return (
+                      <div key={enrollment.id} className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+                        <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase mb-1">
+                          {dayName}{time ? ` • ${time}` : ''}
+                        </p>
+                        <p className="font-bold text-slate-900 dark:text-white">{courseName}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{location}</p>
+                      </div>
+                    )
+                  })}
+                {enrollments.filter(e => e.status === 'enrolled' && e.instance?.start_date).length === 0 && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+                    No scheduled classes this week
+                  </p>
+                )}
+              </div>
+              <button 
+                onClick={() => {
+                  const enrollmentsTab = document.querySelector('[value="enrollments"]') as HTMLElement
+                  enrollmentsTab?.click()
+                }}
+                className="w-full mt-6 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
+              >
+                View Full Calendar &rarr;
+              </button>
+            </div>
+
+            {/* Promo Card */}
+            <div className="bg-gradient-to-br from-indigo-600 to-blue-700 dark:from-indigo-700 dark:to-blue-800 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
+              <h3 className="text-xl font-bold mb-2">Summer 2026</h3>
+              <p className="text-blue-100 text-sm mb-6">Early bird registration is now open for current families!</p>
+              <button 
+                onClick={() => router.push('/programs')}
+                className="bg-white text-blue-600 w-full py-3 rounded-xl font-bold text-sm hover:scale-105 transition-all"
+              >
+                Browse Camps
+              </button>
+              <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
   );
 
   // 移动端：使用移动端布局
@@ -929,11 +1122,11 @@ export default function ProfilePage() {
       <Navbar />
       <div className="pt-14">
         {content}
-      <AddPaymentMethodDialog
-        open={isAddPaymentMethodOpen}
-        onOpenChange={setIsAddPaymentMethodOpen}
-        onSuccess={handleAddPaymentMethodSuccess}
-      />
+        <AddPaymentMethodDialog
+          open={isAddPaymentMethodOpen}
+          onOpenChange={setIsAddPaymentMethodOpen}
+          onSuccess={handleAddPaymentMethodSuccess}
+        />
 
       {/* Invoice Dialog */}
       <Dialog open={viewingInvoiceId !== null} onOpenChange={(open) => {
@@ -1116,6 +1309,7 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
       </div>
+      <Footer />
     </>
   );
 }

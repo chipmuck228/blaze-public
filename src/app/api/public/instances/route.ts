@@ -84,6 +84,7 @@ export async function GET(request: Request) {
           description,
           status,
           base_price,
+          poster_url,
           target_audience,
           learning_outcomes,
           prerequisites
@@ -333,6 +334,12 @@ export async function GET(request: Request) {
           age_min: instance.age_min || null,
           age_max: instance.age_max || null,
           base_price: offering.base_price,
+          poster_url: offering.poster_url || null,
+        },
+        offering: {
+          id: offering.id,
+          name: offering.name,
+          poster_url: offering.poster_url || null,
         },
         available_spots: Math.max(0, (instance.max_students || 0) - (instance.current_students || 0)),
         is_full: (instance.max_students || 0) <= (instance.current_students || 0),

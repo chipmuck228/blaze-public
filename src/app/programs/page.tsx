@@ -4,27 +4,12 @@ import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Loader2, MapPin, Calendar, Search, Filter, ArrowRight, Sparkles, BookOpen, Tent } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import { Loader2, MapPin, Calendar, Users, Search, Filter, X } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { useSession } from "next-auth/react"
+import { AIAssessmentDialog } from "@/components/location/AIAssessmentDialog"
 
 interface Instance {
   id: string
@@ -53,6 +38,12 @@ interface Instance {
     age_min?: number
     age_max?: number
     base_price?: number
+    poster_url?: string | null
+  }
+  offering?: {
+    id: string
+    name: string
+    poster_url?: string | null
   }
   available_spots: number
   is_full: boolean
@@ -85,50 +76,43 @@ function ProgramsPageContent() {
   const [franchises, setFranchises] = useState<Franchise[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; display_name: string }>>([])
 
   // 筛选状态
   const [selectedFranchise, setSelectedFranchise] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedGrade, setSelectedGrade] = useState<string>("all")
+  const [activeFilter, setActiveFilter] = useState<'all' | 'courses' | 'camps'>('all')
+  const [locationSlug, setLocationSlug] = useState<string | null>(null)
+  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false)
 
   // 从 URL query parameter 获取 category
   const categoryFromUrl = searchParams.get("category")
+  const locationFromUrl = searchParams.get("location")
 
   useEffect(() => {
-    // 从 URL query parameter 读取 category，并设置到筛选状态
     if (categoryFromUrl) {
       setSelectedCategory(categoryFromUrl)
     }
-  }, [categoryFromUrl])
-
-  useEffect(() => {
-    fetchCategories()
-  }, [])
+    if (locationFromUrl) {
+      setLocationSlug(locationFromUrl)
+      // 找到对应的 franchise
+      const franchise = franchises.find(f => f.code === locationFromUrl)
+      if (franchise) {
+        setSelectedFranchise(franchise.id)
+      }
+    }
+  }, [categoryFromUrl, locationFromUrl, franchises])
 
   useEffect(() => {
     fetchInstances()
   }, [selectedCategory])
-
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch("/api/public/categories")
-      if (response.ok) {
-        const data = await response.json()
-        setCategories(data.categories || [])
-      }
-    } catch (err) {
-      console.error("Error fetching categories:", err)
-    }
-  }
 
   const fetchInstances = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      // 根据 selectedCategory 构建 API URL
       let url = "/api/public/instances"
       if (selectedCategory && selectedCategory !== "all") {
         url += `?category=${selectedCategory}`
@@ -143,32 +127,15 @@ function ProgramsPageContent() {
 
       const data = await response.json()
       
-      console.log("[Programs Page] API Response:", {
-        hasError: !!data.error,
-        error: data.error,
-        franchisesCount: data.franchises?.length || 0,
-        franchises: data.franchises,
-      })
-      
-      // 即使没有 instances，也设置 franchises 和 programs 数据
       if (data.error) {
         console.warn("API returned error but continuing:", data.error)
         setFranchises([])
       } else {
         const franchises = data.franchises || []
-        console.log("[Programs Page] Setting franchises:", {
-          count: franchises.length,
-          franchises: franchises.map((f: any) => ({
-            id: f.id,
-            name: f.name,
-            programsCount: f.programs?.length || 0,
-          })),
-        })
         setFranchises(franchises)
       }
     } catch (err) {
       console.error("Error fetching instances:", err)
-      // 即使出错，也尝试显示空结构，而不是完全失败
       setFranchises([])
       setError(err instanceof Error ? err.message : "Failed to load programs")
     } finally {
@@ -181,30 +148,12 @@ function ProgramsPageContent() {
     return franchises.map((f) => ({ id: f.id, code: f.code, name: f.name }))
   }, [franchises])
 
-  // 获取所有唯一的 category 列表（从实际数据中提取）
-  const allCategoriesFromData = useMemo(() => {
-    const categoryMap = new Map<string, { id: string; name: string; display_name: string }>()
-    franchises.forEach((franchise) => {
-      franchise.programs.forEach((program) => {
-        if (program.category && !categoryMap.has(program.category.id)) {
-          categoryMap.set(program.category.id, {
-            id: program.category.id,
-            name: program.category.name,
-            display_name: program.category.display_name,
-          })
-        }
-      })
-    })
-    return Array.from(categoryMap.values())
-  }, [franchises])
-
   // 获取所有唯一的 grade 列表
   const allGrades = useMemo(() => {
     const gradeSet = new Set<string>()
     franchises.forEach((franchise) => {
       franchise.programs.forEach((program) => {
         program.instances.forEach((instance) => {
-          // 支持 grade_level 或 target_grades
           if (instance.course.grade_level && typeof instance.course.grade_level === 'string') {
             const grade = instance.course.grade_level.trim()
             if (grade !== '') {
@@ -223,9 +172,9 @@ function ProgramsPageContent() {
     return Array.from(gradeSet).sort()
   }, [franchises])
 
-  // 过滤数据
-  // 只显示有 instances 的 programs
-  const filteredFranchises = useMemo(() => {
+
+  // 按层级结构组织数据：franchise -> category -> programs -> instances
+  const hierarchicalData = useMemo(() => {
     return franchises
       .filter((franchise) => {
         // Franchise 筛选
@@ -234,80 +183,116 @@ function ProgramsPageContent() {
         }
         return true
       })
-      .map((franchise) => ({
-        ...franchise,
-        programs: franchise.programs
-          .filter((program) => {
-            // Category 筛选
-            if (selectedCategory !== "all" && program.category?.id !== selectedCategory) {
-              return false
+      .map((franchise) => {
+        // 按 category 分组 programs
+        const categoryMap = new Map<string, Program[]>()
+        
+        franchise.programs.forEach((program) => {
+          // Category 筛选
+          if (selectedCategory !== "all" && program.category?.id !== selectedCategory) {
+            return
+          }
+
+          // Type 筛选 (courses vs camps)
+          if (activeFilter !== 'all') {
+            const categoryName = program.category?.name?.toLowerCase() || ''
+            if (activeFilter === 'courses' && !categoryName.includes('course')) {
+              return
             }
+            if (activeFilter === 'camps' && !categoryName.includes('camp')) {
+              return
+            }
+          }
+
+          // 过滤 instances
+          const filteredInstances = (program.instances || []).filter((instance) => {
+            // 搜索过滤
+            if (searchQuery) {
+              const query = searchQuery.toLowerCase()
+              const matchesName = instance.course?.name?.toLowerCase().includes(query) || false
+              const matchesDescription = instance.course?.description?.toLowerCase().includes(query) || false
+              const matchesProgramName = program.display_name?.toLowerCase().includes(query) || false
+              const matchesProgramDesc = program.description?.toLowerCase().includes(query) || false
+              if (!matchesName && !matchesDescription && !matchesProgramName && !matchesProgramDesc) {
+                return false
+              }
+            }
+
+            // Grade 过滤
+            if (selectedGrade !== "all") {
+              const instanceGrade = instance.course?.grade_level || 
+                (instance.course?.target_grades && Array.isArray(instance.course.target_grades) 
+                  ? instance.course.target_grades[0] 
+                  : null)
+              if (instanceGrade !== selectedGrade) {
+                return false
+              }
+            }
+
             return true
           })
-          .map((program) => ({
+
+          if (filteredInstances.length === 0) {
+            return
+          }
+
+          const categoryId = program.category?.id || 'uncategorized'
+          const categoryName = program.category?.display_name || program.category?.name || 'Uncategorized'
+          
+          if (!categoryMap.has(categoryId)) {
+            categoryMap.set(categoryId, [])
+          }
+          
+          categoryMap.get(categoryId)!.push({
             ...program,
-            instances: (program.instances || []).filter((instance) => {
-              // 搜索过滤
-              if (searchQuery) {
-                const query = searchQuery.toLowerCase()
-                const matchesName = instance.course?.name?.toLowerCase().includes(query) || false
-                const matchesDescription = instance.course?.description?.toLowerCase().includes(query) || false
-                if (!matchesName && !matchesDescription) {
-                  return false
-                }
-              }
+            instances: filteredInstances,
+          })
+        })
 
-              // Grade 过滤
-              if (selectedGrade !== "all") {
-                const instanceGrade = instance.course?.grade_level || 
-                  (instance.course?.target_grades && Array.isArray(instance.course.target_grades) 
-                    ? instance.course.target_grades[0] 
-                    : null)
-                if (instanceGrade !== selectedGrade) {
-                  return false
-                }
-              }
+        const categories = Array.from(categoryMap.entries()).map(([categoryId, programs]) => {
+          const firstProgram = programs[0]
+          return {
+            id: categoryId,
+            name: firstProgram.category?.display_name || firstProgram.category?.name || 'Uncategorized',
+            display_name: firstProgram.category?.display_name || firstProgram.category?.name || 'Uncategorized',
+            programs: programs.filter((p) => p.id && typeof p.id === 'string' && p.id.trim() !== ''),
+          }
+        }).filter((cat) => cat.programs.length > 0)
 
-              return true
-            }),
-          }))
-          .filter((program) => {
-            // 只返回有 instances 的 programs
-            return program.instances && program.instances.length > 0
-          }),
-      }))
-      .filter((franchise) => {
-        // 只返回有 programs 的 franchises
-        return franchise.programs.length > 0
+        return {
+          ...franchise,
+          categories: categories.filter((cat) => cat.programs.length > 0),
+        }
       })
-  }, [franchises, selectedFranchise, selectedCategory, searchQuery, selectedGrade])
+      .filter((franchise) => franchise.categories.length > 0)
+  }, [franchises, selectedFranchise, selectedCategory, searchQuery, selectedGrade, activeFilter])
 
-  const handleEnroll = async (instanceId: string) => {
-    if (!session?.user) {
-      router.push("/login")
-      return
-    }
-
-    // TODO: 实现加入购物车逻辑
-    router.push(`/course-catalog?instance=${instanceId}`)
-  }
-
-  const clearFilters = () => {
-    setSelectedFranchise("all")
-    setSelectedCategory("all")
-    setSearchQuery("")
-    setSelectedGrade("all")
-    // 清除 URL 中的 category 参数
-    if (categoryFromUrl) {
-      router.push("/programs")
+  const handleLocationChange = (value: string) => {
+    if (value === 'all') {
+      setSelectedFranchise('all')
+      setLocationSlug(null)
+      router.push('/programs')
+    } else {
+      const franchise = allFranchises.find(f => f.code === value)
+      if (franchise) {
+        setSelectedFranchise(franchise.id)
+        setLocationSlug(value)
+        router.push(`/programs?location=${value}`)
+      }
     }
   }
 
-  const hasActiveFilters =
-    selectedFranchise !== "all" ||
-    selectedCategory !== "all" ||
-    searchQuery !== "" ||
-    selectedGrade !== "all"
+  const activeLocName = useMemo(() => {
+    if (locationSlug) {
+      const franchise = allFranchises.find(f => f.code === locationSlug)
+      return franchise?.name || null
+    }
+    return null
+  }, [locationSlug, allFranchises])
+
+  const navigate = (path: string) => {
+    router.push(path)
+  }
 
   if (isLoading) {
     return (
@@ -328,7 +313,7 @@ function ProgramsPageContent() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <p className="text-destructive mb-4">{error}</p>
-            <Button onClick={fetchInstances}>Retry</Button>
+            <button onClick={fetchInstances} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Retry</button>
           </div>
         </div>
         <Footer />
@@ -339,349 +324,314 @@ function ProgramsPageContent() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-background pt-14">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8 md:py-12">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-4">All Programs</h1>
-            <p className="text-muted-foreground">
-              Browse all available course instances organized by franchise and program
+      <div className="pb-24 bg-slate-50 min-h-screen">
+        {/* Hero Section */}
+        <section className="bg-[#0f172a] pt-32 pb-20 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-10 pointer-events-none">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2"></div>
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-sky-500 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2"></div>
+          </div>
+          
+          <div className="max-w-7xl mx-auto px-4 relative z-10 text-center">
+            <span className="inline-flex items-center space-x-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-blue-500/20">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Academic Catalog 2026</span>
+            </span>
+            <h1 className="text-4xl md:text-6xl font-black text-white mb-6">
+              Programs {activeLocName ? `in ${activeLocName}` : 'Across Blaze'}
+            </h1>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              Discover our full range of engineering pathways, from foundational logic to world-class competitive robotics.
             </p>
           </div>
+        </section>
 
-          {/* Filters */}
-          <Card className="mb-8">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Filter className="h-5 w-5" />
-                  Filters
-                </CardTitle>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    <X className="h-4 w-4 mr-2" />
-                    Clear All
-                  </Button>
-                )}
+        {/* Filter & Search Bar */}
+        <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-20">
+          <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 p-6 flex flex-col xl:flex-row gap-4 items-center">
+            
+            {/* Search */}
+            <div className="relative w-full xl:w-1/4">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input 
+                type="text"
+                placeholder="Search programs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              />
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 w-full xl:w-3/4">
+              {/* Type Filters */}
+              <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto grow">
+                {[
+                  { id: 'all', label: 'All Types', icon: <Filter className="w-4 h-4" /> },
+                  { id: 'courses', label: 'Courses', icon: <BookOpen className="w-4 h-4" /> },
+                  { id: 'camps', label: 'Camps', icon: <Tent className="w-4 h-4" /> },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveFilter(tab.id as any)}
+                    className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex-1 justify-center ${
+                      activeFilter === tab.id 
+                        ? 'bg-white text-blue-600 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Franchise Filter */}
-                <div className="space-y-2">
-                  <Label htmlFor="franchise">Franchise</Label>
-                  <Select value={selectedFranchise} onValueChange={setSelectedFranchise}>
-                    <SelectTrigger id="franchise">
-                      <SelectValue placeholder="All Franchises" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Franchises</SelectItem>
-                      {allFranchises
-                        .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
-                        .map((franchise) => (
-                        <SelectItem key={franchise.id} value={franchise.id}>
-                          {franchise.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                {/* Category Filter */}
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Select value={selectedCategory} onValueChange={(value) => {
-                    setSelectedCategory(value)
-                    // 更新 URL 参数
-                    if (value === "all") {
-                      router.push("/programs")
-                    } else {
-                      router.push(`/programs?category=${value}`)
-                    }
-                  }}>
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {allCategoriesFromData
-                        .filter((c) => c.id && typeof c.id === 'string' && c.id.trim() !== '')
-                        .map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.display_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Grade Filter */}
-                <div className="space-y-2">
-                  <Label htmlFor="grade">Grade Level</Label>
-                  <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-                    <SelectTrigger id="grade">
-                      <SelectValue placeholder="All Grades" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Grades</SelectItem>
-                      {allGrades
-                        .filter((g) => g && typeof g === 'string' && g.trim() !== '')
-                        .map((grade) => (
-                        <SelectItem key={grade} value={grade}>
-                          {grade}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Search */}
-                <div className="space-y-2">
-                  <Label htmlFor="search">Search</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="search"
-                      placeholder="Course name..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
+              {/* Location Selector */}
+              <div className="relative md:w-56 shrink-0">
+                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 pointer-events-none" />
+                <select 
+                  value={locationSlug || 'all'}
+                  onChange={(e) => handleLocationChange(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all cursor-pointer appearance-none shadow-sm"
+                >
+                  <option value="all">All Locations</option>
+                  {allFranchises
+                    .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
+                    .map((franchise) => (
+                    <option key={franchise.id} value={franchise.code}>{franchise.name}</option>
+                  ))}
+                </select>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Results */}
-          {filteredFranchises.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground mb-2">
-                  {error ? (
-                    <>
-                      <span className="text-destructive">{error}</span>
-                      <br />
-                      <span className="text-sm">No programs or instances found.</span>
-                    </>
-                  ) : (
-                    "No programs or instances found matching your filters."
-                  )}
-                </p>
-                {error && (
-                  <Button onClick={fetchInstances} variant="outline" className="mt-4">
-                    Retry
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Accordion 
-              type="single" 
-              collapsible 
-              className="w-full space-y-4"
-              defaultValue={filteredFranchises.length > 0 ? filteredFranchises[0].id : undefined}
-            >
-              {filteredFranchises
-                .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
-                .map((franchise) => {
-                const programsCount = franchise.programs?.length || 0
-                
-                return (
-                  <AccordionItem key={franchise.id || `franchise-${franchise.code}`} value={franchise.id} className="border rounded-lg px-4">
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex flex-col items-start text-left">
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-xl font-semibold">{franchise.name}</h3>
-                            <Badge variant="secondary" className="text-sm">
-                              {programsCount} Program{programsCount !== 1 ? 's' : ''}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Franchise Code: {franchise.code}
-                          </p>
+              {/* Grade Level Selector */}
+              <div className="md:w-48 shrink-0">
+                <select 
+                  value={selectedGrade}
+                  onChange={(e) => setSelectedGrade(e.target.value)}
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all cursor-pointer appearance-none shadow-sm"
+                >
+                  <option value="all">All Grades</option>
+                  {allGrades
+                    .filter((g) => g && typeof g === 'string' && g.trim() !== '')
+                    .map((grade) => (
+                    <option key={grade} value={grade}>{grade}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Results - Hierarchical Display */}
+        <section className="py-16 px-4">
+          <div className="max-w-7xl mx-auto">
+            {hierarchicalData.length > 0 ? (
+              <div className="space-y-12">
+                {hierarchicalData
+                  .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
+                  .map((franchise) => (
+                  <div key={franchise.id} className="space-y-8">
+                    {/* Franchise Header */}
+                    <div className="flex items-center gap-4">
+                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                      <h2 className="text-3xl md:text-4xl font-black text-slate-900">{franchise.name}</h2>
+                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+                    </div>
+
+                    {/* Categories */}
+                    {franchise.categories.map((category) => (
+                      <div key={category.id} className="space-y-6">
+                        {/* Category Header */}
+                        <div className="flex items-center gap-3">
+                          <span className="bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider">
+                            {category.display_name}
+                          </span>
+                          <span className="text-slate-500 text-sm font-medium">
+                            {category.programs.length} Program{category.programs.length !== 1 ? 's' : ''}
+                          </span>
                         </div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="pt-4 space-y-6">
-                        {/* Programs */}
-                        {franchise.programs && franchise.programs.length > 0 ? (
-                          franchise.programs
-                            .filter((p) => p.id && typeof p.id === 'string' && p.id.trim() !== '')
-                            .map((program) => {
-                            const instancesCount = program.instances?.length || 0
-                            
-                            return (
-                              <Card
-                                key={program.id || `program-${program.display_name}`}
-                                className="border"
-                              >
-                                <CardHeader>
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                      <CardTitle className="text-xl font-semibold mb-2">
-                                        {program.display_name}
-                                      </CardTitle>
-                                      {program.description && (
-                                        <CardDescription className="mb-2">{program.description}</CardDescription>
-                                      )}
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline">{program.category?.display_name || 'Unknown'}</Badge>
-                                        <Badge variant="secondary" className="text-xs">
-                                          {instancesCount} Instance{instancesCount !== 1 ? 's' : ''}
-                                        </Badge>
+
+                        {/* Instances Grid - 显示每个 program 的所有 instances */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                          {category.programs.flatMap((program) => 
+                            program.instances
+                              .filter((inst) => inst.id && typeof inst.id === 'string' && inst.id.trim() !== '')
+                              .map((instance) => {
+                                // 格式化年龄组
+                                const ageGroup = instance.course.age_min && instance.course.age_max
+                                  ? `Ages ${instance.course.age_min}-${instance.course.age_max}`
+                                  : instance.course.age_min
+                                  ? `Ages ${instance.course.age_min}+`
+                                  : instance.course.age_max
+                                  ? `Up to Age ${instance.course.age_max}`
+                                  : instance.course.grade_level
+                                  ? `Grade ${instance.course.grade_level}`
+                                  : 'All Ages'
+
+                                // 格式化日期
+                                const dates = instance.start_date && instance.end_date
+                                  ? `${new Date(instance.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(instance.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                  : instance.start_date
+                                  ? `Starts ${new Date(instance.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                  : 'TBD'
+
+                                // 获取价格
+                                const basePrice = instance.price_override ?? instance.course.base_price ?? 0
+
+                                // 获取图片 - 优先使用 offering 的 poster，然后是 course 的 poster
+                                const image = instance.offering?.poster_url || instance.course.poster_url || `https://picsum.photos/400/300?random=${instance.id}`
+
+                                // 获取位置
+                                const locationName = instance.location?.name || franchise.name || 'Multiple Locations'
+
+                                return (
+                                  <div 
+                                    key={instance.id} 
+                                    onClick={() => {
+                                      if (instance.course.slug) {
+                                        const params = new URLSearchParams()
+                                        params.set('instance', instance.id)
+                                        params.set('franchise', franchise.code)
+                                        navigate(`/course-catalog/${encodeURIComponent(instance.course.slug)}?${params.toString()}`)
+                                      } else {
+                                        const params = new URLSearchParams()
+                                        params.set('instance', instance.id)
+                                        params.set('franchise', franchise.code)
+                                        navigate(`/course-catalog?${params.toString()}`)
+                                      }
+                                    }}
+                                    className="group bg-white rounded-[32px] overflow-hidden border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 cursor-pointer flex flex-col h-full"
+                                  >
+                                    <div className="h-64 relative overflow-hidden">
+                                      <Image
+                                        src={image}
+                                        alt={instance.course.name || program.display_name || program.name}
+                                        fill
+                                        className="object-cover group-hover:scale-110 transition-transform duration-700"
+                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-80"></div>
+                                      
+                                      <div className="absolute top-4 left-4 flex flex-col gap-2">
+                                        <span className="bg-white/90 backdrop-blur-md text-slate-900 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                          {ageGroup}
+                                        </span>
+                                      </div>
+
+                                      <div className="absolute bottom-4 left-4 right-4">
+                                        <p className="text-white text-sm font-bold flex items-center">
+                                          <MapPin className="w-3.5 h-3.5 mr-1 text-blue-400" />
+                                          {locationName}
+                                        </p>
+                                        {instance.available_spots !== undefined && (
+                                          <p className="text-white/90 text-xs mt-1">
+                                            {instance.is_full ? 'Full' : `${instance.available_spots} spots available`}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="p-8 flex flex-col flex-grow">
+                                      <div className="flex justify-between items-start mb-3">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                                            <h3 className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">
+                                              {instance.course.name || program.name}
+                                            </h3>
+                                            {program.display_name && instance.course.name !== program.display_name && (
+                                              <Badge variant="secondary" className="text-xs font-semibold">
+                                                {program.display_name}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <p className="text-slate-500 text-sm mb-6 line-clamp-3 leading-relaxed">
+                                        {instance.course.description || ''}
+                                      </p>
+                                      
+                                      <div className="mt-auto">
+                                        <div className="flex items-center text-slate-600 text-sm mb-6 bg-slate-50 p-3 rounded-xl">
+                                          <Calendar className="w-4 h-4 mr-2 text-blue-500" />
+                                          <span className="font-medium">{dates}</span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                                          <div>
+                                            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Enrollment</p>
+                                            <p className="text-2xl font-black text-slate-900">${basePrice.toFixed(2)}</p>
+                                          </div>
+                                          <button className="bg-[#0f172a] group-hover:bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center">
+                                            Details
+                                            <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
+                                          </button>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
-                                </CardHeader>
-
-                                <CardContent>
-                                  {/* Instances */}
-                                  {instancesCount === 0 ? (
-                                    <div className="py-8 text-center">
-                                      <p className="text-sm text-muted-foreground">No instances available for this program.</p>
-                                    </div>
-                                  ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                      {program.instances
-                                        .filter((instance) => instance.id && typeof instance.id === 'string' && instance.id.trim() !== '') // 过滤掉没有 id 或空字符串的 instances
-                                        .map((instance, index) => (
-                                        <Card key={instance.id || `instance-${index}`} className="hover:shadow-lg transition-shadow">
-                                          <CardHeader>
-                                            <CardTitle className="text-lg">{instance.course.name}</CardTitle>
-                                            <CardDescription className="line-clamp-2">
-                                              {instance.course.description}
-                                            </CardDescription>
-                                          </CardHeader>
-                                          <CardContent className="space-y-4">
-                                            {/* Course Info */}
-                                            <div className="space-y-2 text-sm">
-                                              {instance.course.grade_level && (
-                                                <div className="flex items-center gap-2">
-                                                  <Badge variant="secondary">{instance.course.grade_level}</Badge>
-                                                </div>
-                                              )}
-                                              {instance.course.age_min && instance.course.age_max && (
-                                                <p className="text-muted-foreground">
-                                                  Ages {instance.course.age_min}-{instance.course.age_max}
-                                                </p>
-                                              )}
-                                            </div>
-
-                                            {/* Schedule */}
-                                            <div className="space-y-2 text-sm">
-                                              <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Calendar className="h-4 w-4" />
-                                                <span>
-                                                  {new Date(instance.start_date).toLocaleDateString()} -{" "}
-                                                  {new Date(instance.end_date).toLocaleDateString()}
-                                                </span>
-                                              </div>
-                                              {instance.start_time && instance.end_time && (
-                                                <div className="flex items-center gap-2 text-muted-foreground">
-                                                  <span>
-                                                    {instance.start_time} - {instance.end_time}
-                                                  </span>
-                                                </div>
-                                              )}
-                                              {instance.location && (
-                                                <div className="flex items-center gap-2 text-muted-foreground">
-                                                  <MapPin className="h-4 w-4" />
-                                                  <span>{instance.location.name}</span>
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            {/* Capacity */}
-                                            <div className="flex items-center gap-2 text-sm">
-                                              <Users className="h-4 w-4 text-muted-foreground" />
-                                              <span className="text-muted-foreground">
-                                                {instance.current_students} / {instance.max_students || "N/A"} students
-                                              </span>
-                                              {instance.is_full && (
-                                                <Badge variant="destructive" className="ml-auto">
-                                                  Full
-                                                </Badge>
-                                              )}
-                                              {!instance.is_full && instance.available_spots > 0 && (
-                                                <Badge variant="outline" className="ml-auto">
-                                                  {instance.available_spots} spots left
-                                                </Badge>
-                                              )}
-                                            </div>
-
-                                            {/* Price */}
-                                            {instance.price_override !== null && instance.price_override !== undefined ? (
-                                              <div className="text-lg font-semibold">
-                                                ${instance.price_override.toFixed(2)}
-                                              </div>
-                                            ) : instance.course.base_price ? (
-                                              <div className="text-lg font-semibold">
-                                                ${instance.course.base_price.toFixed(2)}
-                                              </div>
-                                            ) : null}
-
-                                            {/* Actions */}
-                                            <div className="flex gap-2 pt-2">
-                                              <Button
-                                                asChild
-                                                variant="outline"
-                                                size="sm"
-                                                className="flex-1"
-                                              >
-                                                <Link 
-                                                  href={
-                                                    (() => {
-                                                      const params = new URLSearchParams();
-                                                      params.set('instance', instance.id);
-                                                      params.set('franchise', franchise.code);
-                                                      if (instance.course.slug) {
-                                                        return `/course-catalog/${encodeURIComponent(instance.course.slug)}?${params.toString()}`;
-                                                      } else {
-                                                        params.set('id', instance.course.id);
-                                                        return `/course-catalog?${params.toString()}`;
-                                                      }
-                                                    })()
-                                                  }
-                                                >
-                                                  View Details
-                                                </Link>
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                className="flex-1"
-                                                onClick={() => handleEnroll(instance.id)}
-                                                disabled={instance.is_full || instance.status !== "scheduled"}
-                                              >
-                                                {instance.is_full ? "Full" : "Enroll"}
-                                              </Button>
-                                            </div>
-                                          </CardContent>
-                                        </Card>
-                                      ))}
-                                    </div>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            )
-                          })
-                        ) : (
-                          <div className="py-8 text-center">
-                            <p className="text-sm text-muted-foreground">No programs available for this franchise.</p>
-                          </div>
-                        )}
+                                )
+                              })
+                          )}
+                        </div>
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              })}
-            </Accordion>
-          )}
-        </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-slate-300">
+                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Search className="w-10 h-10 text-slate-300" />
+                </div>
+                <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Programs</h2>
+                <p className="text-slate-500 max-w-md mx-auto mb-8">
+                  We couldn't find any programs matching your filters {activeLocName ? `at the ${activeLocName} campus` : ''}.
+                </p>
+                <button 
+                  onClick={() => { 
+                    setActiveFilter('all'); 
+                    setSelectedGrade('all'); 
+                    setSearchQuery(''); 
+                    handleLocationChange('all'); 
+                  }}
+                  className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold hover:bg-blue-700 transition-all"
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* AI Assessment Promo */}
+        <section className="max-w-7xl mx-auto px-4">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl">
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
+              <div className="text-center lg:text-left">
+                <h2 className="text-4xl font-black mb-4">Unsure about your child's level?</h2>
+                <p className="text-blue-100 text-lg max-w-xl">
+                  Chat with our AI assistant to get personalized recommendations. Our AI will evaluate your student's experience and suggest the perfect program path based on their age, grade, and interests.
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsAIDialogOpen(true)}
+                className="bg-white text-blue-600 px-12 py-5 rounded-full font-black text-xl hover:scale-105 transition-all shadow-xl whitespace-nowrap"
+              >
+                Get AI Assessment
+              </button>
+            </div>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl"></div>
+          </div>
+        </section>
       </div>
       <Footer />
+      
+      {/* AI Assessment Dialog */}
+      <AIAssessmentDialog
+        franchiseCode={locationSlug || 'general'}
+        franchiseName={activeLocName || 'Blaze Robotics Academy'}
+        isOpen={isAIDialogOpen}
+        onOpenChange={setIsAIDialogOpen}
+      />
     </>
   )
 }

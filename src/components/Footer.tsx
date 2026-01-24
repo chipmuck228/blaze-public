@@ -96,7 +96,7 @@ export const Footer = () => {
             <div>
               <a
                 rel="noreferrer noopener"
-                href="#"
+                href="/about#careers"
                 className="opacity-60 hover:opacity-100"
               >
                 Careers

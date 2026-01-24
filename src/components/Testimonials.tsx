@@ -1,80 +1,75 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 interface TestimonialProps {
-  image: string;
+  id: string;
+  user_id: string;
   name: string;
-  userName: string;
+  email?: string | null;
   comment: string;
+  image_url?: string | null;
+  franchise_id?: string | null;
+  franchise_code?: string | null;
+  franchise_name?: string | null;
 }
 
-const testimonials: TestimonialProps[] = [
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Mom of Sofia",
-    userName: "@linda_sofia",
-    comment: "Seeing Sophie's transformation during her time with Team 838G has been a profound experience for us. From a shy 3rd grader to a confident team player who's now comfortable collaborating with students from around the world, her progress has been remarkable.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Dave Wang",
-    userName: "@dave_wang",
-    comment: "Being part of Team 938X has been an amazing adventure. The opportunity to compete at the world championship stage was a dream come true for us. It's not just about the robots; it's about pushing our limits and learning from failures.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Team 938 X.",
-    userName: "@spencer_y",
-    comment: "This experience has taught us the true meaning of perseverance and innovation. The program has opened up a world of possibilities far beyond our expectations.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Sarah Chen",
-    userName: "@sarah_chen",
-    comment: "Blaze Robotics Academy has been incredible for my daughter. She's learned so much about coding and robotics, and the instructors are amazing mentors who really care about each student's growth.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Michael Johnson",
-    userName: "@mike_j",
-    comment: "The hands-on approach here is fantastic. My son has built several robots and even participated in competitions. The skills he's gained go way beyond just robotics.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Emily Rodriguez",
-    userName: "@emily_r",
-    comment: "As a parent, I'm impressed by how Blaze Robotics Academy combines education with excitement. My kids love coming here and are always excited to share what they've learned.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "James Kim",
-    userName: "@james_k",
-    comment: "The 6000 sq ft Robot House is amazing! There's so much space for kids to experiment and create. The facilities are top-notch and the programs are well-structured.",
-  },
-  {
-    image: "https://github.com/shadcn.png",
-    name: "Lisa Thompson",
-    userName: "@lisa_t",
-    comment: "What I love most is how the program builds 21st century skills. My daughter has become more confident, collaborative, and creative. These are skills that will serve her well in the future.",
-  },
-];
+interface TestimonialsProps {
+  franchiseCode?: string; // 可选的 franchise code，如果提供则只显示该 franchise 的 testimonials
+  locationName?: string; // 可选的 location 名称，用于显示在标题中
+}
 
-// 复制 testimonials 数组以创建无缝滚动效果（复制2次确保有足够内容形成无缝循环）
-const duplicatedTestimonials = [...testimonials, ...testimonials];
-
-export const Testimonials = () => {
-  const [isPaused, setIsPaused] = useState(false);
+export const Testimonials = ({ franchiseCode, locationName }: TestimonialsProps = {}) => {
+  const [testimonials, setTestimonials] = useState<TestimonialProps[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const rowRef = useRef<HTMLDivElement>(null);
 
+  // 从数据库获取 testimonials
   useEffect(() => {
+    const fetchTestimonials = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        
+        const params = new URLSearchParams()
+        if (franchiseCode) {
+          params.set('franchise', franchiseCode)
+        }
+        
+        const response = await fetch(`/api/public/testimonials?${params.toString()}`)
+        if (!response.ok) {
+          throw new Error("Failed to load testimonials")
+        }
+        
+        const data = await response.json()
+        setTestimonials(data.testimonials || [])
+      } catch (err: any) {
+        console.error("Error fetching testimonials:", err)
+        setError(err.message || "Failed to load testimonials")
+        // 如果出错，使用空数组
+        setTestimonials([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchTestimonials()
+  }, [franchiseCode])
+
+  // 复制 testimonials 数组以创建无缝滚动效果（复制2次确保有足够内容形成无缝循环）
+  const displayTestimonials = testimonials;
+  const duplicatedTestimonials = testimonials.length > 0 ? [...displayTestimonials, ...displayTestimonials] : [];
+
+  // 生成头像背景色（循环使用不同颜色）
+  const getAvatarColor = (index: number) => {
+    return index % 2 === 0 ? 'bg-[#2563eb]' : 'bg-[#e0f2fe]';
+  };
+
+  // 动画效果 useEffect - 只在有数据时运行
+  useEffect(() => {
+    // 如果没有数据，不初始化动画
+    if (testimonials.length === 0) return;
+
     const row = rowRef.current;
 
     if (!row) return;
@@ -115,12 +110,10 @@ export const Testimonials = () => {
 
     // 鼠标悬停时暂停/恢复动画
     const handleMouseEnter = () => {
-      setIsPaused(true);
       animation?.pause();
     };
 
     const handleMouseLeave = () => {
-      setIsPaused(false);
       animation?.play();
     };
 
@@ -143,66 +136,106 @@ export const Testimonials = () => {
         container.removeEventListener('mouseleave', handleMouseLeave);
       }
     };
-  }, []);
+  }, [testimonials]); // 依赖 testimonials，当数据变化时重新初始化动画
+
+  // 如果正在加载，显示加载状态
+  if (isLoading) {
+    return (
+      <section
+        id="testimonials"
+        className="py-16 sm:py-20 lg:py-24 bg-slate-50 dark:bg-slate-900"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#0f172a] dark:text-white">
+              What {locationName ? `${locationName} Parents` : 'Parents Across Our Network'} Say
+            </h2>
+          </div>
+          <div className="flex items-center justify-center py-10">
+            <div className="text-slate-400">Loading testimonials...</div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  // 如果出错或没有数据，不显示组件
+  if (error || testimonials.length === 0) {
+    return null
+  }
 
   return (
     <section
       id="testimonials"
-      className="py-24 bg-slate-50"
+      className="py-16 sm:py-20 lg:py-24 bg-slate-50 dark:bg-slate-900"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16"><h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-          How{" "}
-          <span className="inline bg-gradient-to-b from-primary/60 to-primary bg-clip-text text-transparent">
-            People Love
-          </span>{" "}
-          Blaze Robotics Academy
-        </h2>
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-4xl font-bold text-[#0f172a] dark:text-white">
+            What {locationName ? `${locationName} Parents` : 'Parents Across Our Network'} Say
+          </h2>
         </div>
-
-
-
-
+        
         <div className="relative overflow-hidden py-4">
           {/* 渐变遮罩 - 左侧 */}
-          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none" />
+          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-slate-50 dark:from-slate-900 via-slate-50/80 dark:via-slate-900/80 to-transparent z-10 pointer-events-none" />
           {/* 渐变遮罩 - 右侧 */}
-          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-slate-50 dark:from-slate-900 via-slate-50/80 dark:via-slate-900/80 to-transparent z-10 pointer-events-none" />
 
           {/* 滚动行 - 从左到右滚动 */}
-          <div className="flex gap-4 will-change-transform" ref={rowRef}>
+          <div className="flex gap-8 will-change-transform" ref={rowRef}>
             {duplicatedTestimonials.map((testimonial, index) => (
-              <Card
-                key={`testimonial-${index}`}
-                className="flex-shrink-0 w-[350px] md:w-[400px]"
+              <div
+                key={`testimonial-${testimonial.id}-${index}`}
+                className="flex-shrink-0 w-[350px] md:w-[400px] bg-white dark:bg-slate-800 p-10 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700"
               >
-                <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                  <Avatar>
-                    <AvatarImage
-                      alt={testimonial.name}
-                      src={testimonial.image}
-                    />
-                    <AvatarFallback>
+                <p className="text-lg italic text-slate-600 dark:text-slate-300 mb-6">
+                  "{testimonial.comment}"
+                </p>
+                <div className="flex items-center space-x-4">
+                  {testimonial.image_url ? (
+                    <>
+                      <img
+                        src={testimonial.image_url}
+                        alt={testimonial.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                        onError={(e) => {
+                          // 如果图片加载失败，隐藏图片并显示默认头像
+                          const target = e.target as HTMLImageElement
+                          target.style.display = 'none'
+                          const fallback = target.nextElementSibling as HTMLElement
+                          if (fallback) fallback.style.display = 'flex'
+                        }}
+                      />
+                      <div className={`w-12 h-12 ${getAvatarColor(index)} rounded-full hidden items-center justify-center text-white font-semibold text-sm`}>
+                        {testimonial.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)}
+                      </div>
+                    </>
+                  ) : (
+                    <div className={`w-12 h-12 ${getAvatarColor(index)} rounded-full flex items-center justify-center text-white font-semibold text-sm`}>
                       {testimonial.name
                         .split(" ")
                         .map((n) => n[0])
                         .join("")
                         .toUpperCase()
                         .slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col">
-                    <CardTitle className="text-base font-semibold">{testimonial.name}</CardTitle>
-                    <CardDescription className="text-sm">{testimonial.userName}</CardDescription>
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="font-bold text-[#0f172a] dark:text-white">{testimonial.name}</h4>
+                    <p className="text-sm text-slate-400 dark:text-slate-500">
+                      {locationName || testimonial.franchise_name || 'Blaze Robotics Academy'}
+                    </p>
                   </div>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  {testimonial.comment}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
-
         </div>
       </div>
     </section>

@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, ArrowLeft, AlertCircle, Loader2, ShoppingCart } from "lucide-react";
+import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, ArrowLeft, AlertCircle, Loader2, ShoppingCart, ShieldCheck, Award } from "lucide-react";
 import { CourseWithDetails } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
 import { CancellationPolicy } from "./CancellationPolicy";
@@ -56,6 +56,7 @@ interface InstanceDetails {
   max_students?: number;
   available_capacity: number;
   is_full: boolean;
+  price_override?: number;
   location?: {
     id: string;
     name: string;
@@ -728,418 +729,232 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
       } 
     : course;
 
+  // 获取价格和库存信息
+  const basePrice = currentInstance?.price_override || displayCourse.base_price || 0;
+  const availableSpots = currentInstance?.available_capacity || 0;
+  const isFull = currentInstance?.is_full || false;
+  
+  // 获取日期和位置信息
+  const dates = currentInstance?.start_date 
+    ? `${formatDate(currentInstance.start_date)}${currentInstance.end_date ? ` - ${formatDate(currentInstance.end_date)}` : ''}`
+    : 'TBD';
+  const locations = currentInstance?.location 
+    ? [currentInstance.location.name]
+    : currentInstance?.franchise?.name 
+    ? [currentInstance.franchise.name]
+    : ['Multiple Locations'];
+  
+  // 获取年龄组
+  const ageGroup = displayCourse.age_min && displayCourse.age_max
+    ? `Ages ${displayCourse.age_min}-${displayCourse.age_max}`
+    : displayCourse.age_min
+    ? `Ages ${displayCourse.age_min}+`
+    : displayCourse.age_max
+    ? `Up to Age ${displayCourse.age_max}`
+    : displayCourse.grade_level
+    ? `Grades ${displayCourse.grade_level}`
+    : 'All Ages';
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-12 md:py-20">
-        <div className="max-w-4xl mx-auto space-y-16">
+    <div className="bg-slate-50 min-h-screen pb-24">
+      {/* Sticky Header for Mobile/Quick Nav */}
+      {currentInstance && (
+        <div className="bg-white border-b border-slate-200 sticky top-20 z-40 px-4 py-3 shadow-sm md:hidden flex justify-between items-center">
+          <span className="font-bold text-slate-900 truncate pr-4">{displayCourse.name}</span>
+          <button 
+            onClick={() => {
+              if (currentInstance) {
+                handleAddToCart(currentInstance.id);
+              } else {
+                handleEnrollClick();
+              }
+            }}
+            disabled={
+              isLoadingInstance ||
+              isFull ||
+              isAddingToCart ||
+              !!(session?.user && enrollmentStatus && !enrollmentStatus.canEnroll)
+            }
+            className="bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAddingToCart ? 'Adding...' : isFull ? 'Full' : 'Book Now'}
+          </button>
+        </div>
+      )}
+
+      {/* Hero Section */}
+      <div className="bg-[#0f172a] text-white relative overflow-hidden">
+        <div className="absolute inset-0 z-0">
+          {displayCourse.poster_url && (
+            <>
+              <Image
+                src={displayCourse.poster_url}
+                alt={displayCourse.name || 'Course image'}
+                fill
+                className="object-cover opacity-20 blur-sm scale-105"
+                sizes="100vw"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent"></div>
+            </>
+          )}
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 pb-24">
+          {/* Back Link */}
+          <Link 
+            href={currentInstance?.franchise 
+              ? `/course-catalog?franchise=${currentInstance.franchise.code}` 
+              : selectedFranchise 
+              ? `/course-catalog?franchise=${selectedFranchise}` 
+              : '/course-catalog'} 
+            className="inline-flex items-center text-slate-400 hover:text-white mb-8 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Programs
+          </Link>
           
-          {/* ============================================
-              LEVEL 1: HERO SECTION - 页面头部信息
-              ============================================ */}
-          <section className="space-y-8">
-            {/* Breadcrumb Navigation */}
-            <nav className="text-sm text-muted-foreground flex flex-wrap items-center">
-              {buildBreadcrumb()}
-            </nav>
-
-            {/* Course Header */}
-            <div className="space-y-4">
-              {/* Badges */}
-              <div className="flex flex-wrap items-center gap-3">
-                {displayCourse.subcategories && displayCourse.subcategories.length > 0 && (
-                  <Badge 
-                    variant="outline" 
-                    className={`${getTypeColor(courseType)} border text-sm px-3 py-1`}
-                  >
-                    {courseType}
-                  </Badge>
-                )}
-                {currentInstance?.category && (
-                  <Badge variant="outline" className="text-sm px-3 py-1 bg-primary/10 text-primary border-primary/20">
-                    {currentInstance.category.display_name || currentInstance.category.name}
-                  </Badge>
-                )}
-                {currentInstance?.program && (
-                  <Badge variant="outline" className="text-sm px-3 py-1 bg-secondary/50">
-                    {currentInstance.program.display_name || currentInstance.program.name}
-                  </Badge>
-                )}
-                {displayCourse.grade_level && (
-                  <Badge variant="secondary" className="text-sm px-3 py-1">
-                    Grades {displayCourse.grade_level}
-                  </Badge>
-                )}
-                {displayCourse.duration_hours && (
-                  <Badge variant="outline" className="text-sm px-3 py-1">
-                    <Clock className="h-3 w-3 mr-1 inline" />
-                    {displayCourse.duration_hours}h
-                  </Badge>
-                )}
-                {displayCourse.session_count && (
-                  <Badge variant="outline" className="text-sm px-3 py-1">
-                    <Calendar className="h-3 w-3 mr-1 inline" />
-                    {displayCourse.session_count} sessions
-                  </Badge>
-                )}
-              </div>
-
-              {/* Course Title */}
-              <h1 className="text-4xl md:text-5xl font-bold">
-                {displayCourse.name}
-              </h1>
-
-              {/* Instance Info Banner (如果有当前 instance) */}
-              {currentInstance && (
-                <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold">Session Details</h2>
-                    <div className="flex items-center gap-3">
-                      {currentInstance.is_full && (
-                        <Badge variant="destructive">Full</Badge>
-                      )}
-                      <Button
-                        size="sm"
-                        onClick={() => handleAddToCart(currentInstance.id)}
-                        disabled={
-                          isLoadingInstance ||
-                          currentInstance.is_full ||
-                          isAddingToCart ||
-                          !!(session?.user && enrollmentStatus && !enrollmentStatus.canEnroll)
-                        }
-                        title={
-                          !session?.user
-                            ? "Please login to enroll"
-                            : currentInstance.is_full
-                            ? "This session is full"
-                            : enrollmentStatus && !enrollmentStatus.canEnroll
-                            ? enrollmentStatus.reason || "Prerequisites not met"
-                            : undefined
-                        }
-                      >
-                        {isAddingToCart ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Adding...
-                          </>
-                        ) : currentInstance.is_full ? (
-                          <>
-                            <AlertCircle className="mr-2 h-4 w-4" />
-                            Full
-                          </>
-                        ) : (
-                          <>
-                            <ShoppingCart className="mr-2 h-4 w-4" />
-                            Enroll Now
-                          </>
-                        )}
-                      </Button>
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+             <div className="flex-grow">
+                <div className="flex flex-wrap gap-3 mb-4">
+                  {currentInstance?.category && (
+                    <span className="bg-[#2563eb] px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                      {currentInstance.category.display_name || currentInstance.category.name}
+                    </span>
+                  )}
+                  <span className="bg-white/10 border border-white/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                    {ageGroup}
+                  </span>
+                </div>
+                <h1 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight">{displayCourse.name}</h1>
+                <div className="flex flex-col sm:flex-row gap-6 text-slate-300 font-medium text-lg">
+                  {dates !== 'TBD' && (
+                    <div className="flex items-center">
+                      <Calendar className="w-5 h-5 mr-2 text-[#38bdf8]" />
+                      {dates}
                     </div>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {currentInstance.location && (
-                      <div className="flex items-start gap-3">
-                        <MapPin className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Location</p>
-                          <p className="font-medium">{currentInstance.location.name}</p>
-                          {currentInstance.location.address && (
-                            <p className="text-sm text-muted-foreground">
-                              {currentInstance.location.address}
-                              {currentInstance.location.city && `, ${currentInstance.location.city}`}
-                              {currentInstance.location.state && `, ${currentInstance.location.state}`}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {currentInstance.start_date && (
-                      <div className="flex items-start gap-3">
-                        <Calendar className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Start Date</p>
-                          <p className="font-medium">{formatDate(currentInstance.start_date)}</p>
-                          {currentInstance.class_time && (
-                            <p className="text-sm text-muted-foreground">
-                              {formatTime(currentInstance.class_time)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {currentInstance.available_capacity !== undefined && (
-                      <div className="flex items-start gap-3">
-                        <Users className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Availability</p>
-                          <p className="font-medium">
-                            {currentInstance.is_full 
-                              ? 'Full' 
-                              : `${currentInstance.available_capacity} spots available`}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {currentInstance.franchise && (
-                      <div className="flex items-start gap-3">
-                        <BookOpen className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">Franchise</p>
-                          <p className="font-medium">{currentInstance.franchise.name}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Navigation: Previous/Next Instance */}
-                  {(() => {
-                    const shouldShow = previousInstance || nextInstance;
-                    console.log('[CourseDetail] Navigation render:', {
-                      shouldShow,
-                      previousInstance: previousInstance?.id,
-                      nextInstance: nextInstance?.id,
-                      currentInstance: currentInstance?.id
-                    });
-                    return shouldShow;
-                  })() && (
-                    <div className="flex items-center justify-between pt-4 border-t">
-                      {previousInstance ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          asChild
-                          className="flex items-center gap-2"
-                        >
-                          <Link
-                            href={
-                              (() => {
-                                const params = new URLSearchParams();
-                                params.set('instance', previousInstance.id);
-                                if (currentInstance?.franchise) {
-                                  params.set('franchise', currentInstance.franchise.code);
-                                }
-                                if (previousInstance.course?.slug) {
-                                  return `/course-catalog/${encodeURIComponent(previousInstance.course.slug)}?${params.toString()}`;
-                                } else if (previousInstance.course?.id) {
-                                  params.set('id', previousInstance.course.id);
-                                  return `/course-catalog?${params.toString()}`;
-                                }
-                                return `/course-catalog?${params.toString()}`;
-                              })()
-                            }
-                          >
-                            <ArrowLeft className="h-4 w-4" />
-                            Previous Instance
-                          </Link>
-                        </Button>
-                      ) : (
-                        <div></div>
-                      )}
-                      
-                      {nextInstance ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          asChild
-                          className="flex items-center gap-2"
-                        >
-                          <Link
-                            href={
-                              (() => {
-                                const params = new URLSearchParams();
-                                params.set('instance', nextInstance.id);
-                                if (currentInstance?.franchise) {
-                                  params.set('franchise', currentInstance.franchise.code);
-                                }
-                                if (nextInstance.course?.slug) {
-                                  return `/course-catalog/${encodeURIComponent(nextInstance.course.slug)}?${params.toString()}`;
-                                } else if (nextInstance.course?.id) {
-                                  params.set('id', nextInstance.course.id);
-                                  return `/course-catalog?${params.toString()}`;
-                                }
-                                return `/course-catalog?${params.toString()}`;
-                              })()
-                            }
-                          >
-                            Next Instance
-                            <ArrowRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      ) : (
-                        <div></div>
-                      )}
+                  )}
+                  {locations.length > 0 && (
+                    <div className="flex items-center">
+                      <MapPin className="w-5 h-5 mr-2 text-[#38bdf8]" />
+                      {locations.join(', ')}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+             </div>
+             
+             {/* Desktop Price Card */}
+             {currentInstance && (
+               <div className="hidden md:block bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-2xl min-w-[300px] text-center">
+                  <p className="text-slate-300 text-sm uppercase tracking-widest font-bold mb-2">Registration Fee</p>
+                  <div className="text-5xl font-black text-white mb-2">${basePrice.toFixed(2)}</div>
+                  <p className="text-slate-400 text-sm mb-6">{isFull ? 'Waitlist Only' : `${availableSpots} spots remaining`}</p>
+                  <button 
+                    onClick={() => handleAddToCart(currentInstance.id)}
+                    disabled={
+                      isLoadingInstance ||
+                      isFull ||
+                      isAddingToCart ||
+                      !!(session?.user && enrollmentStatus && !enrollmentStatus.canEnroll)
+                    }
+                    className="w-full bg-[#2563eb] hover:bg-blue-600 text-white py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-blue-500/30 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  >
+                    {isAddingToCart ? (
+                      <>
+                        <Loader2 className="w-4 h-4 inline-block mr-2 animate-spin" />
+                        Adding...
+                      </>
+                    ) : isFull ? (
+                      'Join Waitlist'
+                    ) : (
+                      'Book Your Spot'
+                    )}
+                  </button>
+               </div>
+             )}
+          </div>
+        </div>
+      </div>
 
-            {/* Course Image */}
-            <div className="rounded-lg overflow-hidden bg-muted aspect-video relative">
-              {displayCourse.poster_url ? (
-                <Image
-                  src={displayCourse.poster_url}
-                  alt={displayCourse.name || 'Course image'}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <BookOpen className="h-24 w-24 text-muted-foreground/20" />
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ============================================
-              LEVEL 2: QUICK OVERVIEW - 快速概览信息
-              ============================================ */}
-          {(displayCourse.duration_hours || displayCourse.session_count || displayCourse.age_min || displayCourse.age_max || displayCourse.base_price) && (
-            <section className="space-y-4">
-              <h2 className="text-2xl font-semibold">Quick Overview</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {displayCourse.duration_hours && (
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <Clock className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Duration</p>
-                        <p className="text-sm font-semibold">{displayCourse.duration_hours} hours</p>
-                      </div>
-                    </div>
-                  </Card>
-                )}
-                {displayCourse.session_count && (
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <Calendar className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Sessions</p>
-                        <p className="text-sm font-semibold">{displayCourse.session_count}</p>
-                      </div>
-                    </div>
-                  </Card>
-                )}
-                {(displayCourse.age_min || displayCourse.age_max) && (
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <Users className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Age Range</p>
-                        <p className="text-sm font-semibold">
-                          {displayCourse.age_min && displayCourse.age_max
-                            ? `${displayCourse.age_min}-${displayCourse.age_max} years`
-                            : displayCourse.age_min
-                            ? `${displayCourse.age_min}+ years`
-                            : `Up to ${displayCourse.age_max} years`}
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
-                )}
-                {displayCourse.base_price && (
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <DollarSign className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Price</p>
-                        <p className="text-sm font-semibold">${displayCourse.base_price.toFixed(2)}</p>
-                      </div>
-                    </div>
-                  </Card>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* ============================================
-              LEVEL 3: COURSE DETAILS - 课程详细信息
-              ============================================ */}
-          <section className="space-y-8">
-            <h2 className="text-2xl font-semibold">Course Details</h2>
-            
-            {/* Description and Target Audience Cards - 大屏幕并列，小屏幕垂直堆叠 */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Description Card */}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 relative z-20">
+        <div className="flex flex-col lg:flex-row gap-12">
+          
+          {/* Left Column: Details */}
+          <div className="lg:w-2/3 space-y-8">
+            {/* Overview Card */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+              <h2 className="text-2xl font-bold text-slate-900 mb-4">Program Overview</h2>
               {displayCourse.description && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl">About This Course</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {displayCourse.description}
-                    </p>
-                  </CardContent>
-                </Card>
+                <p className="text-slate-600 text-lg leading-relaxed mb-6">
+                  {displayCourse.description}
+                </p>
               )}
-
-              {/* Target Audience */}
               {displayCourse.target_audience && (
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-xl">Target Audience</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {displayCourse.target_audience}
-                    </p>
-                  </CardContent>
-                </Card>
+                <p className="text-slate-600 leading-relaxed mb-6">
+                  {displayCourse.target_audience}
+                </p>
               )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+                <div className="flex items-start">
+                   <CheckCircle2 className="w-6 h-6 text-green-500 mr-3 shrink-0" />
+                   <div>
+                     <h4 className="font-bold text-slate-900">Hands-on Hardware</h4>
+                     <p className="text-sm text-slate-500">1:1 Robot Kit Ratio for every student.</p>
+                   </div>
+                </div>
+                <div className="flex items-start">
+                   <Users className="w-6 h-6 text-blue-500 mr-3 shrink-0" />
+                   <div>
+                     <h4 className="font-bold text-slate-900">Small Class Sizes</h4>
+                     <p className="text-sm text-slate-500">Maximum 6:1 Student-Teacher ratio.</p>
+                   </div>
+                </div>
+                <div className="flex items-start">
+                   <ShieldCheck className="w-6 h-6 text-indigo-500 mr-3 shrink-0" />
+                   <div>
+                     <h4 className="font-bold text-slate-900">Safe Environment</h4>
+                     <p className="text-sm text-slate-500">Background-checked, certified instructors.</p>
+                   </div>
+                </div>
+                <div className="flex items-start">
+                   <Award className="w-6 h-6 text-orange-500 mr-3 shrink-0" />
+                   <div>
+                     <h4 className="font-bold text-slate-900">Certificate of Completion</h4>
+                     <p className="text-sm text-slate-500">Awarded at the end of the session.</p>
+                   </div>
+                </div>
+              </div>
             </div>
 
-            {/* Learning Outcomes */}
+            {/* Learning Outcomes / Curriculum */}
             {learningOutcomes.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-5 w-5 text-primary" />
-                    <CardTitle className="text-xl">Learning Outcomes</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3">
-                    {learningOutcomes.map((outcome: string, index: number) => (
-                      <li key={index} className="flex items-start gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <span className="text-muted-foreground leading-relaxed">
-                          {outcome.trim()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+                 <h2 className="text-2xl font-bold text-slate-900 mb-6">What They Will Learn</h2>
+                 <div className="space-y-6">
+                   {learningOutcomes.slice(0, 4).map((outcome: string, week: number) => (
+                     <div key={week} className="flex gap-4">
+                       <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg shrink-0">
+                         {week + 1}
+                       </div>
+                       <div>
+                         <h4 className="font-bold text-slate-900 text-lg">Phase {week + 1}</h4>
+                         <p className="text-slate-500 mt-1">
+                           {outcome.trim()}
+                         </p>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+              </div>
             )}
-          </section>
 
-          {/* ============================================
-              LEVEL 4: ENROLLMENT INFORMATION - 注册相关信息
-              ============================================ */}
-          <section className="space-y-8">
-            <h2 className="text-2xl font-semibold">Enrollment Information</h2>
-
-          {/* Prerequisites */}
-          {((course.prerequisites_list && course.prerequisites_list.length > 0) || displayCourse.prerequisites) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl">Prerequisites</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* 结构化先修课程列表 */}
-                {course.prerequisites_list && course.prerequisites_list.length > 0 && (
+            {/* Prerequisites */}
+            {((course.prerequisites_list && course.prerequisites_list.length > 0) || displayCourse.prerequisites) && (
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+                <h2 className="text-2xl font-bold text-slate-900 mb-6">Prerequisites</h2>
+                <div className="space-y-4">
+                  {course.prerequisites_list && course.prerequisites_list.length > 0 && (
                     <div className="space-y-3">
                       {course.prerequisites_list.filter(p => p.requirement_type === 'required').length > 0 && (
                         <div>
@@ -1148,11 +963,11 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                             {course.prerequisites_list
                               .filter(p => p.requirement_type === 'required')
                               .map((prerequisite) => (
-                                <div key={prerequisite.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                                  <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+                                <div key={prerequisite.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50">
+                                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                                   <Link
                                     href={`/course-catalog/${prerequisite.prerequisite_course?.slug || prerequisite.prerequisite_course_id}`}
-                                    className="text-sm hover:text-primary transition-colors"
+                                    className="text-sm hover:text-blue-600 transition-colors"
                                   >
                                     {prerequisite.prerequisite_course?.name || 'Unknown Course'}
                                   </Link>
@@ -1168,11 +983,11 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                             {course.prerequisites_list
                               .filter(p => p.requirement_type === 'recommended')
                               .map((prerequisite) => (
-                                <div key={prerequisite.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                                  <CheckCircle2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div key={prerequisite.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50">
+                                  <CheckCircle2 className="h-4 w-4 text-slate-400 flex-shrink-0" />
                                   <Link
                                     href={`/course-catalog/${prerequisite.prerequisite_course?.slug || prerequisite.prerequisite_course_id}`}
-                                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                                    className="text-sm text-slate-600 hover:text-blue-600 transition-colors"
                                   >
                                     {prerequisite.prerequisite_course?.name || 'Unknown Course'}
                                   </Link>
@@ -1182,198 +997,269 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                         </div>
                       )}
                     </div>
-                )}
-                {/* 文本描述（作为补充） */}
-                {displayCourse.prerequisites && (
-                  <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {displayCourse.prerequisites}
-                    </p>
-                  </div>
-                )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Available Instances - 如果有当前 instance，只显示其他实例 */}
-            {(!currentInstance && instances.length > 0) || (currentInstance && instances.filter(inst => inst.id !== currentInstance.id).length > 0) ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-xl">
-                    {currentInstance ? 'Other Available Sessions' : 'Available Sessions'}
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedFranchise 
-                      ? `Showing sessions for ${franchises.find(f => f.code === selectedFranchise)?.name || selectedFranchise}`
-                      : 'Showing all available sessions'}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingInstances ? (
-                    <div className="flex justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    </div>
-                  ) : instances.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4">
-                      No available sessions at the selected location.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {instances
-                        .filter((inst: any) => !currentInstance || inst.id !== currentInstance.id)
-                        .map((instance: any) => (
-                        <div 
-                          key={instance.id} 
-                          className={`p-4 rounded-lg border transition-colors ${
-                            instance.is_full 
-                              ? 'bg-muted/30 opacity-60' 
-                              : 'bg-muted/30 hover:bg-muted/50 cursor-pointer'
-                          }`}
-                          onClick={() => !instance.is_full && setSelectedInstanceId(instance.id)}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              {instance.assignment?.category && instance.assignment?.series && (
-                                <p className="font-semibold text-sm mb-2">
-                                  {instance.assignment.category.display_name || instance.assignment.category.name} &gt; {instance.assignment.series.display_name || instance.assignment.series.name}
-                                </p>
-                              )}
-                              <div className="space-y-1 text-sm text-muted-foreground">
-                                {instance.location && (
-                                  <div className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4" />
-                                    <span>{instance.location.name}</span>
-                                  </div>
-                                )}
-                                {instance.start_date && (
-                                  <div className="flex items-center gap-2">
-                                    <Calendar className="h-4 w-4" />
-                                    <span>Starts: {formatDate(instance.start_date)}</span>
-                                  </div>
-                                )}
-                                {instance.class_time && (
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="h-4 w-4" />
-                                    <span>Time: {formatTime(instance.class_time)}</span>
-                                  </div>
-                                )}
-                                {instance.available_capacity !== undefined && (
-                                  <div className="flex items-center gap-2">
-                                    <Users className="h-4 w-4" />
-                                    <span>
-                                      {instance.is_full 
-                                        ? 'Full' 
-                                        : `${instance.available_capacity} spots available`}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            {instance.is_full && (
-                              <Badge variant="destructive" className="shrink-0">
-                                Full
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                  )}
+                  {displayCourse.prerequisites && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        {displayCourse.prerequisites}
+                      </p>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            )}
+
+            {/* Available Instances */}
+            {(!currentInstance && instances.length > 0) || (currentInstance && instances.filter(inst => inst.id !== currentInstance.id).length > 0) ? (
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+                <h2 className="text-2xl font-bold text-slate-900 mb-4">
+                  {currentInstance ? 'Other Available Sessions' : 'Available Sessions'}
+                </h2>
+                <p className="text-sm text-slate-500 mb-6">
+                  {selectedFranchise 
+                    ? `Showing sessions for ${franchises.find(f => f.code === selectedFranchise)?.name || selectedFranchise}`
+                    : 'Showing all available sessions'}
+                </p>
+                {isLoadingInstances ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  </div>
+                ) : instances.length === 0 ? (
+                  <p className="text-slate-500 text-center py-4">
+                    No available sessions at the selected location.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {instances
+                      .filter((inst: any) => !currentInstance || inst.id !== currentInstance.id)
+                      .map((instance: any) => (
+                      <div 
+                        key={instance.id} 
+                        className={`p-4 rounded-lg border transition-colors ${
+                          instance.is_full 
+                            ? 'bg-slate-50 opacity-60' 
+                            : 'bg-slate-50 hover:bg-slate-100 cursor-pointer'
+                        }`}
+                        onClick={() => !instance.is_full && setSelectedInstanceId(instance.id)}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            {instance.assignment?.category && instance.assignment?.series && (
+                              <p className="font-semibold text-sm mb-2">
+                                {instance.assignment.category.display_name || instance.assignment.category.name} &gt; {instance.assignment.series.display_name || instance.assignment.series.name}
+                              </p>
+                            )}
+                            <div className="space-y-1 text-sm text-slate-600">
+                              {instance.location && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4" />
+                                  <span>{instance.location.name}</span>
+                                </div>
+                              )}
+                              {instance.start_date && (
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4" />
+                                  <span>Starts: {formatDate(instance.start_date)}</span>
+                                </div>
+                              )}
+                              {instance.class_time && (
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4" />
+                                  <span>Time: {formatTime(instance.class_time)}</span>
+                                </div>
+                              )}
+                              {instance.available_capacity !== undefined && (
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" />
+                                  <span>
+                                    {instance.is_full 
+                                      ? 'Full' 
+                                      : `${instance.available_capacity} spots available`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {instance.is_full && (
+                            <Badge variant="destructive" className="shrink-0">
+                              Full
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : null}
 
             {/* Cancellation Policy */}
-            {/* Phase 4: 优先使用 franchise 的取消政策 */}
             <CancellationPolicy policy={
               currentInstance?.franchise?.cancellation_policy || 
               displayCourse.cancellation_policy
             } />
-          </section>
+          </div>
 
-          {/* ============================================
-              LEVEL 5: CALL TO ACTION - 行动号召
-              ============================================ */}
-          <section className="bg-muted/50 rounded-lg p-8 text-center">
-            <BookOpen className="h-12 w-12 text-primary mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-4">Ready to Get Started?</h2>
-            <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-              Join us for this exciting robotics adventure and take your skills to the next level!
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button 
-                variant="destructive" 
-                size="lg" 
-                onClick={() => {
-                  // 如果有当前 instance，直接添加到购物车
-                  if (currentInstance) {
-                    handleAddToCart(currentInstance.id);
-                  } else {
-                    handleEnrollClick();
-                  }
-                }}
-                disabled={
-                  isLoadingInstance ||
-                  isLoadingInstances || 
-                  (currentInstance ? currentInstance.is_full : instances.length === 0) || 
-                  isAddingToCart ||
-                  (session?.user && enrollmentStatus && !enrollmentStatus.canEnroll) ||
-                  (!currentInstance && instances.every(inst => inst.is_full))
-                }
-                title={
-                  !session?.user 
-                    ? "Please login to enroll"
-                    : isLoadingInstance || isLoadingInstances
-                    ? "Loading..."
-                    : currentInstance && currentInstance.is_full
-                    ? "This session is full. Please join the waitlist."
-                    : !currentInstance && instances.length === 0
-                    ? "No available sessions for this course"
-                    : !currentInstance && instances.every(inst => inst.is_full)
-                    ? "All sessions are full. Please join the waitlist."
-                    : enrollmentStatus && !enrollmentStatus.canEnroll
-                    ? enrollmentStatus.reason || "Prerequisites not met"
-                    : undefined
-                }
-              >
-                {isAddingToCart ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
-                  </>
-                ) : !session?.user ? (
-                  <>
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    Login to Enroll
-                  </>
-                ) : (currentInstance && currentInstance.is_full) || (!currentInstance && instances.every(inst => inst.is_full)) ? (
-                  <>
-                    <AlertCircle className="mr-2 h-4 w-4" />
-                    All Sessions Full
-                  </>
-                ) : enrollmentStatus && !enrollmentStatus.canEnroll ? (
-                  <>
-                    <AlertCircle className="mr-2 h-4 w-4" />
-                    Prerequisites Required
-                  </>
-                ) : (
-                  <>
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    Enroll Now
-                  </>
-                )}
-              </Button>
-              <Button size="lg" variant="outline" asChild>
-                <Link href={currentInstance?.franchise ? `/course-catalog?franchise=${currentInstance.franchise.code}` : (selectedFranchise ? `/course-catalog?franchise=${selectedFranchise}` : '/#courses')}>
-                  View All Courses
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
+          {/* Right Column: Sidebar */}
+          <div className="lg:w-1/3 space-y-6">
+            
+            {/* Mobile Booking Card */}
+            {currentInstance && (
+              <div className="md:hidden bg-white rounded-3xl p-6 shadow-lg border border-slate-200 text-center">
+                  <div className="text-4xl font-black text-slate-900 mb-2">${basePrice.toFixed(2)}</div>
+                  <button 
+                    onClick={() => handleAddToCart(currentInstance.id)}
+                    disabled={
+                      isLoadingInstance ||
+                      isFull ||
+                      isAddingToCart ||
+                      !!(session?.user && enrollmentStatus && !enrollmentStatus.canEnroll)
+                    }
+                    className="w-full bg-[#2563eb] text-white py-3 rounded-xl font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAddingToCart ? (
+                      <>
+                        <Loader2 className="w-4 h-4 inline-block mr-2 animate-spin" />
+                        Adding...
+                      </>
+                    ) : isFull ? (
+                      'Join Waitlist'
+                    ) : (
+                      'Book Now'
+                    )}
+                  </button>
+              </div>
+            )}
+
+            {/* Session Details */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+               <h3 className="font-bold text-slate-900 mb-4 text-lg">Session Details</h3>
+               <div className="space-y-4">
+                 <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                   <div className="flex items-center text-slate-500">
+                     <Users className="w-4 h-4 mr-2" />
+                     <span>Age Group</span>
+                   </div>
+                   <span className="font-bold text-slate-900">{ageGroup}</span>
+                 </div>
+                 {displayCourse.duration_hours && (
+                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                     <div className="flex items-center text-slate-500">
+                       <Clock className="w-4 h-4 mr-2" />
+                       <span>Duration</span>
+                     </div>
+                     <span className="font-bold text-slate-900">{displayCourse.duration_hours} hours</span>
+                   </div>
+                 )}
+                 {displayCourse.session_count && (
+                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                     <div className="flex items-center text-slate-500">
+                       <Calendar className="w-4 h-4 mr-2" />
+                       <span>Sessions</span>
+                     </div>
+                     <span className="font-bold text-slate-900">{displayCourse.session_count}</span>
+                   </div>
+                 )}
+                 {currentInstance?.location && (
+                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                     <div className="flex items-center text-slate-500">
+                       <MapPin className="w-4 h-4 mr-2" />
+                       <span>Campus</span>
+                     </div>
+                     <span className="font-bold text-slate-900 text-right">{currentInstance.location.name}</span>
+                   </div>
+                 )}
+               </div>
             </div>
-          </section>
 
-          {/* Enroll Dialog - 选择实例 */}
-          <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
+            {/* Need Help Card */}
+            {currentInstance?.franchise && (
+              <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200">
+                <h3 className="font-bold text-slate-900 mb-2">Need Help?</h3>
+                <p className="text-slate-500 text-sm mb-4">Not sure if this is the right level for your student at our {currentInstance.franchise.name} campus?</p>
+                <button className="text-blue-600 font-bold text-sm hover:underline">Contact Admissions &rarr;</button>
+              </div>
+            )}
+
+            {/* Navigation: Previous/Next Instance */}
+            {(previousInstance || nextInstance) && (
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                <div className="flex items-center justify-between gap-4">
+                  {previousInstance ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="flex items-center gap-2"
+                    >
+                      <Link
+                        href={
+                          (() => {
+                            const params = new URLSearchParams();
+                            params.set('instance', previousInstance.id);
+                            if (currentInstance?.franchise) {
+                              params.set('franchise', currentInstance.franchise.code);
+                            }
+                            if (previousInstance.course?.slug) {
+                              return `/course-catalog/${encodeURIComponent(previousInstance.course.slug)}?${params.toString()}`;
+                            } else if (previousInstance.course?.id) {
+                              params.set('id', previousInstance.course.id);
+                              return `/course-catalog?${params.toString()}`;
+                            }
+                            return `/course-catalog?${params.toString()}`;
+                          })()
+                        }
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Previous
+                      </Link>
+                    </Button>
+                  ) : (
+                    <div></div>
+                  )}
+                  
+                  {nextInstance ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="flex items-center gap-2"
+                    >
+                      <Link
+                        href={
+                          (() => {
+                            const params = new URLSearchParams();
+                            params.set('instance', nextInstance.id);
+                            if (currentInstance?.franchise) {
+                              params.set('franchise', currentInstance.franchise.code);
+                            }
+                            if (nextInstance.course?.slug) {
+                              return `/course-catalog/${encodeURIComponent(nextInstance.course.slug)}?${params.toString()}`;
+                            } else if (nextInstance.course?.id) {
+                              params.set('id', nextInstance.course.id);
+                              return `/course-catalog?${params.toString()}`;
+                            }
+                            return `/course-catalog?${params.toString()}`;
+                          })()
+                        }
+                      >
+                        Next
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  ) : (
+                    <div></div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+
+      {/* Enroll Dialog - 选择实例 */}
+      <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Select a Session</DialogTitle>
@@ -1496,8 +1382,6 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
     </div>
   );
 };

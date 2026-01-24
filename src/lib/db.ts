@@ -1042,6 +1042,76 @@ export async function getAllTeamMembers(): Promise<TeamMember[]> {
   return teamsWithSocial as TeamMember[]
 }
 
+// 获取所有激活的团队成员（不限制 featured，用于 About 页面）
+export async function getAllActiveTeamMembers(): Promise<TeamMember[]> {
+  // 获取所有激活的团队成员（不仅仅是 featured），JOIN Users 表
+  const { data: teams, error: teamsError } = await supabaseAdmin
+    .from('teams')
+    .select(`
+      *,
+      user:users(*)
+    `)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  if (teamsError) {
+    throw new Error(`Failed to fetch teams: ${teamsError.message}`)
+  }
+
+  if (!teams || teams.length === 0) {
+    return []
+  }
+
+  // 获取所有社交媒体链接
+  const teamIds = teams.map(team => team.id)
+  const { data: socialNetworks, error: socialError } = await supabaseAdmin
+    .from('team_social_networks')
+    .select('*')
+    .in('team_id', teamIds)
+    .order('display_order', { ascending: true })
+
+  if (socialError) {
+    throw new Error(`Failed to fetch social networks: ${socialError.message}`)
+  }
+
+  // 组合数据，优先使用 Users 表的 name 和 image
+  const teamsWithSocial = teams.map(team => {
+    const user = (team as any).user
+    const userImage = user?.image || null
+    return {
+      id: team.id,
+      user_id: team.user_id || null,
+      image_url: userImage || team.image_url,
+      name: user?.name || team.name,
+      position: team.position,
+      description: team.description,
+      bio: team.bio || undefined,
+      display_order: team.display_order,
+      is_featured: team.is_featured ?? false,
+      is_active: team.is_active ?? true,
+      created_at: team.created_at,
+      updated_at: team.updated_at,
+      social_networks: (socialNetworks || [])
+        .filter(sn => sn.team_id === team.id)
+        .map(sn => ({
+          id: sn.id,
+          name: sn.name,
+          url: sn.url,
+          display_order: sn.display_order,
+        })),
+      user: user ? {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+      } : undefined,
+    }
+  })
+
+  return teamsWithSocial as TeamMember[]
+}
+
 // 获取所有团队成员（Admin API，包括所有状态）
 export async function getAllTeamMembersForAdmin(): Promise<TeamMember[]> {
   // 获取所有团队成员（包括未激活的），JOIN Users 表
