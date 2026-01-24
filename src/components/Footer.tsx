@@ -86,10 +86,10 @@ export const Footer = () => {
             <div>
               <a
                 rel="noreferrer noopener"
-                href="/coach/login"
+                href="/teacher-portal/login"
                 className="opacity-60 hover:opacity-100"
               >
-                Coach Portal
+                Teacher Portal
               </a>
             </div>
 
