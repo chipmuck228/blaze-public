@@ -25,12 +25,44 @@ export async function POST(req: NextRequest) {
     }
 
     // 获取 franchise 和 location 信息
-    const franchise = await getFranchiseDetailsByCode(franchiseCode)
+    let franchise = await getFranchiseDetailsByCode(franchiseCode)
+    
+    // 如果 franchiseCode 是 'general' 且找不到对应的 franchise，创建一个默认的 franchise
+    if (!franchise && franchiseCode.toLowerCase() === 'general') {
+      franchise = {
+        id: 'general',
+        code: 'general',
+        name: 'Blaze Robotics Academy',
+        primary_domain: null,
+        timezone: 'America/Los_Angeles',
+        branding_config: {
+          hero: {
+            title: 'Blaze Robotics Academy',
+            subtitle: 'Empowering the next generation of innovation',
+            description: 'Blaze Robotics Academy provides robotics, coding, and engineering programs for students of all ages. We offer hands-on learning experiences that prepare students for real-world robotics challenges.',
+          },
+          contact: {
+            email: 'info@blazeroboticsacademy.org',
+            phone: null,
+            address: null,
+            businessHours: null,
+          },
+        },
+        is_active: true,
+        cancellation_policy: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as any
+    }
+    
     if (!franchise) {
       return new Response('Franchise not found', { status: 404 })
     }
 
-    const locations = await getFranchiseLocations(franchise.id)
+    // 如果 franchise 是 'general'，返回空 locations 数组
+    const locations = franchise.id === 'general' 
+      ? [] 
+      : await getFranchiseLocations(franchise.id)
 
     // 构建基本信息
     const primaryLocation = locations[0]

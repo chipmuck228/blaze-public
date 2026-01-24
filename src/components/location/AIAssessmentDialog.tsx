@@ -116,7 +116,7 @@ Let's find the perfect program together!`,
 
     const userMessage = input.trim()
     setInput('')
-    await sendMessage(userMessage)
+    await sendMessage({ text: userMessage })
   }
 
   if (!isOpen) return null
