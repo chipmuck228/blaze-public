@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
@@ -44,7 +44,7 @@ interface Franchise {
   programs: Program[]
 }
 
-export default function CampsPage() {
+function CampsPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const locationSlug = searchParams.get('location')
@@ -351,5 +351,17 @@ export default function CampsPage() {
       </div>
       <Footer />
     </>
+  )
+}
+
+export default function CampsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <CampsPageContent />
+    </Suspense>
   )
 }
