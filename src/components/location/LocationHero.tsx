@@ -130,7 +130,7 @@ export function LocationHero({
 
           <div className="flex flex-wrap gap-4">
             <Link
-              href="#programs"
+              href={`/programs?location=${encodeURIComponent(normalizedCode)}`}
               className="bg-[#2563eb] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-blue-600 transition-all flex items-center shadow-xl hover:shadow-2xl hover:-translate-y-1"
             >
               View Programs
@@ -187,7 +187,7 @@ export function LocationHero({
                 return (
                   <Link
                     key={program.id}
-                    href={`/course-catalog?franchise=${encodeURIComponent(normalizedCode)}`}
+                    href={`/programs?location=${encodeURIComponent(normalizedCode)}`}
                     className="min-w-[300px] w-[300px] md:min-w-[340px] md:w-[340px] snap-start bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col"
                   >
                     <div className="h-48 relative overflow-hidden shrink-0">
@@ -217,7 +217,7 @@ export function LocationHero({
                         <div className="flex items-center gap-4 text-xs text-slate-500">
                           <div className="flex items-center gap-1">
                             <BookOpen className="h-4 w-4" />
-                            <span>{courseCount} {courseCount === 1 ? 'course' : 'courses'}</span>
+                            <span>{courseCount} {courseCount === 1 ? 'instance' : 'instances'}</span>
                           </div>
                         </div>
                         <ArrowRight className="h-5 w-5 text-[#2563eb] group-hover:translate-x-1 transition-transform" />

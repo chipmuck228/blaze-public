@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Loader2, MapPin, Calendar, Search, Filter, ArrowRight, Sparkles, BookOpen, Tent } from "lucide-react"
+import { Loader2, MapPin, Calendar, Search, Filter, ArrowRight, Sparkles, BookOpen } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import Image from "next/image"
@@ -82,13 +82,13 @@ function ProgramsPageContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedGrade, setSelectedGrade] = useState<string>("all")
-  const [activeFilter, setActiveFilter] = useState<'all' | 'courses' | 'camps'>('all')
+  const [activeFilter, setActiveFilter] = useState<string>('all') // 改为动态的 category id
   const [locationSlug, setLocationSlug] = useState<string | null>(null)
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false)
 
-  // 从 URL query parameter 获取 category
+  // 从 URL query parameter 获取 category 和 location/franchise
   const categoryFromUrl = searchParams.get("category")
-  const locationFromUrl = searchParams.get("location")
+  const locationFromUrl = searchParams.get("location") || searchParams.get("franchise")
 
   useEffect(() => {
     if (categoryFromUrl) {
@@ -101,6 +101,10 @@ function ProgramsPageContent() {
       if (franchise) {
         setSelectedFranchise(franchise.id)
       }
+    } else {
+      // 如果没有 location 参数，重置筛选
+      setLocationSlug(null)
+      setSelectedFranchise("all")
     }
   }, [categoryFromUrl, locationFromUrl, franchises])
 
@@ -172,6 +176,42 @@ function ProgramsPageContent() {
     return Array.from(gradeSet).sort()
   }, [franchises])
 
+  // 获取当前 franchise 的所有 categories（用于 Type Filter）
+  const availableCategories = useMemo(() => {
+    if (selectedFranchise === "all") {
+      // 如果选择了所有 franchise，获取所有 categories
+      const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
+      franchises.forEach((franchise) => {
+        franchise.programs.forEach((program) => {
+          if (program.category) {
+            categorySet.set(program.category.id, {
+              id: program.category.id,
+              name: program.category.name,
+              display_name: program.category.display_name,
+            })
+          }
+        })
+      })
+      return Array.from(categorySet.values())
+    } else {
+      // 如果选择了特定 franchise，只获取该 franchise 的 categories
+      const franchise = franchises.find(f => f.id === selectedFranchise)
+      if (!franchise) return []
+      
+      const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
+      franchise.programs.forEach((program) => {
+        if (program.category) {
+          categorySet.set(program.category.id, {
+            id: program.category.id,
+            name: program.category.name,
+            display_name: program.category.display_name,
+          })
+        }
+      })
+      return Array.from(categorySet.values())
+    }
+  }, [franchises, selectedFranchise])
+
 
   // 按层级结构组织数据：franchise -> category -> programs -> instances
   const hierarchicalData = useMemo(() => {
@@ -193,15 +233,9 @@ function ProgramsPageContent() {
             return
           }
 
-          // Type 筛选 (courses vs camps)
-          if (activeFilter !== 'all') {
-            const categoryName = program.category?.name?.toLowerCase() || ''
-            if (activeFilter === 'courses' && !categoryName.includes('course')) {
+          // Type 筛选 (按 category)
+          if (activeFilter !== 'all' && program.category?.id !== activeFilter) {
               return
-            }
-            if (activeFilter === 'camps' && !categoryName.includes('camp')) {
-              return
-            }
           }
 
           // 过滤 instances
@@ -363,43 +397,33 @@ function ProgramsPageContent() {
             </div>
 
             <div className="flex flex-col md:flex-row gap-4 w-full xl:w-3/4">
-              {/* Type Filters */}
+              {/* Type Filters - 动态显示当前 franchise 的 categories */}
               <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto grow">
-                {[
-                  { id: 'all', label: 'All Types', icon: <Filter className="w-4 h-4" /> },
-                  { id: 'courses', label: 'Courses', icon: <BookOpen className="w-4 h-4" /> },
-                  { id: 'camps', label: 'Camps', icon: <Tent className="w-4 h-4" /> },
-                ].map((tab) => (
+                <button
+                  onClick={() => setActiveFilter('all')}
+                  className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+                    activeFilter === 'all' 
+                      ? 'bg-white text-blue-600 shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                  <span>All Types</span>
+                </button>
+                {availableCategories.map((category) => (
                   <button
-                    key={tab.id}
-                    onClick={() => setActiveFilter(tab.id as any)}
-                    className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex-1 justify-center ${
-                      activeFilter === tab.id 
+                    key={category.id}
+                    onClick={() => setActiveFilter(category.id)}
+                    className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+                      activeFilter === category.id 
                         ? 'bg-white text-blue-600 shadow-sm' 
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    {tab.icon}
-                    <span>{tab.label}</span>
+                    <BookOpen className="w-4 h-4" />
+                    <span>{category.display_name || category.name}</span>
                   </button>
                 ))}
-              </div>
-
-              {/* Location Selector */}
-              <div className="relative md:w-56 shrink-0">
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 pointer-events-none" />
-                <select 
-                  value={locationSlug || 'all'}
-                  onChange={(e) => handleLocationChange(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all cursor-pointer appearance-none shadow-sm"
-                >
-                  <option value="all">All Locations</option>
-                  {allFranchises
-                    .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '')
-                    .map((franchise) => (
-                    <option key={franchise.id} value={franchise.code}>{franchise.name}</option>
-                  ))}
-                </select>
               </div>
 
               {/* Grade Level Selector */}
@@ -591,7 +615,10 @@ function ProgramsPageContent() {
                     setActiveFilter('all'); 
                     setSelectedGrade('all'); 
                     setSearchQuery(''); 
+                    setSelectedCategory('all');
+                    if (locationSlug) {
                     handleLocationChange('all'); 
+                    }
                   }}
                   className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold hover:bg-blue-700 transition-all"
                 >

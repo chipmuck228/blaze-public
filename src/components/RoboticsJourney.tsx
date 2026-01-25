@@ -23,7 +23,7 @@ const journeySteps: JourneyStep[] = [
     title: "Explore",
     description: "Discover the world of building and coding through our fun, high-energy camps.",
     ctaText: "Join Our Camps",
-    ctaLink: "#camps",
+    ctaLink: "/camps",
     icon: <Zap className="w-8 h-8" />,
     gradientFrom: "#0f172a",
     gradientTo: "#0f172a",
@@ -35,7 +35,7 @@ const journeySteps: JourneyStep[] = [
     title: "Build",
     description: "Master the fundamentals of mechanics and programming in our structured courses.",
     ctaText: "Enroll in Our Courses",
-    ctaLink: "#courses",
+    ctaLink: "/course",
     icon: <Target className="w-8 h-8" />,
     gradientFrom: "#2563eb",
     gradientTo: "#2563eb"
@@ -46,7 +46,7 @@ const journeySteps: JourneyStep[] = [
     title: "Compete",
     description: "Join a team, build a tournament-ready robot, and compete at local and global events.",
     ctaText: "Join Our Teams",
-    ctaLink: "/programs",
+    ctaLink: "/competition",
     icon: <Users className="w-8 h-8" />,
     gradientFrom: "#e0f2fe",
     gradientTo: "#e0f2fe"

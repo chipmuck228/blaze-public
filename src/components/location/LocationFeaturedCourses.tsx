@@ -174,7 +174,7 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
               return (
                 <Link
                   key={category.id}
-                  href={`/course-catalog?franchise=${encodeURIComponent(franchiseCode)}&category=${encodeURIComponent(category.id)}`}
+                  href={`/programs?location=${encodeURIComponent(franchiseCode)}`}
                   className="min-w-[300px] w-[300px] md:min-w-[340px] md:w-[340px] snap-start bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col"
                 >
                   <div className="h-48 relative overflow-hidden shrink-0">
@@ -202,7 +202,7 @@ export function LocationFeaturedCourses({ franchiseCode, locationName }: Locatio
                       <div className="flex items-center gap-4 text-xs text-slate-500">
                         <div className="flex items-center gap-1">
                           <BookOpen className="h-4 w-4" />
-                          <span>View Courses</span>
+                          <span>View {category.name}</span>
                         </div>
                       </div>
                       <ArrowRight className="h-5 w-5 text-[#2563eb] group-hover:translate-x-1 transition-transform" />

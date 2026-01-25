@@ -85,14 +85,16 @@ interface RouteProps {
     const router = useRouter();
     const { data: session, status } = useSession();
 
-    // 从 URL 中获取 franchise 参数（用于 course-catalog 页面）
+    // 从 URL 中获取 franchise 参数（用于 course-catalog 和 programs 页面）
     useEffect(() => {
-      if (typeof window !== 'undefined' && pathname === '/course-catalog') {
+      if (typeof window !== 'undefined') {
+        if (pathname === '/course-catalog' || pathname === '/programs') {
         const params = new URLSearchParams(window.location.search);
-        const franchise = params.get('franchise');
+          const franchise = params.get('franchise') || params.get('location');
         setFranchiseFromUrl(franchise);
       } else {
         setFranchiseFromUrl(null);
+        }
       }
     }, [pathname]);
 
@@ -111,8 +113,8 @@ interface RouteProps {
         return matchedFranchise?.name || null;
       }
       
-      // 2. 检查是否是 /course-catalog 页面且 URL 中有 franchise 参数
-      if (pathname === '/course-catalog' && franchiseFromUrl) {
+      // 2. 检查是否是 /course-catalog 或 /programs 页面且 URL 中有 franchise/location 参数
+      if ((pathname === '/course-catalog' || pathname === '/programs') && franchiseFromUrl) {
         const matchedFranchise = franchiseGroups.find(
           (f) => f.code.toLowerCase() === franchiseFromUrl.toLowerCase()
         );

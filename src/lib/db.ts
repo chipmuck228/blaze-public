@@ -1432,12 +1432,12 @@ export interface CourseCategory {
 export interface CourseSeries {
   id: string
   category_id: string
-  franchise_id?: string | null
+  franchise_id: string // 必填字段，不能为 null
   name: string
   display_name: string
   description?: string
-  start_date?: string
-  end_date?: string
+  start_date: string // 必填字段
+  end_date: string // 必填字段
   display_order: number
   is_active: boolean
   created_at: string
