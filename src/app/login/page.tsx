@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { signIn, useSession } from "next-auth/react"
@@ -16,9 +16,9 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Navbar } from "@/components/Navbar"
-import { Mail, Lock, Chrome } from "lucide-react"
+import { Mail, Lock, Chrome, Loader2 } from "lucide-react"
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { update: updateSession } = useSession()
@@ -264,3 +264,17 @@ export default function LoginPage() {
   )
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <>
+        <Navbar />
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </>
+    }>
+      <LoginPageContent />
+    </Suspense>
+  )
+}
