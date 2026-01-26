@@ -57,6 +57,8 @@ interface InstanceDetails {
   available_capacity: number;
   is_full: boolean;
   price_override?: number;
+  age_min?: number;
+  age_max?: number;
   location?: {
     id: string;
     name: string;
@@ -82,6 +84,13 @@ interface InstanceDetails {
     display_name: string;
   } | null;
   course?: any;
+  discount?: {
+    has_discount: boolean;
+    original_price?: number;
+    discounted_price?: number;
+    discount_amount?: number;
+    discount_percentage?: number;
+  };
 }
 
 export const CourseDetail = ({ course }: CourseDetailProps) => {
@@ -395,13 +404,31 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         if (selectedFranchise) {
           params.set('franchise', selectedFranchise);
         }
-        const res = await fetch(`/api/courses/${course.id}/instances?${params.toString()}`);
+        
+        // 检测是否是offering（通过检查isOffering标记或offering_type字段）
+        const isOffering = (course as any).isOffering === true || (course as any).offering_type !== undefined;
+        
+        // 根据类型选择不同的API端点
+        const apiUrl = isOffering
+          ? `/api/offerings/${course.id}/instances?${params.toString()}`
+          : `/api/courses/${course.id}/instances?${params.toString()}`;
+        
+        console.log('[CourseDetail] Fetching instances:', {
+          courseId: course.id,
+          isOffering,
+          apiUrl,
+          franchise: selectedFranchise,
+        });
+        
+        const res = await fetch(apiUrl);
         if (!res.ok) {
-          throw new Error("Failed to load instances");
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to load instances");
         }
         const data = await res.json();
         console.log('[CourseDetail] Fetched instances:', {
           courseId: course.id,
+          isOffering,
           franchise: selectedFranchise,
           instancesCount: data?.length || 0,
           instances: data?.map((inst: any) => ({
@@ -492,6 +519,14 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
   // 添加到购物车
   const handleAddToCart = async (instanceId?: string) => {
+    // 检查用户是否登录
+    if (!session?.user) {
+      // 保存当前URL（包括查询参数）作为回调地址
+      const currentUrl = window.location.pathname + window.location.search;
+      router.push('/login?callbackUrl=' + encodeURIComponent(currentUrl));
+      return;
+    }
+
     const targetInstanceId = instanceId || selectedInstanceId;
     
     if (!targetInstanceId) {
@@ -522,6 +557,13 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         }
       } else {
         const error = await response.json();
+        // 如果是401未授权错误，跳转到登录页面
+        if (response.status === 401) {
+          const currentUrl = window.location.pathname + window.location.search;
+          router.push('/login?callbackUrl=' + encodeURIComponent(currentUrl));
+          return;
+        }
+        
         if (error.code === 'CAPACITY_FULL' && error.suggestion === 'waitlist') {
           // 询问是否加入等待列表
           if (confirm('This course is full. Would you like to join the waitlist?')) {
@@ -545,6 +587,14 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
   // 加入等待列表
   const handleJoinWaitlist = async (instanceId: string) => {
+    // 检查用户是否登录
+    if (!session?.user) {
+      // 保存当前URL（包括查询参数）作为回调地址
+      const currentUrl = window.location.pathname + window.location.search;
+      router.push('/login?callbackUrl=' + encodeURIComponent(currentUrl));
+      return;
+    }
+
     try {
       const response = await fetch('/api/enrollments/waitlist', {
         method: 'POST',
@@ -562,6 +612,12 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         setSelectedInstanceId(null);
       } else {
         const error = await response.json();
+        // 如果是401未授权错误，跳转到登录页面
+        if (response.status === 401) {
+          const currentUrl = window.location.pathname + window.location.search;
+          router.push('/login?callbackUrl=' + encodeURIComponent(currentUrl));
+          return;
+        }
         alert(error.error || 'Failed to join waitlist');
       }
     } catch (err) {
@@ -730,9 +786,18 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
     : course;
 
   // 获取价格和库存信息
-  const basePrice = currentInstance?.price_override || displayCourse.base_price || 0;
+  // 如果instance有price_override，使用它；否则使用offering的base_price
+  const basePrice = currentInstance?.price_override !== null && currentInstance?.price_override !== undefined
+    ? currentInstance.price_override
+    : displayCourse.base_price || 0;
   const availableSpots = currentInstance?.available_capacity || 0;
   const isFull = currentInstance?.is_full || false;
+  
+  // 折扣信息
+  const hasDiscount = currentInstance?.discount?.has_discount || false;
+  const originalPrice = currentInstance?.discount?.original_price;
+  const discountedPrice = currentInstance?.discount?.discounted_price;
+  const discountPercentage = currentInstance?.discount?.discount_percentage;
   
   // 获取日期和位置信息
   const dates = currentInstance?.start_date 
@@ -744,16 +809,24 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
     ? [currentInstance.franchise.name]
     : ['Multiple Locations'];
   
-  // 获取年龄组
-  const ageGroup = displayCourse.age_min && displayCourse.age_max
-    ? `Ages ${displayCourse.age_min}-${displayCourse.age_max}`
-    : displayCourse.age_min
-    ? `Ages ${displayCourse.age_min}+`
-    : displayCourse.age_max
-    ? `Up to Age ${displayCourse.age_max}`
-    : displayCourse.grade_level
-    ? `Grades ${displayCourse.grade_level}`
-    : 'All Ages';
+  // 获取年龄组：优先使用currentInstance的age信息（instance_v2表），否则使用course的age信息
+  const ageGroup = currentInstance?.age_min !== undefined || currentInstance?.age_max !== undefined
+    ? (currentInstance.age_min !== null && currentInstance.age_max !== null
+        ? `Ages ${currentInstance.age_min}-${currentInstance.age_max}`
+        : currentInstance.age_min !== null
+        ? `Ages ${currentInstance.age_min}+`
+        : currentInstance.age_max !== null
+        ? `Up to Age ${currentInstance.age_max}`
+        : 'All Ages')
+    : (displayCourse.age_min && displayCourse.age_max
+        ? `Ages ${displayCourse.age_min}-${displayCourse.age_max}`
+        : displayCourse.age_min
+        ? `Ages ${displayCourse.age_min}+`
+        : displayCourse.age_max
+        ? `Up to Age ${displayCourse.age_max}`
+        : displayCourse.grade_level
+        ? `Grades ${displayCourse.grade_level}`
+        : 'All Ages');
 
   return (
     <div className="bg-slate-50 min-h-screen pb-24">
@@ -846,7 +919,21 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
              {currentInstance && (
                <div className="hidden md:block bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-2xl min-w-[300px] text-center">
                   <p className="text-slate-300 text-sm uppercase tracking-widest font-bold mb-2">Registration Fee</p>
-                  <div className="text-5xl font-black text-white mb-2">${basePrice.toFixed(2)}</div>
+                  {hasDiscount && originalPrice ? (
+                    <div className="mb-2">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <span className="text-2xl font-bold text-slate-400 line-through">${originalPrice.toFixed(2)}</span>
+                        {discountPercentage && (
+                          <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
+                            -{discountPercentage}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-5xl font-black text-white">${basePrice.toFixed(2)}</div>
+                    </div>
+                  ) : (
+                    <div className="text-5xl font-black text-white mb-2">${basePrice.toFixed(2)}</div>
+                  )}
                   <p className="text-slate-400 text-sm mb-6">{isFull ? 'Waitlist Only' : `${availableSpots} spots remaining`}</p>
                   <button 
                     onClick={() => handleAddToCart(currentInstance.id)}
@@ -1056,6 +1143,20 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                                   <span>{instance.location.name}</span>
                                 </div>
                               )}
+                              {(instance.age_min !== undefined || instance.age_max !== undefined) && (
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" />
+                                  <span>
+                                    {instance.age_min !== null && instance.age_max !== null
+                                      ? `Ages ${instance.age_min}-${instance.age_max}`
+                                      : instance.age_min !== null
+                                      ? `Ages ${instance.age_min}+`
+                                      : instance.age_max !== null
+                                      ? `Up to Age ${instance.age_max}`
+                                      : 'All Ages'}
+                                  </span>
+                                </div>
+                              )}
                               {instance.start_date && (
                                 <div className="flex items-center gap-2">
                                   <Calendar className="h-4 w-4" />
@@ -1106,7 +1207,21 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
             {/* Mobile Booking Card */}
             {currentInstance && (
               <div className="md:hidden bg-white rounded-3xl p-6 shadow-lg border border-slate-200 text-center">
-                  <div className="text-4xl font-black text-slate-900 mb-2">${basePrice.toFixed(2)}</div>
+                  {hasDiscount && originalPrice ? (
+                    <div className="mb-2">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <span className="text-xl font-bold text-slate-400 line-through">${originalPrice.toFixed(2)}</span>
+                        {discountPercentage && (
+                          <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
+                            -{discountPercentage}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-4xl font-black text-slate-900">${basePrice.toFixed(2)}</div>
+                    </div>
+                  ) : (
+                    <div className="text-4xl font-black text-slate-900 mb-2">${basePrice.toFixed(2)}</div>
+                  )}
                   <button 
                     onClick={() => handleAddToCart(currentInstance.id)}
                     disabled={
@@ -1292,6 +1407,20 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                             <div className="flex items-center gap-2">
                               <MapPin className="h-4 w-4" />
                               <span>{instance.location.name}</span>
+                            </div>
+                          )}
+                          {(instance.age_min !== undefined || instance.age_max !== undefined) && (
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              <span>
+                                {instance.age_min !== null && instance.age_max !== null
+                                  ? `Ages ${instance.age_min}-${instance.age_max}`
+                                  : instance.age_min !== null
+                                  ? `Ages ${instance.age_min}+`
+                                  : instance.age_max !== null
+                                  ? `Up to Age ${instance.age_max}`
+                                  : 'All Ages'}
+                              </span>
                             </div>
                           )}
                           {instance.start_date && (

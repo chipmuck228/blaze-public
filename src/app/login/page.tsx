@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { signIn, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
@@ -20,11 +20,15 @@ import { Mail, Lock, Chrome } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { update: updateSession } = useSession()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  
+  // 从URL获取callbackUrl
+  const callbackUrl = searchParams.get('callbackUrl') || '/'
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,8 +46,9 @@ export default function LoginPage() {
         setError("Invalid email or password")
         setIsLoading(false)
       } else {
-        // 登录成功，跳转到首页
-        router.push("/")
+        // 登录成功，跳转到callbackUrl或首页
+        await updateSession()
+        router.push(callbackUrl)
         router.refresh()
       }
     } catch (error) {
@@ -57,7 +62,7 @@ export default function LoginPage() {
     setError("")
     try {
       const result = await signIn("google", { 
-        callbackUrl: "/",
+        callbackUrl: callbackUrl,
         redirect: false 
       })
       
@@ -102,8 +107,8 @@ export default function LoginPage() {
         // 等待一小段时间确保 session 更新
         await new Promise(resolve => setTimeout(resolve, 300))
         
-        // 重定向到首页
-        router.push("/")
+        // 重定向到callbackUrl或首页
+        router.push(callbackUrl)
         router.refresh()
       } else if (result === undefined || result === null) {
         // result 为 undefined/null，可能是 OAuth 回调已完成但 session 还未更新
@@ -114,7 +119,7 @@ export default function LoginPage() {
         } catch (sessionError) {
           console.error("Error updating session:", sessionError)
         }
-        router.push("/")
+        router.push(callbackUrl)
         router.refresh()
       } else {
         // 其他情况：尝试更新 session 并重定向
@@ -125,7 +130,7 @@ export default function LoginPage() {
         } catch (sessionError) {
           console.error("Error updating session:", sessionError)
         }
-        router.push("/")
+        router.push(callbackUrl)
         router.refresh()
       }
     } catch (error: any) {

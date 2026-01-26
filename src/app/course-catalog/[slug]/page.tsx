@@ -153,6 +153,9 @@ export default async function CourseDetailPage({
               target_audience: offering.target_audience,
               learning_outcomes: offering.learning_outcomes,
               prerequisites: offering.prerequisites,
+              // 添加标记，表示这是offering而不是course
+              isOffering: true,
+              offering_type: offering.offering_type,
               // 这些字段在新架构中不存在于 offering，设置为 null
               duration_hours: null,
               session_count: null,

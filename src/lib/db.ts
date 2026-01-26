@@ -3888,83 +3888,93 @@ export async function getEnrollmentConfig(key: string): Promise<string | null> {
 
 // 获取实例可用容量
 export async function getInstanceAvailableCapacity(instanceId: string): Promise<number> {
-  const { data, error } = await supabaseAdmin
-    .rpc('get_instance_available_capacity', { instance_id_param: instanceId })
+  // 优先从 instance_v2 查询（新表）
+  const { data: instanceV2, error: instanceV2Error } = await supabaseAdmin
+    .from('instance_v2')
+    .select('max_students, current_students')
+    .eq('id', instanceId)
+    .single()
 
-  if (error || data === null) {
-    // 如果函数不存在或出错，手动计算
-    // 优先从 instance_v2 查询
-    let instance: any = null
-    let maxStudents = 0
+  if (!instanceV2Error && instanceV2) {
+    // 对于instance_v2表，直接使用表中的max_students和current_students字段
+    // instance_v2表已经包含了容量信息，不需要查询course_enrollments表
+    const maxStudents = instanceV2.max_students ?? 0
+    const currentStudents = instanceV2.current_students ?? 0
+    const availableCapacity = Math.max(0, maxStudents - currentStudents)
     
-    const { data: instanceV2, error: instanceV2Error } = await supabaseAdmin
-      .from('instance_v2')
-      .select('max_students, current_students')
-      .eq('id', instanceId)
-      .single()
-
-    if (!instanceV2Error && instanceV2) {
-      instance = instanceV2
-      maxStudents = instanceV2.max_students ?? 0
-    } else {
-      // 向后兼容：查询旧表
-      const { data: instanceData, error: instanceError } = await supabaseAdmin
-        .from('course_instances')
-        .select('max_students, current_students')
-        .eq('id', instanceId)
-        .single()
-
-      if (instanceError || !instanceData) {
-        return 0
-      }
-
-      instance = instanceData
-      maxStudents = instanceData.max_students ?? 0
-    }
-    
-    // 统计各种状态的注册数量
-    // course_enrollments.instance_id 可能指向旧表或新表的 instance ID
-    const [enrolled, reserved, cart] = await Promise.all([
-      supabaseAdmin
-        .from('course_enrollments')
-        .select('id', { count: 'exact', head: true })
-        .eq('instance_id', instanceId)
-        .eq('status', 'enrolled'),
-      supabaseAdmin
-        .from('course_enrollments')
-        .select('id', { count: 'exact', head: true })
-        .eq('instance_id', instanceId)
-        .eq('status', 'reserved')
-        .gt('reserved_expires_at', new Date().toISOString()),
-      supabaseAdmin
-        .from('course_enrollments')
-        .select('id', { count: 'exact', head: true })
-        .eq('instance_id', instanceId)
-        .eq('status', 'cart')
-        .gt('cart_expires_at', new Date().toISOString()),
-    ])
-
-    const enrolledCount = enrolled.count || 0
-    const reservedCount = reserved.count || 0
-    const cartCount = cart.count || 0
-
-    const availableCapacity = Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
-    
-    // 调试日志：记录容量计算详情
+    // 调试日志
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[getInstanceAvailableCapacity ${instanceId}]`, {
+      console.log(`[getInstanceAvailableCapacity ${instanceId} - instance_v2]`, {
         max_students: maxStudents,
-        enrolled_count: enrolledCount,
-        reserved_count: reservedCount,
-        cart_count: cartCount,
+        current_students: currentStudents,
         available_capacity: availableCapacity,
       })
     }
-
+    
     return availableCapacity
   }
 
-  return data as number
+  // 向后兼容：查询旧表 course_instances
+  const { data: instanceData, error: instanceError } = await supabaseAdmin
+    .from('course_instances')
+    .select('max_students, current_students')
+    .eq('id', instanceId)
+    .single()
+
+  if (instanceError || !instanceData) {
+    // 如果旧表也找不到，尝试使用 RPC 函数（最后的后备方案）
+    const { data: rpcData, error: rpcError } = await supabaseAdmin
+      .rpc('get_instance_available_capacity', { instance_id_param: instanceId })
+    
+    if (!rpcError && rpcData !== null) {
+      return rpcData as number
+    }
+    
+    console.warn(`[getInstanceAvailableCapacity] Instance ${instanceId} not found in both instance_v2 and course_instances`)
+    return 0
+  }
+
+  // 对于旧表，查询所有状态的注册数量
+  const maxStudents = instanceData.max_students ?? 0
+  
+  const [enrolled, reserved, cart] = await Promise.all([
+    supabaseAdmin
+      .from('course_enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('instance_id', instanceId)
+      .eq('status', 'enrolled'),
+    supabaseAdmin
+      .from('course_enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('instance_id', instanceId)
+      .eq('status', 'reserved')
+      .gt('reserved_expires_at', new Date().toISOString()),
+    supabaseAdmin
+      .from('course_enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('instance_id', instanceId)
+      .eq('status', 'cart')
+      .gt('cart_expires_at', new Date().toISOString()),
+  ])
+
+  const enrolledCount = enrolled.count || 0
+  const reservedCount = reserved.count || 0
+  const cartCount = cart.count || 0
+
+  const availableCapacity = Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
+  
+  // 调试日志
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[getInstanceAvailableCapacity ${instanceId} - legacy table]`, {
+      max_students: maxStudents,
+      enrolled_count: enrolledCount,
+      reserved_count: reservedCount,
+      cart_count: cartCount,
+      available_capacity: availableCapacity,
+    })
+  }
+  
+  return availableCapacity
 }
 
 // 将课程实例加入注册清单
@@ -3985,7 +3995,18 @@ export async function addToCart(userId: string, instanceId: string, notes?: stri
   // 检查可用容量
   const availableCapacity = await getInstanceAvailableCapacity(instanceId)
   
+  // 添加调试日志
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[addToCart] Capacity check for instance ${instanceId}:`, {
+      available_capacity: availableCapacity,
+      user_id: userId,
+    })
+  }
+  
   if (availableCapacity <= 0) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`[addToCart] Instance ${instanceId} is full (available_capacity: ${availableCapacity})`)
+    }
     throw new Error('Course instance is full. Please join the waitlist.')
   }
 

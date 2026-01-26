@@ -39,6 +39,8 @@ export async function GET(
         current_students,
         status,
         price_override,
+        age_min,
+        age_max,
         is_active,
         location_id,
         location:course_locations(
@@ -167,14 +169,20 @@ export async function GET(
         }
       }
 
-      // 获取可用容量（需要检查 getInstanceAvailableCapacity 是否支持 instance_v2）
-      let availableCapacity = 0
-      try {
-        availableCapacity = await getInstanceAvailableCapacity(id)
-      } catch (error) {
-        console.warn(`[Instances API] Error getting available capacity, using instance data:`, error)
-        availableCapacity = (instanceV2.max_students || 0) - (instanceV2.current_students || 0)
-      }
+      // 对于instance_v2表，直接使用表中的max_students和current_students字段
+      // 不需要查询course_enrollments表，因为instance_v2表已经包含了容量信息
+      const maxStudents = instanceV2.max_students ?? 0
+      const currentStudents = instanceV2.current_students ?? 0
+      const availableCapacity = Math.max(0, maxStudents - currentStudents)
+
+      // 计算折扣信息
+      const basePrice = offering.base_price ?? 0
+      const priceOverride = instanceV2.price_override
+      const hasDiscount = priceOverride !== null && priceOverride < basePrice
+      const discountAmount = hasDiscount ? basePrice - priceOverride : 0
+      const discountPercentage = hasDiscount && basePrice > 0 
+        ? Math.round((discountAmount / basePrice) * 100) 
+        : 0
 
       // 构建返回数据（保持与旧 API 兼容的格式）
       const result = {
@@ -190,6 +198,9 @@ export async function GET(
         current_students: instanceV2.current_students,
         available_capacity: availableCapacity,
         is_full: availableCapacity <= 0,
+        price_override: instanceV2.price_override,
+        age_min: instanceV2.age_min,
+        age_max: instanceV2.age_max,
         location: instanceV2.location,
         franchise: franchise,
         category: category ? {
@@ -218,6 +229,16 @@ export async function GET(
           age_max: null, // Offerings 不再有 age_max，在 instance 层面
           grade_level: null, // Offerings 不再有 grade_level，在 instance 层面
           poster_url: offering.poster_url,
+        },
+        // 折扣信息
+        discount: hasDiscount ? {
+          has_discount: true,
+          original_price: basePrice,
+          discounted_price: priceOverride,
+          discount_amount: discountAmount,
+          discount_percentage: discountPercentage,
+        } : {
+          has_discount: false,
         },
       }
 

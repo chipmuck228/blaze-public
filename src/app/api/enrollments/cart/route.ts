@@ -108,6 +108,11 @@ export async function POST(request: Request) {
     }
 
     try {
+      // 添加调试日志：记录添加购物车请求
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Cart API] Adding instance ${instance_id} to cart for user ${session.user.id}`)
+      }
+      
       const enrollment = await addToCart(session.user.id, instance_id, notes)
 
       return NextResponse.json({
@@ -115,6 +120,16 @@ export async function POST(request: Request) {
         message: "Added to cart successfully",
       })
     } catch (error: any) {
+      // 添加调试日志：记录错误详情
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`[Cart API] Error adding to cart:`, {
+          instance_id,
+          user_id: session.user.id,
+          error_message: error.message,
+          error_stack: error.stack,
+        })
+      }
+      
       // 如果是容量不足，返回特殊错误码
       if (error.message.includes('full') || error.message.includes('capacity')) {
         return NextResponse.json(
