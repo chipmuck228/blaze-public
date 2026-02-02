@@ -41,16 +41,16 @@ export async function GET(
         price_override,
         age_min,
         age_max,
+        target_grades,
+        session_count,
+        duration_hours,
+        duration_days,
+        days_of_week,
+        timezone,
+        instructor_name,
+        notes,
         is_active,
         location_id,
-        location:course_locations(
-          id,
-          name,
-          address,
-          city,
-          state,
-          zip_code
-        ),
         series:course_series(
           id,
           name,
@@ -169,6 +169,61 @@ export async function GET(
         }
       }
 
+      // 获取 location (campus) 信息
+      // 由于 Supabase 可能无法识别 instance_v2 和 campuses 之间的外键关系，
+      // 我们单独查询 campuses 表
+      let location: any = null
+      if (instanceV2.location_id) {
+        try {
+          // 方法1: 直接通过 location_id 查询
+          const { data: campusData, error: campusError } = await supabaseAdmin
+            .from('campuses')
+            .select('id, name, address, city, state, zip_code')
+            .eq('id', instanceV2.location_id)
+            .single()
+
+          if (!campusError && campusData) {
+            location = campusData
+          } else {
+            console.warn(`[Instances API] Campus not found for location_id: ${instanceV2.location_id}`)
+            // 方法2: 如果直接查询失败，尝试通过 franchise_id 查询该 franchise 下的所有 campuses
+            if (franchise?.id) {
+              const { data: campusesData, error: campusesError } = await supabaseAdmin
+                .from('campuses')
+                .select('id, name, address, city, state, zip_code')
+                .eq('franchise_id', franchise.id)
+                .eq('is_active', true)
+
+              if (!campusesError && campusesData && campusesData.length > 0) {
+                // 尝试匹配 location_id，如果匹配不到，使用第一个 campus
+                const matchedCampus = campusesData.find(c => c.id === instanceV2.location_id)
+                location = matchedCampus || campusesData[0]
+                console.log(`[Instances API] Found campus via franchise_id:`, location)
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`[Instances API] Error fetching campus:`, error)
+        }
+      } else if (franchise?.id) {
+        // 如果 instance 没有 location_id，但有 franchise_id，尝试获取该 franchise 的第一个 campus
+        try {
+          const { data: campusesData, error: campusesError } = await supabaseAdmin
+            .from('campuses')
+            .select('id, name, address, city, state, zip_code')
+            .eq('franchise_id', franchise.id)
+            .eq('is_active', true)
+            .limit(1)
+
+          if (!campusesError && campusesData && campusesData.length > 0) {
+            location = campusesData[0]
+            console.log(`[Instances API] Using first campus from franchise:`, location)
+          }
+        } catch (error) {
+          console.error(`[Instances API] Error fetching campus from franchise:`, error)
+        }
+      }
+
       // 对于instance_v2表，直接使用表中的max_students和current_students字段
       // 不需要查询course_enrollments表，因为instance_v2表已经包含了容量信息
       const maxStudents = instanceV2.max_students ?? 0
@@ -201,7 +256,16 @@ export async function GET(
         price_override: instanceV2.price_override,
         age_min: instanceV2.age_min,
         age_max: instanceV2.age_max,
-        location: instanceV2.location,
+        target_grades: instanceV2.target_grades,
+        session_count: instanceV2.session_count,
+        duration_hours: instanceV2.duration_hours,
+        duration_days: instanceV2.duration_days,
+        days_of_week: instanceV2.days_of_week,
+        timezone: instanceV2.timezone,
+        instructor_name: instanceV2.instructor_name,
+        notes: instanceV2.notes,
+        status: instanceV2.status,
+        location: location,
         franchise: franchise,
         category: category ? {
           id: category.id,
@@ -223,11 +287,13 @@ export async function GET(
           prerequisites: offering.prerequisites,
           cancellation_policy: franchise?.cancellation_policy || null,
           base_price: offering.base_price,
-          duration_hours: null, // Offerings 不再有 duration_hours，在 instance 层面
-          session_count: null, // Offerings 不再有 session_count，在 instance 层面
-          age_min: null, // Offerings 不再有 age_min，在 instance 层面
-          age_max: null, // Offerings 不再有 age_max，在 instance 层面
-          grade_level: null, // Offerings 不再有 grade_level，在 instance 层面
+          duration_hours: instanceV2.duration_hours, // 使用 instance 的 duration_hours
+          session_count: instanceV2.session_count, // 使用 instance 的 session_count
+          age_min: instanceV2.age_min, // 使用 instance 的 age_min
+          age_max: instanceV2.age_max, // 使用 instance 的 age_max
+          grade_level: instanceV2.target_grades && Array.isArray(instanceV2.target_grades) && instanceV2.target_grades.length > 0
+            ? instanceV2.target_grades[0]
+            : (instanceV2.target_grades || null), // 使用 instance 的 target_grades
           poster_url: offering.poster_url,
         },
         // 折扣信息

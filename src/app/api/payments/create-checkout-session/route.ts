@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { stripe } from '@/lib/stripe'
 import { 
-  checkoutCart, 
-  calculateEnrollmentTotal, 
-  updateEnrollmentStripeInfo,
-  getEnrollmentById 
+  checkoutInstanceEnrollments, 
+  calculateInstanceEnrollmentTotal, 
+  updateInstanceEnrollmentStripeInfo,
+  getInstanceEnrollmentById 
 } from '@/lib/db'
+import { isStudentAccount } from '@/lib/permissions'
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      )
+    }
+
+    // 验证用户不是学生账户（学生账户不能支付）
+    const isStudent = await isStudentAccount(session.user.id)
+    if (isStudent) {
+      return NextResponse.json(
+        { 
+          error: 'Student accounts cannot checkout. Payment must be initiated by the payer.',
+          code: 'STUDENT_CANNOT_PAY'
+        },
+        { status: 403 }
       )
     }
 
@@ -38,14 +51,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // 验证所有注册都属于当前用户且状态为 cart（checkoutCart 会进行更详细的验证）
-    // 这里只做基本检查，详细验证在 checkoutCart 中进行
+    // 验证所有注册都属于当前用户（付款人）且状态为 cart
     const enrollments = await Promise.all(
-      enrollment_ids.map(id => getEnrollmentById(id))
+      enrollment_ids.map(id => getInstanceEnrollmentById(id))
     )
 
     const invalidEnrollments = enrollments.filter(
-      (e) => !e || e.user_id !== session.user.id || e.status !== 'cart'
+      (e) => !e || e.payer_user_id !== session.user.id || e.status !== 'cart' || e.is_synced === true
     )
 
     if (invalidEnrollments.length > 0) {
@@ -55,10 +67,13 @@ export async function POST(request: Request) {
         e && e.status === 'cart' && e.cart_expires_at && e.cart_expires_at <= now
       )
       const wrongStatus = invalidEnrollments.filter(e => e && e.status !== 'cart')
+      const synced = invalidEnrollments.filter(e => e && e.is_synced === true)
       
       let errorMessage = 'Some enrollments are invalid or not in cart'
       if (expired.length > 0) {
         errorMessage = 'Some items in your cart have expired. Please refresh the page and try again.'
+      } else if (synced.length > 0) {
+        errorMessage = 'Cannot checkout synced cart items. Please checkout from the payer account.'
       } else if (wrongStatus.length > 0) {
         errorMessage = `Some enrollments are no longer in cart (status: ${wrongStatus.map(e => e?.status).join(', ')}).`
       }
@@ -70,13 +85,13 @@ export async function POST(request: Request) {
     }
 
     // 先结账（转为 reserved 状态）
-    const reservedEnrollments = await checkoutCart(
+    const reservedEnrollments = await checkoutInstanceEnrollments(
       enrollment_ids,
       session.user.id
     )
 
     // 计算总金额
-    const { total, currency, items } = await calculateEnrollmentTotal(enrollment_ids)
+    const { total, currency, items } = await calculateInstanceEnrollmentTotal(enrollment_ids)
 
     if (total <= 0) {
       return NextResponse.json(
@@ -113,7 +128,7 @@ export async function POST(request: Request) {
             currency: currency.toLowerCase(),
             product_data: {
               name: item.courseName,
-              ...(item.instanceName && { description: `Instance: ${item.instanceName}` }),
+              ...(item.instanceName && { description: `${item.instanceName} - ${item.studentName}` }),
             },
             unit_amount: Math.round(item.amount * 100), // 转换为分（Stripe 使用最小货币单位）
           },
@@ -141,7 +156,7 @@ export async function POST(request: Request) {
     // 更新所有注册记录，保存 Stripe Checkout Session ID
     await Promise.all(
       enrollment_ids.map(id =>
-        updateEnrollmentStripeInfo(id, {
+        updateInstanceEnrollmentStripeInfo(id, {
           checkout_session_id: checkoutSession.id,
         })
       )
@@ -161,4 +176,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

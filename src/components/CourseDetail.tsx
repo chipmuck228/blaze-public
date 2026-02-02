@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, ArrowLeft, AlertCircle, Loader2, ShoppingCart, ShieldCheck, Award } from "lucide-react";
+import { CheckCircle2, Users, Target, BookOpen, Clock, Calendar, DollarSign, MapPin, ArrowRight, ArrowLeft, AlertCircle, Loader2, ShoppingCart, ShieldCheck, Award, GraduationCap, UserCheck, FileText } from "lucide-react";
 import { CourseWithDetails } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
 import { CancellationPolicy } from "./CancellationPolicy";
@@ -54,11 +54,21 @@ interface InstanceDetails {
   end_time?: string;
   class_time?: string;
   max_students?: number;
+  current_students?: number;
   available_capacity: number;
   is_full: boolean;
   price_override?: number;
   age_min?: number;
   age_max?: number;
+  target_grades?: string[] | null;
+  session_count?: number | null;
+  duration_hours?: number | null;
+  duration_days?: number | null;
+  days_of_week?: number[] | null;
+  timezone?: string;
+  instructor_name?: string | null;
+  notes?: string | null;
+  status?: string;
   location?: {
     id: string;
     name: string;
@@ -117,6 +127,10 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
     prerequisitesNotMet?: boolean;
     missingPrerequisites?: any[];
   } | null>(null);
+  const [students, setStudents] = useState<Array<{ id: string; name: string }>>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [isStudentSelectDialogOpen, setIsStudentSelectDialogOpen] = useState(false);
+  const [pendingInstanceId, setPendingInstanceId] = useState<string | null>(null);
 
   // 从 URL 参数获取 instance ID 和 franchise
   useEffect(() => {
@@ -517,6 +531,32 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
     setIsEnrollDialogOpen(true);
   };
 
+  // 获取用户的学生列表
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!session?.user) {
+        setStudents([]);
+        return;
+      }
+
+      try {
+        setIsLoadingStudents(true);
+        const response = await fetch('/api/students');
+        if (response.ok) {
+          const data = await response.json();
+          setStudents(data.students || []);
+        }
+      } catch (error) {
+        console.error('Error fetching students:', error);
+        setStudents([]);
+      } finally {
+        setIsLoadingStudents(false);
+      }
+    };
+
+    fetchStudents();
+  }, [session?.user]);
+
   // 添加到购物车
   const handleAddToCart = async (instanceId?: string) => {
     // 检查用户是否登录
@@ -534,6 +574,45 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
       return;
     }
 
+    // 如果学生列表还在加载中，等待加载完成
+    if (isLoadingStudents) {
+      // 等待学生列表加载完成
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (!isLoadingStudents) {
+            clearInterval(checkInterval);
+            resolve(null);
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve(null);
+        }, 5000); // 最多等待5秒
+      });
+    }
+
+    // 检查学生列表
+    if (students.length === 0) {
+      // 没有学生，提示用户先添加学生
+      if (confirm('You need to add a student first. Would you like to go to the students page?')) {
+        router.push('/students/new');
+      }
+      return;
+    }
+
+    // 如果只有一个学生，直接使用
+    if (students.length === 1) {
+      await addToCartWithStudent(targetInstanceId, students[0].id, students[0].name);
+      return;
+    }
+
+    // 如果有多个学生，显示选择对话框
+    setPendingInstanceId(targetInstanceId);
+    setIsStudentSelectDialogOpen(true);
+  };
+
+  // 使用选定的学生添加到购物车
+  const addToCartWithStudent = async (instanceId: string, studentId: string, studentName: string) => {
     setIsAddingToCart(true);
     try {
       const response = await fetch('/api/enrollments/cart', {
@@ -542,7 +621,9 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          instance_id: targetInstanceId,
+          instance_id: instanceId,
+          student_id: studentId,
+          student_name: studentName,
         }),
       });
 
@@ -550,6 +631,8 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         const data = await response.json();
         setIsEnrollDialogOpen(false);
         setSelectedInstanceId(null);
+        setIsStudentSelectDialogOpen(false);
+        setPendingInstanceId(null);
         
         // 询问用户是否立即结账
         if (confirm('Added to cart successfully! Would you like to proceed to checkout?')) {
@@ -567,7 +650,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         if (error.code === 'CAPACITY_FULL' && error.suggestion === 'waitlist') {
           // 询问是否加入等待列表
           if (confirm('This course is full. Would you like to join the waitlist?')) {
-            handleJoinWaitlist(targetInstanceId);
+            handleJoinWaitlist(instanceId, studentId, studentName);
           }
         } else if (error.code === 'PREREQUISITES_NOT_MET') {
           alert(error.error || 'You need to complete prerequisite courses first.');
@@ -586,12 +669,22 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
   };
 
   // 加入等待列表
-  const handleJoinWaitlist = async (instanceId: string) => {
+  const handleJoinWaitlist = async (instanceId: string, studentId?: string, studentName?: string) => {
     // 检查用户是否登录
     if (!session?.user) {
       // 保存当前URL（包括查询参数）作为回调地址
       const currentUrl = window.location.pathname + window.location.search;
       router.push('/login?callbackUrl=' + encodeURIComponent(currentUrl));
+      return;
+    }
+
+    // 如果没有提供学生信息，使用第一个学生
+    const finalStudentId = studentId || (students.length > 0 ? students[0].id : null);
+    const finalStudentName = studentName || (students.length > 0 ? students[0].name : null);
+
+    if (!finalStudentId || !finalStudentName) {
+      alert('Please add a student first.');
+      router.push('/students/new');
       return;
     }
 
@@ -603,6 +696,8 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         },
         body: JSON.stringify({
           instance_id: instanceId,
+          student_id: finalStudentId,
+          student_name: finalStudentName,
         }),
       });
 
@@ -819,13 +914,13 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
         ? `Up to Age ${currentInstance.age_max}`
         : 'All Ages')
     : (displayCourse.age_min && displayCourse.age_max
-        ? `Ages ${displayCourse.age_min}-${displayCourse.age_max}`
-        : displayCourse.age_min
-        ? `Ages ${displayCourse.age_min}+`
-        : displayCourse.age_max
-        ? `Up to Age ${displayCourse.age_max}`
-        : displayCourse.grade_level
-        ? `Grades ${displayCourse.grade_level}`
+    ? `Ages ${displayCourse.age_min}-${displayCourse.age_max}`
+    : displayCourse.age_min
+    ? `Ages ${displayCourse.age_min}+`
+    : displayCourse.age_max
+    ? `Up to Age ${displayCourse.age_max}`
+    : displayCourse.grade_level
+    ? `Grades ${displayCourse.grade_level}`
         : 'All Ages');
 
   return (
@@ -874,17 +969,13 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 pb-24">
           {/* Back Link */}
-          <Link 
-            href={currentInstance?.franchise 
-              ? `/course-catalog?franchise=${currentInstance.franchise.code}` 
-              : selectedFranchise 
-              ? `/course-catalog?franchise=${selectedFranchise}` 
-              : '/course-catalog'} 
+          <button 
+            onClick={() => router.back()}
             className="inline-flex items-center text-slate-400 hover:text-white mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Programs
-          </Link>
+          </button>
           
           <div className="flex flex-col md:flex-row gap-8 items-start">
              <div className="flex-grow">
@@ -932,7 +1023,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                       <div className="text-5xl font-black text-white">${basePrice.toFixed(2)}</div>
                     </div>
                   ) : (
-                    <div className="text-5xl font-black text-white mb-2">${basePrice.toFixed(2)}</div>
+                  <div className="text-5xl font-black text-white mb-2">${basePrice.toFixed(2)}</div>
                   )}
                   <p className="text-slate-400 text-sm mb-6">{isFull ? 'Waitlist Only' : `${availableSpots} spots remaining`}</p>
                   <button 
@@ -1096,103 +1187,6 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
               </div>
             )}
 
-            {/* Available Instances */}
-            {(!currentInstance && instances.length > 0) || (currentInstance && instances.filter(inst => inst.id !== currentInstance.id).length > 0) ? (
-              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
-                <h2 className="text-2xl font-bold text-slate-900 mb-4">
-                  {currentInstance ? 'Other Available Sessions' : 'Available Sessions'}
-                </h2>
-                <p className="text-sm text-slate-500 mb-6">
-                  {selectedFranchise 
-                    ? `Showing sessions for ${franchises.find(f => f.code === selectedFranchise)?.name || selectedFranchise}`
-                    : 'Showing all available sessions'}
-                </p>
-                {isLoadingInstances ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                  </div>
-                ) : instances.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4">
-                    No available sessions at the selected location.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {instances
-                      .filter((inst: any) => !currentInstance || inst.id !== currentInstance.id)
-                      .map((instance: any) => (
-                      <div 
-                        key={instance.id} 
-                        className={`p-4 rounded-lg border transition-colors ${
-                          instance.is_full 
-                            ? 'bg-slate-50 opacity-60' 
-                            : 'bg-slate-50 hover:bg-slate-100 cursor-pointer'
-                        }`}
-                        onClick={() => !instance.is_full && setSelectedInstanceId(instance.id)}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            {instance.assignment?.category && instance.assignment?.series && (
-                              <p className="font-semibold text-sm mb-2">
-                                {instance.assignment.category.display_name || instance.assignment.category.name} &gt; {instance.assignment.series.display_name || instance.assignment.series.name}
-                              </p>
-                            )}
-                            <div className="space-y-1 text-sm text-slate-600">
-                              {instance.location && (
-                                <div className="flex items-center gap-2">
-                                  <MapPin className="h-4 w-4" />
-                                  <span>{instance.location.name}</span>
-                                </div>
-                              )}
-                              {(instance.age_min !== undefined || instance.age_max !== undefined) && (
-                                <div className="flex items-center gap-2">
-                                  <Users className="h-4 w-4" />
-                                  <span>
-                                    {instance.age_min !== null && instance.age_max !== null
-                                      ? `Ages ${instance.age_min}-${instance.age_max}`
-                                      : instance.age_min !== null
-                                      ? `Ages ${instance.age_min}+`
-                                      : instance.age_max !== null
-                                      ? `Up to Age ${instance.age_max}`
-                                      : 'All Ages'}
-                                  </span>
-                                </div>
-                              )}
-                              {instance.start_date && (
-                                <div className="flex items-center gap-2">
-                                  <Calendar className="h-4 w-4" />
-                                  <span>Starts: {formatDate(instance.start_date)}</span>
-                                </div>
-                              )}
-                              {instance.class_time && (
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-4 w-4" />
-                                  <span>Time: {formatTime(instance.class_time)}</span>
-                                </div>
-                              )}
-                              {instance.available_capacity !== undefined && (
-                                <div className="flex items-center gap-2">
-                                  <Users className="h-4 w-4" />
-                                  <span>
-                                    {instance.is_full 
-                                      ? 'Full' 
-                                      : `${instance.available_capacity} spots available`}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {instance.is_full && (
-                            <Badge variant="destructive" className="shrink-0">
-                              Full
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : null}
 
             {/* Cancellation Policy */}
             <CancellationPolicy policy={
@@ -1220,7 +1214,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                       <div className="text-4xl font-black text-slate-900">${basePrice.toFixed(2)}</div>
                     </div>
                   ) : (
-                    <div className="text-4xl font-black text-slate-900 mb-2">${basePrice.toFixed(2)}</div>
+                  <div className="text-4xl font-black text-slate-900 mb-2">${basePrice.toFixed(2)}</div>
                   )}
                   <button 
                     onClick={() => handleAddToCart(currentInstance.id)}
@@ -1246,46 +1240,190 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
               </div>
             )}
 
-            {/* Session Details */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-               <h3 className="font-bold text-slate-900 mb-4 text-lg">Session Details</h3>
-               <div className="space-y-4">
-                 <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                   <div className="flex items-center text-slate-500">
-                     <Users className="w-4 h-4 mr-2" />
-                     <span>Age Group</span>
+            {/* Instance Details */}
+            {currentInstance && (
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                 <h3 className="font-bold text-slate-900 mb-4 text-lg">Instance Details</h3>
+                 <div className="space-y-4">
+                   {/* Age Group */}
+                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                     <div className="flex items-center text-slate-500">
+                       <Users className="w-4 h-4 mr-2" />
+                       <span>Age Group</span>
+                     </div>
+                     <span className="font-bold text-slate-900">{ageGroup}</span>
                    </div>
-                   <span className="font-bold text-slate-900">{ageGroup}</span>
+
+                   {/* Target Grades */}
+                   {currentInstance.target_grades && Array.isArray(currentInstance.target_grades) && currentInstance.target_grades.length > 0 && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <GraduationCap className="w-4 h-4 mr-2" />
+                         <span>Target Grades</span>
+                       </div>
+                       <span className="font-bold text-slate-900">{currentInstance.target_grades.join(', ')}</span>
+                     </div>
+                   )}
+
+                   {/* Start Date */}
+                   {currentInstance.start_date && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Calendar className="w-4 h-4 mr-2" />
+                         <span>Start Date</span>
+                       </div>
+                       <span className="font-bold text-slate-900">{formatDate(currentInstance.start_date)}</span>
+                     </div>
+                   )}
+
+                   {/* End Date */}
+                   {currentInstance.end_date && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Calendar className="w-4 h-4 mr-2" />
+                         <span>End Date</span>
+                       </div>
+                       <span className="font-bold text-slate-900">{formatDate(currentInstance.end_date)}</span>
+                     </div>
+                   )}
+
+                   {/* Class Time */}
+                   {currentInstance.start_time && currentInstance.end_time && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Clock className="w-4 h-4 mr-2" />
+                         <span>Class Time</span>
+                       </div>
+                       <span className="font-bold text-slate-900">{formatTime(currentInstance.start_time)} - {formatTime(currentInstance.end_time)}</span>
+                     </div>
+                   )}
+
+                   {/* Days of Week */}
+                   {currentInstance.days_of_week && Array.isArray(currentInstance.days_of_week) && currentInstance.days_of_week.length > 0 && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Calendar className="w-4 h-4 mr-2" />
+                         <span>Days of Week</span>
+                       </div>
+                       <span className="font-bold text-slate-900">
+                         {currentInstance.days_of_week.map((day: number) => {
+                           const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                           return days[day];
+                         }).join(', ')}
+                       </span>
+                     </div>
+                   )}
+
+                   {/* Duration */}
+                   {currentInstance.duration_hours && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Clock className="w-4 h-4 mr-2" />
+                         <span>Duration</span>
+                       </div>
+                       <span className="font-bold text-slate-900">
+                         {currentInstance.duration_hours} {currentInstance.duration_hours === 1 ? 'hour' : 'hours'}
+                         {currentInstance.duration_days && ` (${currentInstance.duration_days} ${currentInstance.duration_days === 1 ? 'day' : 'days'})`}
+                       </span>
+                     </div>
+                   )}
+
+                   {/* Session Count */}
+                   {currentInstance.session_count && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Calendar className="w-4 h-4 mr-2" />
+                         <span>Sessions</span>
+                       </div>
+                       <span className="font-bold text-slate-900">{currentInstance.session_count}</span>
+                     </div>
+                   )}
+
+                   {/* Campus */}
+                   {currentInstance.location && (
+                     <div className="flex justify-between items-start py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <MapPin className="w-4 h-4 mr-2" />
+                         <span>Campus</span>
+                       </div>
+                       <div className="text-right">
+                         <span className="font-bold text-slate-900 block">{currentInstance.location.name}</span>
+                         {currentInstance.location.address && (
+                           <span className="text-sm text-slate-500">{currentInstance.location.address}</span>
+                         )}
+                         {(currentInstance.location.city || currentInstance.location.state || currentInstance.location.zip_code) && (
+                           <span className="text-sm text-slate-500 block">
+                             {[currentInstance.location.city, currentInstance.location.state, currentInstance.location.zip_code].filter(Boolean).join(', ')}
+                           </span>
+                         )}
+                       </div>
+                     </div>
+                   )}
+
+                   {/* Class Capacity */}
+                   {currentInstance.max_students !== undefined && currentInstance.max_students !== null && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <Users className="w-4 h-4 mr-2" />
+                         <span>Class Capacity</span>
+                       </div>
+                       <span className="font-bold text-slate-900">
+                         {currentInstance.current_students || 0} / {currentInstance.max_students}
+                         {currentInstance.available_capacity !== undefined && (
+                           <span className="text-sm text-slate-500 ml-2">({currentInstance.available_capacity} available)</span>
+                         )}
+                       </span>
+                     </div>
+                   )}
+
+                   {/* Instructor */}
+                   {currentInstance.instructor_name && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <UserCheck className="w-4 h-4 mr-2" />
+                         <span>Instructor</span>
+                       </div>
+                       <span className="font-bold text-slate-900">{currentInstance.instructor_name}</span>
+                     </div>
+                   )}
+
+                   {/* Status */}
+                   {currentInstance.status && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <CheckCircle2 className="w-4 h-4 mr-2" />
+                         <span>Status</span>
+                       </div>
+                       <Badge variant={currentInstance.status === 'scheduled' ? 'default' : currentInstance.status === 'ongoing' ? 'default' : 'secondary'}>
+                         {currentInstance.status.charAt(0).toUpperCase() + currentInstance.status.slice(1)}
+                       </Badge>
+                     </div>
+                   )}
+
+                   {/* Notes */}
+                   {currentInstance.notes && (
+                     <div className="flex justify-between items-start py-2 border-b border-slate-50">
+                       <div className="flex items-center text-slate-500">
+                         <FileText className="w-4 h-4 mr-2" />
+                         <span>Notes</span>
+                       </div>
+                       <span className="font-medium text-slate-900 text-right text-sm max-w-[60%]">{currentInstance.notes}</span>
+                     </div>
+                   )}
+
+                   {/* Timezone */}
+                   {currentInstance.timezone && (
+                     <div className="flex justify-between items-center py-2">
+                       <div className="flex items-center text-slate-500">
+                         <Clock className="w-4 h-4 mr-2" />
+                         <span>Timezone</span>
+                       </div>
+                       <span className="font-bold text-slate-900 text-sm">{currentInstance.timezone}</span>
+                     </div>
+                   )}
                  </div>
-                 {displayCourse.duration_hours && (
-                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                     <div className="flex items-center text-slate-500">
-                       <Clock className="w-4 h-4 mr-2" />
-                       <span>Duration</span>
-                     </div>
-                     <span className="font-bold text-slate-900">{displayCourse.duration_hours} hours</span>
-                   </div>
-                 )}
-                 {displayCourse.session_count && (
-                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                     <div className="flex items-center text-slate-500">
-                       <Calendar className="w-4 h-4 mr-2" />
-                       <span>Sessions</span>
-                     </div>
-                     <span className="font-bold text-slate-900">{displayCourse.session_count}</span>
-                   </div>
-                 )}
-                 {currentInstance?.location && (
-                   <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                     <div className="flex items-center text-slate-500">
-                       <MapPin className="w-4 h-4 mr-2" />
-                       <span>Campus</span>
-                     </div>
-                     <span className="font-bold text-slate-900 text-right">{currentInstance.location.name}</span>
-                   </div>
-                 )}
-               </div>
-            </div>
+              </div>
+            )}
 
             {/* Need Help Card */}
             {currentInstance?.franchise && (
@@ -1293,6 +1431,142 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                 <h3 className="font-bold text-slate-900 mb-2">Need Help?</h3>
                 <p className="text-slate-500 text-sm mb-4">Not sure if this is the right level for your student at our {currentInstance.franchise.name} campus?</p>
                 <button className="text-blue-600 font-bold text-sm hover:underline">Contact Admissions &rarr;</button>
+              </div>
+            )}
+
+            {/* Other Available Sessions */}
+            {currentInstance && instances.filter((inst: any) => inst.id !== currentInstance.id).length > 0 && (
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+                <h3 className="font-bold text-slate-900 mb-4 text-lg">Other Available Sessions</h3>
+                {isLoadingInstances ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {instances
+                      .filter((inst: any) => inst.id !== currentInstance.id)
+                      .map((instance: any) => {
+                        // 获取 poster URL - 优先使用 offering.poster_url，然后是 course.poster_url
+                        const posterUrl = instance.offering?.poster_url || instance.course?.poster_url || displayCourse.poster_url || null;
+                        
+                        // 获取 instance 名称
+                        const instanceName = instance.course?.name || instance.offering?.name || displayCourse.name || 'Course';
+                        
+                        // 获取地点
+                        const locationName = instance.location?.name || currentInstance?.franchise?.name || 'Multiple Locations';
+                        
+                        // 获取年龄信息
+                        const instanceAgeMin = instance.age_min !== undefined ? instance.age_min : (instance.course?.age_min || null);
+                        const instanceAgeMax = instance.age_max !== undefined ? instance.age_max : (instance.course?.age_max || null);
+                        const ageDisplay = instanceAgeMin !== null && instanceAgeMax !== null
+                          ? `Ages ${instanceAgeMin}-${instanceAgeMax}`
+                          : instanceAgeMin !== null
+                          ? `Ages ${instanceAgeMin}+`
+                          : instanceAgeMax !== null
+                          ? `Up to Age ${instanceAgeMax}`
+                          : 'All Ages';
+                        
+                        // 构建跳转链接
+                        const instanceSlug = instance.course?.slug || course.slug;
+                        const instanceUrl = instanceSlug
+                          ? `/course-catalog/${encodeURIComponent(instanceSlug)}?instance=${instance.id}${currentInstance?.franchise ? `&franchise=${currentInstance.franchise.code}` : ''}`
+                          : `/course-catalog?instance=${instance.id}${currentInstance?.franchise ? `&franchise=${currentInstance.franchise.code}` : ''}`;
+                        
+                        return (
+                          <Link
+                            key={instance.id}
+                            href={instanceUrl}
+                            className={`block rounded-2xl overflow-hidden border transition-all ${
+                              instance.is_full 
+                                ? 'border-slate-200 opacity-60 cursor-not-allowed' 
+                                : 'border-slate-200 hover:border-blue-400 hover:shadow-lg cursor-pointer'
+                            }`}
+                          >
+                            <div className="flex gap-4">
+                              {/* Poster Image */}
+                              <div className="w-24 h-24 shrink-0 relative overflow-hidden bg-slate-100 rounded-xl">
+                                {posterUrl ? (
+                                  <Image
+                                    src={posterUrl}
+                                    alt={instanceName}
+                                    fill
+                                    className="object-cover"
+                                    sizes="96px"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200">
+                                    <BookOpen className="w-8 h-8 text-blue-400" />
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Content */}
+                              <div className="flex-1 min-w-0 py-2">
+                                <h4 className="font-bold text-slate-900 text-sm mb-1 line-clamp-2">{instanceName}</h4>
+                                
+                                <div className="space-y-1 text-xs text-slate-600">
+                                  {/* Location */}
+                                  {locationName && (
+                                    <div className="flex items-center gap-1.5">
+                                      <MapPin className="h-3 w-3 shrink-0" />
+                                      <span className="truncate">{locationName}</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Date Range */}
+                                  {instance.start_date && (
+                                    <div className="flex items-center gap-1.5">
+                                      <Calendar className="h-3 w-3 shrink-0" />
+                                      <span>
+                                        {formatDate(instance.start_date)}
+                                        {instance.end_date && ` - ${formatDate(instance.end_date)}`}
+                                      </span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Time */}
+                                  {instance.start_time && instance.end_time && (
+                                    <div className="flex items-center gap-1.5">
+                                      <Clock className="h-3 w-3 shrink-0" />
+                                      <span>{formatTime(instance.start_time)} - {formatTime(instance.end_time)}</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Ages */}
+                                  {(instanceAgeMin !== null || instanceAgeMax !== null) && (
+                                    <div className="flex items-center gap-1.5">
+                                      <Users className="h-3 w-3 shrink-0" />
+                                      <span>{ageDisplay}</span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Available Spots */}
+                                  {instance.available_capacity !== undefined && (
+                                    <div className="flex items-center gap-1.5">
+                                      <Users className="h-3 w-3 shrink-0" />
+                                      <span className={instance.is_full ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                                        {instance.is_full 
+                                          ? 'Full' 
+                                          : `${instance.available_capacity} spot${instance.available_capacity === 1 ? '' : 's'} available`}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Status Badge */}
+                              {instance.is_full && (
+                                <div className="shrink-0 pt-2">
+                                  <Badge variant="destructive" className="text-xs">Full</Badge>
+                                </div>
+                              )}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1511,6 +1785,62 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
               </div>
             </DialogContent>
           </Dialog>
+
+      {/* Student Selection Dialog */}
+      <Dialog open={isStudentSelectDialogOpen} onOpenChange={setIsStudentSelectDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select a Student</DialogTitle>
+            <DialogDescription>
+              Please select which student you want to enroll in this course.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-4">
+            {students.map((student) => (
+              <button
+                key={student.id}
+                onClick={() => {
+                  if (pendingInstanceId) {
+                    addToCartWithStudent(pendingInstanceId, student.id, student.name);
+                  }
+                }}
+                className="w-full p-4 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+                disabled={isAddingToCart}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-slate-900">{student.name}</span>
+                  {isAddingToCart && (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+          <div className="mt-6 flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsStudentSelectDialogOpen(false);
+                setPendingInstanceId(null);
+              }}
+              className="flex-1"
+              disabled={isAddingToCart}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                router.push('/students/new');
+              }}
+              variant="outline"
+              className="flex-1"
+              disabled={isAddingToCart}
+            >
+              Add New Student
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

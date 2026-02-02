@@ -13,13 +13,19 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap } from "lucide-react";
+import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
 import Link from "next/link";
 
@@ -73,6 +79,9 @@ interface RouteProps {
     const [isProgramsOpen, setIsProgramsOpen] = useState<boolean>(false);
     const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
     const [cartCount, setCartCount] = useState<number>(0);
+    const [waitlistCount, setWaitlistCount] = useState<number>(0);
+    const [availableCredits, setAvailableCredits] = useState<number>(0);
+    const [isStudentAccount, setIsStudentAccount] = useState<boolean>(false);
     const [locations, setLocations] = useState<Location[]>([]);
     const [franchiseGroups, setFranchiseGroups] = useState<FranchiseGroup[]>([]);
     const [filteredFranchiseGroups, setFilteredFranchiseGroups] = useState<FranchiseGroup[]>([]);
@@ -154,27 +163,54 @@ interface RouteProps {
       setCartCount(0);
     };
 
-    // Fetch cart count when user is logged in
+    // Fetch cart count, waitlist count, credits, and student account status when user is logged in
     useEffect(() => {
       if (status === 'authenticated' && session?.user) {
-        const fetchCartCount = async () => {
+        const fetchUserData = async () => {
           try {
-            const response = await fetch('/api/enrollments/cart');
-            if (response.ok) {
-              const data = await response.json();
-              setCartCount(data.total || 0);
+            // Fetch cart count
+            const cartResponse = await fetch('/api/enrollments/cart');
+            if (cartResponse.ok) {
+              const cartData = await cartResponse.json();
+              setCartCount(cartData.items?.length || 0);
+            }
+
+            // Fetch waitlist count
+            const waitlistResponse = await fetch('/api/enrollments/waitlist');
+            if (waitlistResponse.ok) {
+              const waitlistData = await waitlistResponse.json();
+              setWaitlistCount(waitlistData.items?.length || 0);
+            }
+
+            // Fetch credits
+            const creditsResponse = await fetch('/api/enrollments/credits');
+            if (creditsResponse.ok) {
+              const creditsData = await creditsResponse.json();
+              const total = creditsData.credits?.reduce((sum: number, c: any) => 
+                sum + (c.available_amount || 0), 0) || 0;
+              setAvailableCredits(total);
+            }
+
+            // Check if student account
+            const studentsResponse = await fetch('/api/students/me');
+            if (studentsResponse.ok) {
+              const studentsData = await studentsResponse.json();
+              setIsStudentAccount(studentsData.is_student || false);
             }
           } catch (error) {
-            console.error('Error fetching cart count:', error);
+            console.error('Error fetching user data:', error);
           }
         };
 
-        fetchCartCount();
-        // Refresh cart count every 30 seconds
-        const interval = setInterval(fetchCartCount, 30000);
+        fetchUserData();
+        // Refresh data every 30 seconds
+        const interval = setInterval(fetchUserData, 30000);
         return () => clearInterval(interval);
       } else {
         setCartCount(0);
+        setWaitlistCount(0);
+        setAvailableCredits(0);
+        setIsStudentAccount(false);
       }
     }, [status, session]);
 
@@ -378,7 +414,7 @@ interface RouteProps {
                 <button 
                   className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${pathname === '/programs' ? 'text-[#38bdf8]' : 'text-gray-300'}`}
                 >
-                  <span>Catalogs</span>
+                  <span>Categories</span>
                   <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
                 </button>
                 
@@ -557,16 +593,28 @@ interface RouteProps {
                         </div>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator className="bg-slate-700" />
-                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800">
+                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                        <Link href="/portal" className="cursor-pointer">
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          <span>Portal</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
                         <Link href="/profile" className="cursor-pointer">
                           <User className="mr-2 h-4 w-4" />
                           <span>Profile</span>
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800">
-                        <Link href="/settings" className="cursor-pointer">
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>Settings</span>
+                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                        <Link href="/enrollments" className="cursor-pointer">
+                          <FileText className="mr-2 h-4 w-4" />
+                          <span>Enrollments</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                        <Link href="/billing" className="cursor-pointer">
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          <span>Billing</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator className="bg-slate-700" />

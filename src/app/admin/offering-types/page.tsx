@@ -108,7 +108,7 @@ export default function OfferingTypesManagementPage() {
   const [configSchemaError, setConfigSchemaError] = useState<string | null>(null)
   const [useVisualEditor, setUseVisualEditor] = useState(true)
   
-  // Visible fields state
+  // Visible fields state (for Offering edit dialog)
   const [visibleFields, setVisibleFields] = useState<Record<string, Record<string, boolean>>>({
     general: {
       name: true,
@@ -138,6 +138,25 @@ export default function OfferingTypesManagementPage() {
     tags: {
       subcategory_tags: false,
     },
+  })
+  
+  // Instance fields state (for Instance create/edit dialog)
+  const [instanceFields, setInstanceFields] = useState<Record<string, { visible?: boolean; required?: boolean }>>({
+    start_date: { visible: true, required: true },
+    end_date: { visible: true, required: true },
+    location_id: { visible: true, required: false },
+    max_students: { visible: true, required: false },
+    session_count: { visible: false, required: false },
+    duration_hours: { visible: false, required: false },
+    duration_days: { visible: false, required: false },
+    start_time: { visible: false, required: false },
+    end_time: { visible: false, required: false },
+    days_of_week: { visible: false, required: false },
+    age_min: { visible: false, required: false },
+    age_max: { visible: false, required: false },
+    target_grades: { visible: false, required: false },
+    price_override: { visible: true, required: false },
+    notes: { visible: true, required: false },
   })
   
   // Type specific fields state
@@ -255,6 +274,47 @@ export default function OfferingTypesManagementPage() {
     if (schema.visible_fields) {
       setVisibleFields(schema.visible_fields as any)
     }
+    // 加载 instance_fields
+    if (schema.instance_fields) {
+      // 合并默认字段和已配置的字段
+      const defaultInstanceFields: Record<string, { visible?: boolean; required?: boolean }> = {
+        start_date: { visible: true, required: true },
+        end_date: { visible: true, required: true },
+        location_id: { visible: true, required: false },
+        max_students: { visible: true, required: false },
+        session_count: { visible: false, required: false },
+        duration_hours: { visible: false, required: false },
+        duration_days: { visible: false, required: false },
+        start_time: { visible: false, required: false },
+        end_time: { visible: false, required: false },
+        days_of_week: { visible: false, required: false },
+        age_min: { visible: false, required: false },
+        age_max: { visible: false, required: false },
+        target_grades: { visible: false, required: false },
+        price_override: { visible: true, required: false },
+        notes: { visible: true, required: false },
+      }
+      setInstanceFields({ ...defaultInstanceFields, ...schema.instance_fields })
+    } else {
+      // 使用默认值
+      setInstanceFields({
+        start_date: { visible: true, required: true },
+        end_date: { visible: true, required: true },
+        location_id: { visible: true, required: false },
+        max_students: { visible: true, required: false },
+        session_count: { visible: false, required: false },
+        duration_hours: { visible: false, required: false },
+        duration_days: { visible: false, required: false },
+        start_time: { visible: false, required: false },
+        end_time: { visible: false, required: false },
+        days_of_week: { visible: false, required: false },
+        age_min: { visible: false, required: false },
+        age_max: { visible: false, required: false },
+        target_grades: { visible: false, required: false },
+        price_override: { visible: true, required: false },
+        notes: { visible: true, required: false },
+      })
+    }
     // 加载 type_specific_fields，标记为已存在的字段
     if (schema.type_specific_fields) {
       const fields = (schema.type_specific_fields as any[]).map(field => ({
@@ -324,6 +384,25 @@ export default function OfferingTypesManagementPage() {
       },
     })
     
+    // 设置默认的 instance_fields
+    setInstanceFields({
+      start_date: { visible: true, required: true },
+      end_date: { visible: true, required: true },
+      location_id: { visible: true, required: false },
+      max_students: { visible: true, required: false },
+      session_count: { visible: false, required: false },
+      duration_hours: { visible: false, required: false },
+      duration_days: { visible: false, required: false },
+      start_time: { visible: false, required: false },
+      end_time: { visible: false, required: false },
+      days_of_week: { visible: false, required: false },
+      age_min: { visible: false, required: false },
+      age_max: { visible: false, required: false },
+      target_grades: { visible: false, required: false },
+      price_override: { visible: true, required: false },
+      notes: { visible: true, required: false },
+    })
+    
     // 设置默认的 type_specific_fields
     setTypeSpecificFields([])
     setOriginalFieldNames(new Set()) // 新创建时没有原始字段名
@@ -360,6 +439,23 @@ export default function OfferingTypesManagementPage() {
           subcategory_tags: false
         }
       },
+      instance_fields: {
+        start_date: { visible: true, required: true },
+        end_date: { visible: true, required: true },
+        location_id: { visible: true, required: false },
+        max_students: { visible: true, required: false },
+        session_count: { visible: false, required: false },
+        duration_hours: { visible: false, required: false },
+        duration_days: { visible: false, required: false },
+        start_time: { visible: false, required: false },
+        end_time: { visible: false, required: false },
+        days_of_week: { visible: false, required: false },
+        age_min: { visible: false, required: false },
+        age_max: { visible: false, required: false },
+        target_grades: { visible: false, required: false },
+        price_override: { visible: true, required: false },
+        notes: { visible: true, required: false },
+      },
       type_specific_fields: []
     }
     setConfigSchemaText(JSON.stringify(defaultConfigSchema, null, 2))
@@ -374,6 +470,17 @@ export default function OfferingTypesManagementPage() {
       [category]: {
         ...prev[category],
         [field]: value,
+      },
+    }))
+  }
+  
+  // 更新 instance_fields
+  const updateInstanceField = (fieldName: string, property: 'visible' | 'required', value: boolean) => {
+    setInstanceFields(prev => ({
+      ...prev,
+      [fieldName]: {
+        ...prev[fieldName],
+        [property]: value,
       },
     }))
   }
@@ -404,6 +511,7 @@ export default function OfferingTypesManagementPage() {
   const buildConfigSchemaFromVisual = () => {
     return {
       visible_fields: visibleFields,
+      instance_fields: instanceFields,
       type_specific_fields: typeSpecificFields
         .filter(f => f.name && f.label) // 只包含有效的字段
         .map(({ _isExisting, ...field }) => field), // 移除内部标记字段
@@ -430,18 +538,36 @@ export default function OfferingTypesManagementPage() {
     let configSchema: any = {}
     if (useVisualEditor) {
       configSchema = buildConfigSchemaFromVisual()
+      console.log(`[OfferingTypes] Building config_schema from visual editor:`, {
+        hasVisibleFields: !!configSchema.visible_fields,
+        hasInstanceFields: !!configSchema.instance_fields,
+        instanceFields: configSchema.instance_fields,
+        hasTypeSpecificFields: !!configSchema.type_specific_fields
+      })
     } else {
       // 验证 config_schema JSON
       if (configSchemaText.trim()) {
         try {
           configSchema = JSON.parse(configSchemaText)
           setConfigSchemaError(null)
+          console.log(`[OfferingTypes] Building config_schema from JSON editor:`, {
+            hasVisibleFields: !!configSchema.visible_fields,
+            hasInstanceFields: !!configSchema.instance_fields,
+            instanceFields: configSchema.instance_fields,
+            hasTypeSpecificFields: !!configSchema.type_specific_fields
+          })
         } catch (error: any) {
           setConfigSchemaError(error.message || "Invalid JSON format")
           toast.error("Please fix the JSON syntax error in Config Schema")
           return
         }
       }
+    }
+    
+    // 确保 instance_fields 始终存在（即使为空对象）
+    if (!configSchema.instance_fields) {
+      console.warn(`[OfferingTypes] instance_fields missing in config_schema, adding default empty object`)
+      configSchema.instance_fields = {}
     }
     
     setIsSubmitting(true)
@@ -452,6 +578,13 @@ export default function OfferingTypesManagementPage() {
         code: formData.code.toLowerCase().trim(),
         config_schema: configSchema,
       }
+
+      console.log(`[OfferingTypes] Submitting offering type:`, {
+        code: submitData.code,
+        hasConfigSchema: !!submitData.config_schema,
+        hasInstanceFields: !!submitData.config_schema?.instance_fields,
+        instanceFields: submitData.config_schema?.instance_fields
+      })
 
       const url = editingType
         ? `/api/admin/offering-types/${editingType.id}`
@@ -467,12 +600,20 @@ export default function OfferingTypesManagementPage() {
       })
 
       if (response.ok) {
+        const savedData = await response.json()
+        console.log(`[OfferingTypes] Successfully saved offering type:`, {
+          code: savedData.code,
+          hasConfigSchema: !!savedData.config_schema,
+          hasInstanceFields: !!savedData.config_schema?.instance_fields,
+          instanceFields: savedData.config_schema?.instance_fields
+        })
         toast.success(editingType ? "Offering type updated successfully" : "Offering type created successfully")
         fetchOfferingTypes()
         setIsEditDialogOpen(false)
         setEditingType(null)
       } else {
         const error = await response.json()
+        console.error(`[OfferingTypes] Failed to save:`, error)
         toast.error(error.error || "Failed to save offering type")
       }
     } catch (error) {
@@ -793,14 +934,15 @@ export default function OfferingTypesManagementPage() {
 
               {useVisualEditor ? (
                 <Tabs defaultValue="visible-fields" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="visible-fields">Visible Fields</TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="visible-fields">Offering Fields</TabsTrigger>
+                    <TabsTrigger value="instance-fields">Instance Fields</TabsTrigger>
                     <TabsTrigger value="type-specific">Type Specific Fields</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="visible-fields" className="space-y-4 mt-4">
                     <p className="text-sm text-muted-foreground">
-                      Configure which general fields should be visible for this offering type.
+                      Configure which fields should be visible in the Offering edit dialog for this offering type.
                     </p>
                     <Accordion type="multiple" className="w-full">
                       <AccordionItem value="general">
@@ -903,6 +1045,53 @@ export default function OfferingTypesManagementPage() {
                         </AccordionContent>
                       </AccordionItem>
                     </Accordion>
+                  </TabsContent>
+
+                  <TabsContent value="instance-fields" className="space-y-4 mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Configure which fields should be visible and required in the Instance create/edit dialog for this offering type.
+                    </p>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(instanceFields).map(([fieldName, config]) => (
+                          <Card key={fieldName} className="p-4">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="font-semibold text-sm">
+                                  {fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </Label>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`instance-visible-${fieldName}`}
+                                    checked={config.visible !== false}
+                                    onCheckedChange={(checked) => updateInstanceField(fieldName, 'visible', checked as boolean)}
+                                  />
+                                  <Label htmlFor={`instance-visible-${fieldName}`} className="cursor-pointer font-normal text-xs">
+                                    Visible
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`instance-required-${fieldName}`}
+                                    checked={config.required === true}
+                                    onCheckedChange={(checked) => updateInstanceField(fieldName, 'required', checked as boolean)}
+                                    disabled={config.visible === false}
+                                  />
+                                  <Label 
+                                    htmlFor={`instance-required-${fieldName}`} 
+                                    className={`cursor-pointer font-normal text-xs ${config.visible === false ? 'text-muted-foreground' : ''}`}
+                                  >
+                                    Required
+                                  </Label>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="type-specific" className="space-y-4 mt-4">
@@ -1045,8 +1234,24 @@ export default function OfferingTypesManagementPage() {
                   )}
                   <p className="text-xs text-muted-foreground">
                     Define which fields are visible and type-specific configuration fields. 
-                    Use JSON format with <code className="bg-muted px-1 rounded">visible_fields</code> and <code className="bg-muted px-1 rounded">type_specific_fields</code>.
+                    Use JSON format with <code className="bg-muted px-1 rounded">visible_fields</code>, <code className="bg-muted px-1 rounded">instance_fields</code>, and <code className="bg-muted px-1 rounded">type_specific_fields</code>.
                   </p>
+                  <div className="text-xs text-muted-foreground space-y-1 mt-2 p-3 bg-muted/50 rounded-md">
+                    <p className="font-semibold">JSON Structure:</p>
+                    <pre className="text-xs overflow-x-auto">{`{
+  "visible_fields": {
+    "general": { ... },
+    "education": { ... }
+  },
+  "instance_fields": {
+    "age_min": { "visible": true, "required": false },
+    "age_max": { "visible": true, "required": false },
+    "target_grades": { "visible": true, "required": false },
+    ...
+  },
+  "type_specific_fields": [ ... ]
+}`}</pre>
+                  </div>
                 </div>
               )}
             </div>

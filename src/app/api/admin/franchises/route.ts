@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
 // 获取所有 franchises（分站）
+// 使用新的 franchises_v2 表
 export async function GET() {
   try {
     const session = await auth()
@@ -10,39 +11,17 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Phase 2: Try to get from franchises_v2 first, then fallback to franchises
-    const { getFranchiseV2ByLegacyId } = await import("@/lib/db-v2")
-    
-    // Get from old table
-    const { data: oldData, error: oldError } = await supabaseAdmin
-      .from("franchises")
-      .select("id, code, name, primary_domain, timezone, branding_config, is_active")
+    // Get from franchises_v2 table
+    const { data, error } = await supabaseAdmin
+      .from("franchises_v2")
+      .select("id, code, name, primary_domain, timezone, branding_config, is_active, cancellation_policy, legacy_franchise_id")
       .order("name", { ascending: true })
 
-    if (oldError) {
-      throw new Error(oldError.message)
+    if (error) {
+      throw new Error(error.message)
     }
 
-    // Try to enrich with cancellation_policy from franchises_v2
-    const enrichedData = await Promise.all((oldData || []).map(async (franchise: any) => {
-      try {
-        const franchiseV2 = await getFranchiseV2ByLegacyId(franchise.id)
-        if (franchiseV2) {
-          return {
-            ...franchise,
-            cancellation_policy: franchiseV2.cancellation_policy || null,
-          }
-        }
-      } catch (error) {
-        console.error(`Error fetching franchise_v2 for ${franchise.id}:`, error)
-      }
-      return {
-        ...franchise,
-        cancellation_policy: null,
-      }
-    }))
-
-    return NextResponse.json(enrichedData || [], { status: 200 })
+    return NextResponse.json(data || [], { status: 200 })
   } catch (error: any) {
     console.error("Error fetching franchises:", error)
     return NextResponse.json(
@@ -53,6 +32,7 @@ export async function GET() {
 }
 
 // 创建新的 franchise
+// 使用新的 franchises_v2 表
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -61,7 +41,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { code, name, primary_domain, timezone, is_active } = body
+    const { code, name, primary_domain, timezone, is_active, branding_config, cancellation_policy } = body
 
     if (!code || !name) {
       return NextResponse.json(
@@ -73,15 +53,17 @@ export async function POST(request: Request) {
     const normalizedCode = String(code).trim().toLowerCase()
 
     const { data, error } = await supabaseAdmin
-      .from("franchises")
+      .from("franchises_v2")
       .insert({
         code: normalizedCode,
         name,
         primary_domain: primary_domain || null,
         timezone: timezone || null,
         is_active: is_active !== undefined ? is_active : true,
+        branding_config: branding_config || null,
+        cancellation_policy: cancellation_policy || null,
       })
-      .select("id, code, name, primary_domain, timezone, is_active")
+      .select("id, code, name, primary_domain, timezone, branding_config, is_active, cancellation_policy")
       .single()
 
     if (error) {

@@ -102,10 +102,13 @@ export async function getOfferingV2ByLegacyId(legacyOfferingId: string): Promise
 
 /**
  * 获取所有可用的 Offerings V2（status = 'published'）
+ * 如果提供了 categoryId，需要先获取 category.name，然后筛选 offerings_v2.offering_type = category.name
+ * 如果提供了 offeringType，直接使用 offeringType 筛选（优先级更高）
  */
 export async function getAvailableOfferingsV2(
   offeringType?: string,
-  search?: string
+  search?: string,
+  categoryId?: string
 ): Promise<OfferingV2[]> {
   let query = supabaseAdmin
     .from("offerings_v2")
@@ -113,8 +116,26 @@ export async function getAvailableOfferingsV2(
     .eq("status", "published")
     .order("created_at", { ascending: false })
 
+  // 如果提供了 offeringType，直接使用它（优先级最高）
   if (offeringType) {
     query = query.eq("offering_type", offeringType)
+  } else if (categoryId) {
+    // 如果没有提供 offeringType 但提供了 categoryId，需要获取 category.name 来匹配 offering_type
+    // 先获取 category 信息
+    const { data: categoryData, error: categoryError } = await supabaseAdmin
+      .from("course_categories")
+      .select("name")
+      .eq("id", categoryId)
+      .single()
+
+    if (categoryError) {
+      throw new Error(`Failed to fetch category: ${categoryError.message}`)
+    }
+
+    if (categoryData && categoryData.name) {
+      // 使用 category.name 来筛选 offering_type
+      query = query.eq("offering_type", categoryData.name)
+    }
   }
 
   const { data, error } = await query
@@ -420,6 +441,84 @@ export async function getInstanceV2(instanceId: string): Promise<InstanceV2 | nu
   }
 
   return data as InstanceV2
+}
+
+/**
+ * 更新 Instance V2（更新 instance_v2 表）
+ */
+export async function updateInstanceV2(
+  instanceId: string,
+  updates: Partial<Omit<InstanceV2, 'id' | 'created_at' | 'updated_at'>>
+): Promise<InstanceV2> {
+  // 如果更新了 days_of_week 或日期，重新生成 RRULE
+  const { autoGenerateRRULE } = await import('./icalendar')
+  
+  let finalRRULE = updates.icalendar_rrule
+  if (!finalRRULE && updates.days_of_week && updates.days_of_week.length > 0) {
+    // 需要获取当前的 start_date 和 end_date（如果更新中没有提供）
+    const currentInstance = await getInstanceV2(instanceId)
+    if (currentInstance) {
+      const startDate = updates.start_date || currentInstance.start_date
+      const endDate = updates.end_date || currentInstance.end_date
+      const startTime = updates.start_time || currentInstance.start_time
+      const timezone = updates.timezone || currentInstance.timezone || 'America/Los_Angeles'
+      
+      const generatedRRULE = autoGenerateRRULE({
+        start_date: startDate,
+        end_date: endDate,
+        days_of_week: updates.days_of_week,
+        start_time: startTime,
+        timezone,
+      } as any)
+      finalRRULE = generatedRRULE || null
+    }
+  }
+
+  const updateData: any = {
+    ...updates,
+  }
+
+  // 如果生成了新的 RRULE，添加到更新数据中
+  if (finalRRULE !== undefined) {
+    updateData.icalendar_rrule = finalRRULE
+  }
+
+  // 确保 timezone 有默认值
+  if (updateData.timezone === undefined) {
+    const currentInstance = await getInstanceV2(instanceId)
+    if (currentInstance) {
+      updateData.timezone = currentInstance.timezone || 'America/Los_Angeles'
+    } else {
+      updateData.timezone = 'America/Los_Angeles'
+    }
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("instance_v2")
+    .update(updateData)
+    .eq("id", instanceId)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to update instance v2: ${error.message}`)
+  }
+
+  return data as InstanceV2
+}
+
+/**
+ * 删除 Instance V2（软删除：设置 is_active = false）
+ */
+export async function deleteInstanceV2(instanceId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("instance_v2")
+    .update({ is_active: false })
+    .eq("id", instanceId)
+
+  if (error) {
+    throw new Error(`Failed to delete instance v2: ${error.message}`)
+  }
 }
 
 // ==================== 验证函数 ====================

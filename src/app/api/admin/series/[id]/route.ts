@@ -51,12 +51,29 @@ export async function PUT(
     const body = await request.json()
     const { category_id, franchise_id, name, display_name, description, start_date, end_date, display_order, is_active } = body
 
-    // 验证 franchise_id 不能为 NULL（如果提供了）
-    if (franchise_id === null || franchise_id === undefined) {
-      return NextResponse.json(
-        { error: "Franchise 是必填字段，不能为空" },
-        { status: 400 }
-      )
+    // 验证 franchise_id（如果提供了）
+    if (franchise_id !== undefined) {
+      if (franchise_id === null) {
+        return NextResponse.json(
+          { error: "Franchise 是必填字段，不能为空" },
+          { status: 400 }
+        )
+      }
+      
+      // 验证 franchise_id 是否存在于 franchises_v2 表中
+      const { data: franchiseCheck, error: franchiseCheckError } = await supabaseAdmin
+        .from("franchises_v2")
+        .select("id, code, name")
+        .eq("id", franchise_id)
+        .eq("is_active", true)
+        .single()
+
+      if (franchiseCheckError || !franchiseCheck) {
+        return NextResponse.json(
+          { error: `Franchise 不存在：franchise_id="${franchise_id}"。请确保该 franchise 存在于 franchises_v2 表中且处于激活状态。` },
+          { status: 400 }
+        )
+      }
     }
 
     // 验证日期逻辑（如果提供了日期）

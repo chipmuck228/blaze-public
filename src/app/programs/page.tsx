@@ -177,7 +177,27 @@ function ProgramsPageContent() {
   }, [franchises])
 
   // 获取当前 franchise 的所有 categories（用于 Type Filter）
+  // 当有 location 参数时，只显示该 location 下 Instance 不为零的 categories
   const availableCategories = useMemo(() => {
+    // 如果有 location 参数，只显示该 location 下 Instance 不为零的 categories
+    if (locationSlug) {
+      const franchise = franchises.find(f => f.code === locationSlug)
+      if (!franchise) return []
+      
+      const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
+      franchise.programs.forEach((program) => {
+        // 只包含有至少一个 instance 的 program 的 category
+        if (program.category && program.instances && program.instances.length > 0) {
+          categorySet.set(program.category.id, {
+            id: program.category.id,
+            name: program.category.name,
+            display_name: program.category.display_name,
+          })
+        }
+      })
+      return Array.from(categorySet.values())
+    }
+    
     if (selectedFranchise === "all") {
       // 如果选择了所有 franchise，获取所有 categories
       const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
@@ -210,7 +230,7 @@ function ProgramsPageContent() {
       })
       return Array.from(categorySet.values())
     }
-  }, [franchises, selectedFranchise])
+  }, [franchises, selectedFranchise, locationSlug])
 
 
   // 按层级结构组织数据：franchise -> category -> programs -> instances

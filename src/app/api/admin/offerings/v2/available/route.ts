@@ -17,10 +17,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const offeringType = searchParams.get("offeringType")
     const search = searchParams.get("search")
+    const categoryId = searchParams.get("categoryId")
 
     const offerings = await getAvailableOfferingsV2(
       offeringType || undefined,
-      search || undefined
+      search || undefined,
+      categoryId || undefined
     )
 
     return NextResponse.json(offerings, { status: 200 })

@@ -56,7 +56,7 @@ interface Offering {
   currency?: string
   duration_hours?: number
   poster_url?: string | null
-  offering_type: 'course' | 'camp' | 'workshop' | 'free_trial' | 'gift_card' | 'care_service' | 'lunch_service'
+  offering_type: 'course' | 'camp' | 'workshop' | 'free_trial' | 'gift_card' | 'care_service' | 'lunch_service' | 'competition'
   type_config?: Record<string, any>
   status: 'draft' | 'published' | 'suspended' | 'archived'
   is_active?: boolean

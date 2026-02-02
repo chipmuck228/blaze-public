@@ -262,6 +262,7 @@ function CoursePageContent() {
                         {cat.programs.flatMap((program) =>
                           program.instances.map((instance) => {
                             const posterUrl = instance.offering?.poster_url || `https://picsum.photos/400/300?random=${instance.id}`
+                            // 如果 price_override 为 null，则使用 offering 的 base_price
                             const basePrice = instance.price_override ?? instance.offering?.base_price ?? 0
                             const dates = instance.start_date && instance.end_date
                               ? `${new Date(instance.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(instance.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`

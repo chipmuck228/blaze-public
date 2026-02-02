@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getEnrollmentById, cancelEnrollment, confirmEnrollment } from "@/lib/db"
+import { getInstanceEnrollmentById } from "@/lib/db"
 
-// GET: 获取单个注册详情
+// GET: 获取单个注册详情（基于 instance_enrollments）
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -18,7 +18,7 @@ export async function GET(
     }
 
     const { id } = await params
-    const enrollment = await getEnrollmentById(id)
+    const enrollment = await getInstanceEnrollmentById(id)
 
     if (!enrollment) {
       return NextResponse.json(
@@ -27,15 +27,15 @@ export async function GET(
       )
     }
 
-    // 验证用户权限
-    if (enrollment.user_id !== session.user.id) {
+    // 验证用户权限（用户必须是enrollment的user_id或payer_user_id）
+    if (enrollment.user_id !== session.user.id && enrollment.payer_user_id !== session.user.id) {
       return NextResponse.json(
         { error: "Forbidden" },
         { status: 403 }
       )
     }
 
-    return NextResponse.json(enrollment)
+    return NextResponse.json({ enrollment })
   } catch (error: any) {
     console.error("Error fetching enrollment:", error)
     return NextResponse.json(

@@ -70,13 +70,6 @@ export async function GET(request: Request) {
         age_max,
         target_grades,
         location_id,
-        location:course_locations(
-          id,
-          name,
-          address,
-          city,
-          state
-        ),
         offering:offerings_v2(
           id,
           name,
@@ -104,7 +97,57 @@ export async function GET(request: Request) {
 
     const instancesV2 = instancesV2Data || []
 
-    // 4. 获取所有相关的 franchises
+    // 4. 批量获取所有相关的 campuses
+    const locationIds = new Set<string>()
+    const franchiseIdsForCampuses = new Set<string>()
+    instancesV2.forEach((inst: any) => {
+      if (inst.location_id) {
+        locationIds.add(inst.location_id)
+      }
+      if (inst.franchise_id) {
+        franchiseIdsForCampuses.add(inst.franchise_id)
+      }
+    })
+
+    // 批量查询 campuses
+    const campusesMap = new Map<string, any>()
+    if (locationIds.size > 0) {
+      const { data: campusesData, error: campusesError } = await supabaseAdmin
+        .from('campuses')
+        .select('id, name, address, city, state, zip_code, franchise_id')
+        .in('id', Array.from(locationIds))
+        .eq('is_active', true)
+
+      if (!campusesError && campusesData) {
+        campusesData.forEach((campus: any) => {
+          campusesMap.set(campus.id, campus)
+        })
+        console.log(`[Public Instances API] Loaded ${campusesData.length} campuses by location_id`)
+      }
+    }
+
+    // 对于没有 location_id 的 instances，尝试通过 franchise_id 获取第一个 campus
+    const franchiseCampusesMap = new Map<string, any>()
+    if (franchiseIdsForCampuses.size > 0) {
+      const { data: franchiseCampusesData, error: franchiseCampusesError } = await supabaseAdmin
+        .from('campuses')
+        .select('id, name, address, city, state, zip_code, franchise_id')
+        .in('franchise_id', Array.from(franchiseIdsForCampuses))
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+
+      if (!franchiseCampusesError && franchiseCampusesData) {
+        // 为每个 franchise 存储第一个 campus
+        franchiseCampusesData.forEach((campus: any) => {
+          if (!franchiseCampusesMap.has(campus.franchise_id)) {
+            franchiseCampusesMap.set(campus.franchise_id, campus)
+          }
+        })
+        console.log(`[Public Instances API] Loaded campuses for ${franchiseCampusesMap.size} franchises`)
+      }
+    }
+
+    // 5. 获取所有相关的 franchises
     // course_series.franchise_id 可能指向旧表的 franchises.id，需要映射到新表
     const franchiseIds = new Set<string>()
     seriesData.forEach((s: any) => {
@@ -308,6 +351,17 @@ export async function GET(request: Request) {
         continue
       }
 
+      // 获取 location (campus) 信息
+      let location: any = null
+      if (instance.location_id) {
+        // 优先使用 location_id 匹配的 campus
+        location = campusesMap.get(instance.location_id)
+      }
+      // 如果没有找到，尝试使用 franchise_id 获取第一个 campus
+      if (!location && instance.franchise_id) {
+        location = franchiseCampusesMap.get(instance.franchise_id)
+      }
+
       // 添加 instance
       targetSeries.instances.push({
         id: instance.id,
@@ -319,7 +373,7 @@ export async function GET(request: Request) {
         current_students: instance.current_students,
         status: instance.status,
         price_override: instance.price_override,
-        location: instance.location,
+        location: location,
         course: {
           id: offering.id,
           name: offering.name,
@@ -340,6 +394,7 @@ export async function GET(request: Request) {
           id: offering.id,
           name: offering.name,
           poster_url: offering.poster_url || null,
+          base_price: offering.base_price,
         },
         available_spots: Math.max(0, (instance.max_students || 0) - (instance.current_students || 0)),
         is_full: (instance.max_students || 0) <= (instance.current_students || 0),

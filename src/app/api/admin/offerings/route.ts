@@ -183,6 +183,25 @@ export async function POST(request: Request) {
       )
     }
 
+    // 验证 offering_type 是否有效（检查是否在 offering_types 表中存在）
+    // 注意：这里只做基本验证，实际的枚举约束由数据库处理
+    // 如果数据库枚举类型中缺少某个值，需要在数据库中添加该值到枚举类型
+    const { data: offeringTypeCheck } = await supabaseAdmin
+      .from("offering_types")
+      .select("code")
+      .eq("code", offering_type)
+      .eq("is_active", true)
+      .single()
+
+    if (!offeringTypeCheck) {
+      return NextResponse.json(
+        { 
+          error: `Invalid offering_type: "${offering_type}". This type either doesn't exist in the offering_types table or is not active. If you're trying to use a new type, please ensure: 1) The type exists in the offering_types table with code="${offering_type}", and 2) The database enum type offering_type_enum includes "${offering_type}" as a valid value.` 
+        },
+        { status: 400 }
+      )
+    }
+
     // 创建 offering_v2（默认状态为 draft）
     // 注意：offerings_v2 表是简化版本，不包含 session_count, age_min, age_max 等字段
     // 这些字段应该在 instance 级别设置

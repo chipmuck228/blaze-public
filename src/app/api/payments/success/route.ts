@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { stripe } from '@/lib/stripe'
-import { getEnrollmentByStripeSessionId, confirmEnrollment } from '@/lib/db'
+import { 
+  getEnrollmentByStripeSessionId, 
+  confirmEnrollment,
+  getInstanceEnrollmentByStripeSessionId,
+  confirmInstanceEnrollment
+} from '@/lib/db'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
@@ -36,8 +41,15 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // 获取注册记录
-    const enrollment = await getEnrollmentByStripeSessionId(sessionId)
+    // 优先使用 instance_enrollments
+    let enrollment = await getInstanceEnrollmentByStripeSessionId(sessionId)
+    let isInstanceEnrollment = true
+    
+    if (!enrollment) {
+      // 回退到旧的 course_enrollments 表
+      enrollment = await getEnrollmentByStripeSessionId(sessionId)
+      isInstanceEnrollment = false
+    }
 
     if (!enrollment) {
       return NextResponse.json(
@@ -51,13 +63,23 @@ export async function GET(req: NextRequest) {
       const paymentIntentId = checkoutSession.payment_intent as string
       if (paymentIntentId) {
         try {
-          await confirmEnrollment(
-            enrollment.id,
-            enrollment.user_id,
-            paymentIntentId,
-            (checkoutSession.amount_total || 0) / 100,
-            paymentIntentId
-          )
+          if (isInstanceEnrollment) {
+            await confirmInstanceEnrollment(
+              enrollment.id,
+              enrollment.payer_user_id,
+              paymentIntentId,
+              (checkoutSession.amount_total || 0) / 100,
+              paymentIntentId
+            )
+          } else {
+            await confirmEnrollment(
+              enrollment.id,
+              enrollment.user_id,
+              paymentIntentId,
+              (checkoutSession.amount_total || 0) / 100,
+              paymentIntentId
+            )
+          }
         } catch (error: any) {
           console.error('Error confirming enrollment:', error)
           // 继续返回，即使更新失败（Webhook 可能会处理）
@@ -70,24 +92,46 @@ export async function GET(req: NextRequest) {
       ? JSON.parse(checkoutSession.metadata.enrollment_ids)
       : [enrollment.id]
 
-    const { data: allEnrollments } = await supabaseAdmin
-      .from('course_enrollments')
+    // 优先查询 instance_enrollments
+    let allEnrollments = null
+    const { data: instanceEnrollments } = await supabaseAdmin
+      .from('instance_enrollments')
       .select(`
         *,
-        instance:course_instances(
+        instance:instance_v2(
           *,
-          assignment:course_assignments(
-            *,
-            course:courses(*),
-            category:course_categories(*),
-            series:course_series(*),
-            location:course_locations(*)
-          ),
+          offering:offerings_v2(*),
           location:course_locations(*)
         )
       `)
       .eq('stripe_checkout_session_id', sessionId)
       .in('id', enrollmentIds)
+    
+    if (instanceEnrollments && instanceEnrollments.length > 0) {
+      allEnrollments = instanceEnrollments
+    } else {
+      // 回退到旧的 course_enrollments
+      const { data: courseEnrollments } = await supabaseAdmin
+        .from('course_enrollments')
+        .select(`
+          *,
+          instance:course_instances(
+            *,
+            assignment:course_assignments(
+              *,
+              course:courses(*),
+              category:course_categories(*),
+              series:course_series(*),
+              location:course_locations(*)
+            ),
+            location:course_locations(*)
+          )
+        `)
+        .eq('stripe_checkout_session_id', sessionId)
+        .in('id', enrollmentIds)
+      
+      allEnrollments = courseEnrollments
+    }
 
     const enrollments = allEnrollments || []
 

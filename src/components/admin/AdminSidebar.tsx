@@ -39,8 +39,17 @@ import {
   AlertCircle,
   Route,
   Shapes,
+  Sparkles,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+
+interface MenuItem {
+  title: string
+  href: string
+  icon: any
+  badge?: string
+}
 
 const menuItems = [
   {
@@ -144,6 +153,48 @@ const newsletterMenuItems = [
   },
 ]
 
+const blazeContentMenuItems = [
+  {
+    title: "Campuses",
+    href: "/admin/blaze/campuses",
+    icon: MapPin,
+    badge: "NEW",
+  },
+  {
+    title: "Programs",
+    href: "/admin/blaze/programs",
+    icon: List,
+    badge: "NEW",
+  },
+  {
+    title: "Offerings",
+    href: "/admin/blaze/offerings",
+    icon: Package,
+    badge: "NEW",
+  },
+]
+
+const blazeSettingsMenuItems: MenuItem[] = [
+  {
+    title: "Franchises",
+    href: "/admin/blaze/franchises",
+    icon: Network,
+    badge: "NEW",
+  },
+  {
+    title: "Categories",
+    href: "/admin/blaze/categories",
+    icon: FolderTree,
+    badge: "NEW",
+  },
+  {
+    title: "Offering Types",
+    href: "/admin/blaze/offering-types",
+    icon: Shapes,
+    badge: "NEW",
+  },
+]
+
 interface AdminSidebarProps {
   onNavigate?: () => void
 }
@@ -171,6 +222,16 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
 
   // 检查是否有任何 Newsletter 相关的页面是活动的
   const isAnyNewsletterPageActive = newsletterMenuItems.some(
+    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  )
+
+  // 检查是否有任何 Blaze Content 相关的页面是活动的
+  const isAnyBlazeContentPageActive = blazeContentMenuItems.some(
+    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  )
+
+  // 检查是否有任何 Blaze Settings 相关的页面是活动的
+  const isAnyBlazeSettingsPageActive = blazeSettingsMenuItems.some(
     (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
   )
 
@@ -435,6 +496,152 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
               )
             })}
           </div>
+        )}
+
+        {/* Blaze Content Admin 可展开菜单 */}
+        {!isCollapsed ? (
+          <Accordion type="single" collapsible defaultValue={isAnyBlazeContentPageActive ? "blaze-content" : undefined} className="w-full">
+            <AccordionItem value="blaze-content" className="border-none">
+              <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                <div className="flex items-center gap-2 w-full">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium pl-2 text-primary">Blaze Content Admin</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-0 pt-2">
+                <div className="space-y-1 pl-6">
+                  {blazeContentMenuItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                    
+                    return (
+                      <Link 
+                        key={item.href} 
+                        href={item.href}
+                        onClick={onNavigate}
+                      >
+                        <Button
+                          variant={isActive ? "secondary" : "ghost"}
+                          className={cn(
+                            "w-full justify-start text-sm",
+                            isActive && "bg-secondary"
+                          )}
+                        >
+                          <Icon className="mr-2 h-4 w-4 text-primary" />
+                          {item.title}
+                          {item.badge && (
+                            <Badge variant="default" className="ml-auto text-xs bg-primary text-primary-foreground">
+                              {item.badge}
+                            </Badge>
+                          )}
+                        </Button>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : (
+          <div className="space-y-1">
+            {blazeContentMenuItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+              
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href} 
+                  title={item.title}
+                  onClick={onNavigate}
+                >
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-center px-0",
+                      isActive && "bg-secondary"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 text-primary" />
+                  </Button>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Blaze Settings 可展开菜单 */}
+        {blazeSettingsMenuItems.length > 0 && (
+          !isCollapsed ? (
+            <Accordion type="single" collapsible defaultValue={isAnyBlazeSettingsPageActive ? "blaze-settings" : undefined} className="w-full">
+              <AccordionItem value="blaze-settings" className="border-none">
+                <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                  <div className="flex items-center gap-2 w-full">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium pl-2 text-primary">Blaze Settings</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pb-0 pt-2">
+                  <div className="space-y-1 pl-6">
+                    {blazeSettingsMenuItems.map((item) => {
+                      const Icon = item.icon
+                      const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                      
+                      return (
+                        <Link 
+                          key={item.href} 
+                          href={item.href}
+                          onClick={onNavigate}
+                        >
+                          <Button
+                            variant={isActive ? "secondary" : "ghost"}
+                            className={cn(
+                              "w-full justify-start text-sm",
+                              isActive && "bg-secondary"
+                            )}
+                          >
+                            <Icon className="mr-2 h-4 w-4 text-primary" />
+                            {item.title}
+                            {item.badge && (
+                              <Badge variant="default" className="ml-auto text-xs bg-primary text-primary-foreground">
+                                {item.badge}
+                              </Badge>
+                            )}
+                          </Button>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          ) : (
+            <div className="space-y-1">
+              {blazeSettingsMenuItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                
+                return (
+                  <Link 
+                    key={item.href} 
+                    href={item.href} 
+                    title={item.title}
+                    onClick={onNavigate}
+                  >
+                    <Button
+                      variant={isActive ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-center px-0",
+                        isActive && "bg-secondary"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 text-primary" />
+                    </Button>
+                  </Link>
+                )
+              })}
+            </div>
+          )
         )}
       </nav>
 

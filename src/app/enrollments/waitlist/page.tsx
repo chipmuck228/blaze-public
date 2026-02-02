@@ -13,7 +13,11 @@ import { useSession } from 'next-auth/react'
 
 interface WaitlistItem {
   id: string
+  user_id: string
+  payer_user_id: string
   instance_id: string
+  student_id: string | null
+  student_name: string
   status: string
   waitlist_position?: number
   waitlisted_at?: string
@@ -22,21 +26,25 @@ interface WaitlistItem {
   instance?: {
     id: string
     start_date: string
-    end_date: string
-    start_time?: string
-    end_time?: string
-    assignment?: {
-      course?: {
-        name: string
-        base_price?: number
-      }
-      location?: {
-        name: string
-      }
-    }
-    location?: {
+    end_date: string | null
+    start_time?: string | null
+    end_time?: string | null
+    offering?: {
+      id: string
       name: string
-    }
+      description: string | null
+      base_price: number
+    } | null
+    location?: {
+      id: string
+      name: string
+      address: string | null
+    } | null
+    franchise?: {
+      id: string
+      code: string
+      name: string
+    } | null
   }
 }
 
@@ -98,7 +106,8 @@ export default function WaitlistPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -106,7 +115,8 @@ export default function WaitlistPage() {
     })
   }
 
-  const formatTime = (timeString: string) => {
+  const formatTime = (timeString: string | null) => {
+    if (!timeString) return ''
     return new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -189,7 +199,7 @@ export default function WaitlistPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <CardTitle className="text-lg">
-                              {item.instance?.assignment?.course?.name || 'Course'}
+                              {item.instance?.offering?.name || 'Course'}
                             </CardTitle>
                             {isNotified && !isExpired && (
                               <Badge variant="default" className="bg-green-600">
@@ -202,12 +212,15 @@ export default function WaitlistPage() {
                             )}
                           </div>
                           <CardDescription className="space-y-1">
-                            {item.instance?.assignment?.location?.name || item.instance?.location?.name ? (
+                            <div className="text-sm text-muted-foreground">
+                              Student: {item.student_name}
+                            </div>
+                            {item.instance?.location?.name && (
                               <div className="flex items-center gap-2">
                                 <MapPin className="h-3.5 w-3.5" />
-                                <span>{item.instance?.assignment?.location?.name || item.instance?.location?.name}</span>
+                                <span>{item.instance.location.name}</span>
                               </div>
-                            ) : null}
+                            )}
                             {item.instance?.start_date && (
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-3.5 w-3.5" />
@@ -264,11 +277,10 @@ export default function WaitlistPage() {
                                 size="sm"
                                 className="mt-2 w-full"
                                 onClick={() => {
-                                  // TODO: Navigate to enrollment page or open enrollment dialog
-                                  alert('Enrollment feature coming soon!')
+                                  router.push(`/enrollments/orders/${item.id}`)
                                 }}
                               >
-                                Enroll Now
+                                View Details
                               </Button>
                             )}
                           </div>

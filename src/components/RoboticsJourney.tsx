@@ -98,7 +98,7 @@ export const RoboticsJourney = () => {
                   href={step.ctaLink} 
                   className="text-[#2563eb] dark:text-blue-400 font-bold flex items-center hover:translate-x-2 transition-transform"
                 >
-                  {step.ctaText} <ArrowRight className="ml-2 w-4 h-4" />
+                  Explore <ArrowRight className="ml-2 w-4 h-4" />
                 </Link>
               </div>
             )

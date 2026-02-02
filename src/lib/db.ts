@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { isStudentAccount, getStudentPayer } from './permissions'
 
 // 生成随机密码（12位，包含大小写字母、数字、特殊字符）
 export function generateRandomPassword(length: number = 12): string {
@@ -2823,6 +2824,1267 @@ export async function checkUserPrerequisites(
   }
 }
 
+// 获取学生已完成的课程ID（基于instance_enrollments）
+// 注意：这里基于学生姓名和用户ID来查找已完成的enrollment
+export async function getStudentCompletedOfferingIds(
+  userId: string,
+  studentId: string | null,
+  studentName: string
+): Promise<Set<string>> {
+  const completedOfferingIds = new Set<string>()
+
+  // 查询该学生已完成的enrollment
+  let query = supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      instance_id,
+      instance:instance_v2(
+        offering_id
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('student_name', studentName)
+    .eq('status', 'completed')
+
+  // 如果有student_id，也加上这个条件
+  if (studentId) {
+    query = query.eq('student_id', studentId)
+  }
+
+  const { data: completedEnrollments } = await query
+
+  if (completedEnrollments) {
+    for (const enrollment of completedEnrollments) {
+      const instance = enrollment.instance as any
+      if (instance?.offering_id) {
+        completedOfferingIds.add(instance.offering_id)
+      }
+    }
+  }
+
+  return completedOfferingIds
+}
+
+// 获取offering的所有先修课程（基于offering_id）
+export async function getOfferingPrerequisites(offeringId: string): Promise<Array<{
+  id: string
+  offering_id: string
+  prerequisite_offering_id: string
+  requirement_type: 'required' | 'recommended' | 'optional'
+  is_mandatory: boolean
+  display_order: number
+  notes: string | null
+  prerequisite_offering?: any
+}>> {
+  const { data, error } = await supabaseAdmin
+    .from('offering_prerequisites')
+    .select(`
+      *,
+      prerequisite_offering:offerings_v2!offering_prerequisites_prerequisite_offering_id_fkey(*)
+    `)
+    .eq('offering_id', offeringId)
+    .order('display_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch offering prerequisites: ${error.message}`)
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    prerequisite_offering: Array.isArray(item.prerequisite_offering) 
+      ? item.prerequisite_offering[0]
+      : item.prerequisite_offering,
+  }))
+}
+
+// 检查学生是否满足offering的先修条件（基于offering_id）
+export async function checkStudentPrerequisites(
+  userId: string,
+  studentId: string | null,
+  studentName: string,
+  offeringId: string
+): Promise<{
+  canEnroll: boolean
+  missingPrerequisites: any[]
+  recommendations: any[]
+  groupRequirements?: Array<{
+    groupId: string
+    groupType: string
+    satisfied: boolean
+    required: number
+    completed: number
+    missing: any[]
+  }>
+}> {
+  // 获取offering的所有先修课程
+  const prerequisites = await getOfferingPrerequisites(offeringId)
+
+  if (prerequisites.length === 0) {
+    return {
+      canEnroll: true,
+      missingPrerequisites: [],
+      recommendations: [],
+    }
+  }
+
+  // 获取学生已完成的offering ID集合
+  const completedOfferingIds = await getStudentCompletedOfferingIds(
+    userId,
+    studentId,
+    studentName
+  )
+
+  // 检查是否有先修课程组
+  const { data: groups } = await supabaseAdmin
+    .from('prerequisite_groups_offerings')
+    .select(`
+      *,
+      items:prerequisite_group_items_offerings(
+        prerequisite:offering_prerequisites(
+          *,
+          prerequisite_offering:offerings_v2!offering_prerequisites_prerequisite_offering_id_fkey(*)
+        )
+      )
+    `)
+    .eq('offering_id', offeringId)
+    .order('display_order', { ascending: true })
+
+  // 如果有组，使用组逻辑验证
+  if (groups && groups.length > 0) {
+    const groupRequirements: Array<{
+      groupId: string
+      groupType: string
+      satisfied: boolean
+      required: number
+      completed: number
+      missing: any[]
+    }> = []
+
+    let allGroupsSatisfied = true
+
+    for (const group of groups) {
+      const groupItems = group.items || []
+      const groupPrerequisites = groupItems.map((item: any) => item.prerequisite).filter(Boolean)
+      
+      const completedInGroup = groupPrerequisites.filter((p: any) =>
+        p.prerequisite_offering_id && completedOfferingIds.has(p.prerequisite_offering_id)
+      )
+
+      let satisfied = false
+      if (group.group_type === 'and') {
+        satisfied = completedInGroup.length === groupPrerequisites.length
+      } else if (group.group_type === 'or') {
+        satisfied = completedInGroup.length >= (group.min_required || 1)
+      }
+
+      if (!satisfied) {
+        allGroupsSatisfied = false
+      }
+
+      const missing = groupPrerequisites
+        .filter((p: any) => !completedOfferingIds.has(p.prerequisite_offering_id))
+        .map((p: any) => {
+          const offering = Array.isArray(p.prerequisite_offering) 
+            ? p.prerequisite_offering[0] 
+            : p.prerequisite_offering
+          return offering
+        })
+        .filter(Boolean)
+
+      groupRequirements.push({
+        groupId: group.id,
+        groupType: group.group_type,
+        satisfied,
+        required: group.group_type === 'or' ? (group.min_required || 1) : groupPrerequisites.length,
+        completed: completedInGroup.length,
+        missing,
+      })
+    }
+
+    // 检查不在组中的必填先修课程
+    const prerequisitesInGroups = new Set<string>()
+    groups.forEach((group: any) => {
+      (group.items || []).forEach((item: any) => {
+        if (item.prerequisite?.id) {
+          prerequisitesInGroups.add(item.prerequisite.id)
+        }
+      })
+    })
+
+    const standalonePrerequisites = prerequisites.filter(
+      p => !prerequisitesInGroups.has(p.id) && p.requirement_type === 'required' && p.is_mandatory
+    )
+
+    const missingStandalone = standalonePrerequisites
+      .filter(p => !completedOfferingIds.has(p.prerequisite_offering_id))
+      .map(p => {
+        const offering = Array.isArray(p.prerequisite_offering) 
+          ? p.prerequisite_offering[0] 
+          : p.prerequisite_offering
+        return offering
+      })
+      .filter(Boolean)
+
+    const recommendations = prerequisites
+      .filter(p => p.requirement_type === 'recommended')
+      .map(p => {
+        const offering = Array.isArray(p.prerequisite_offering) 
+          ? p.prerequisite_offering[0] 
+          : p.prerequisite_offering
+        return offering
+      })
+      .filter(Boolean)
+
+    return {
+      canEnroll: allGroupsSatisfied && missingStandalone.length === 0,
+      missingPrerequisites: [
+        ...groupRequirements.filter(gr => !gr.satisfied).flatMap(gr => gr.missing),
+        ...missingStandalone,
+      ],
+      recommendations,
+      groupRequirements,
+    }
+  }
+
+  // 没有组，使用简单逻辑（向后兼容）
+  const requiredPrerequisites = prerequisites.filter(
+    p => p.requirement_type === 'required' && p.is_mandatory
+  )
+
+  const missingRequired = requiredPrerequisites.filter(
+    p => !completedOfferingIds.has(p.prerequisite_offering_id)
+  )
+
+  const recommendations = prerequisites
+    .filter(p => p.requirement_type === 'recommended')
+    .map(p => {
+      const offering = Array.isArray(p.prerequisite_offering) 
+        ? p.prerequisite_offering[0] 
+        : p.prerequisite_offering
+      return offering
+    })
+    .filter(Boolean)
+
+  return {
+    canEnroll: missingRequired.length === 0,
+    missingPrerequisites: missingRequired.map(p => {
+      const offering = Array.isArray(p.prerequisite_offering) 
+        ? p.prerequisite_offering[0] 
+        : p.prerequisite_offering
+      return offering
+    }).filter(Boolean),
+    recommendations,
+  }
+}
+
+// ==================== Instance Enrollments 支付流程操作 ====================
+
+// 结账（从 cart 转为 reserved，使用 instance_enrollments 表）
+export async function checkoutInstanceEnrollments(
+  enrollmentIds: string[],
+  userId: string,
+  paymentMethodId?: string
+): Promise<any[]> {
+  // 1. 验证用户是付款人（不是学生账户）
+  const isStudent = await isStudentAccount(userId)
+  if (isStudent) {
+    throw new Error('Student accounts cannot checkout. Payment must be initiated by the payer.')
+  }
+
+  // 2. 验证所有enrollment属于当前用户（付款人）且状态为cart，且未过期
+  const now = new Date().toISOString()
+  const { data: enrollments, error: queryError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('*')
+    .in('id', enrollmentIds)
+    .eq('payer_user_id', userId)  // 验证是付款人
+    .eq('status', 'cart')
+    .eq('is_synced', false)  // 只处理非同步项
+    .gt('cart_expires_at', now)  // 确保购物车项未过期
+
+  if (queryError) {
+    throw new Error(`Failed to query enrollments: ${queryError.message}`)
+  }
+
+  if (!enrollments || enrollments.length !== enrollmentIds.length) {
+    const foundIds = enrollments?.map(e => e.id) || []
+    const missingIds = enrollmentIds.filter(id => !foundIds.includes(id))
+    
+    if (missingIds.length > 0) {
+      const { data: missingEnrollments } = await supabaseAdmin
+        .from('instance_enrollments')
+        .select('id, status, payer_user_id, cart_expires_at')
+        .in('id', missingIds)
+      
+      const expired = missingEnrollments?.filter(e => 
+        e.status === 'cart' && e.cart_expires_at && e.cart_expires_at <= now
+      ) || []
+      const wrongPayer = missingEnrollments?.filter(e => e.payer_user_id !== userId) || []
+      const wrongStatus = missingEnrollments?.filter(e => e.status !== 'cart') || []
+      
+      if (expired.length > 0) {
+        throw new Error(`Some items in your cart have expired. Please refresh the page and try again.`)
+      }
+      if (wrongPayer.length > 0) {
+        throw new Error(`Some enrollments do not belong to you as the payer.`)
+      }
+      if (wrongStatus.length > 0) {
+        throw new Error(`Some enrollments are no longer in cart (status: ${wrongStatus.map(e => e.status).join(', ')}).`)
+      }
+    }
+    
+    throw new Error('Some enrollments are invalid or not in cart')
+  }
+
+  // 3. 再次检查先修条件和容量
+  for (const enrollment of enrollments) {
+    // 检查容量
+    const { data: instance } = await supabaseAdmin
+      .from('instance_v2')
+      .select('id, max_students, current_students, is_active, status, offering_id')
+      .eq('id', enrollment.instance_id)
+      .single()
+    
+    if (!instance || !instance.is_active || !['scheduled', 'ongoing'].includes(instance.status)) {
+      throw new Error(`Instance ${enrollment.instance_id} is not available`)
+    }
+    
+    const availableCapacity = (instance.max_students || 0) - instance.current_students
+    if (availableCapacity <= 0) {
+      throw new Error(`Instance ${enrollment.instance_id} is now full`)
+    }
+    
+    // 再次检查先修条件（如果之前未检查或检查失败）
+    if (!enrollment.prerequisites_passed) {
+      const prereqCheck = await checkStudentPrerequisites(
+        enrollment.user_id,
+        enrollment.student_id,
+        enrollment.student_name,
+        instance.offering_id
+      )
+      
+      if (!prereqCheck.canEnroll) {
+        throw new Error(`Prerequisites not met for student ${enrollment.student_name}`)
+      }
+      
+      // 更新先修条件检查结果
+      await supabaseAdmin
+        .from('instance_enrollments')
+        .update({
+          prerequisites_passed: true,
+          prerequisites_checked_at: new Date().toISOString(),
+          prerequisites_check_result: prereqCheck
+        })
+        .eq('id', enrollment.id)
+    }
+  }
+
+  // 4. 更新状态为 reserved
+  const reservedExpiryMinutes = 10  // 10分钟保留时间
+  const reservedExpiresAt = new Date(Date.now() + reservedExpiryMinutes * 60 * 1000)
+
+  const { data: updatedEnrollments, error: updateError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .update({
+      status: 'reserved',
+      reserved_at: new Date().toISOString(),
+      reserved_expires_at: reservedExpiresAt.toISOString(),
+      payment_status: 'pending',
+      payment_method_id: paymentMethodId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', enrollmentIds)
+    .eq('payer_user_id', userId)
+    .eq('status', 'cart')
+    .eq('is_synced', false)
+    .gt('cart_expires_at', now)
+    .select()
+
+  if (updateError) {
+    throw new Error(`Failed to checkout: ${updateError.message}`)
+  }
+
+  return updatedEnrollments || []
+}
+
+// 计算 instance_enrollments 的总金额
+export async function calculateInstanceEnrollmentTotal(
+  enrollmentIds: string[]
+): Promise<{
+  total: number
+  currency: string
+  items: Array<{
+    enrollmentId: string
+    amount: number
+    currency: string
+    courseName: string
+    instanceName?: string
+    studentName: string
+  }>
+}> {
+  if (enrollmentIds.length === 0) {
+    return { total: 0, currency: 'USD', items: [] }
+  }
+
+  // 获取所有注册记录及其关联的实例和offering信息
+  const { data: enrollments, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      id,
+      instance_id,
+      student_name,
+      currency,
+      instance:instance_v2(
+        id,
+        start_date,
+        start_time,
+        end_date,
+        end_time,
+        price_override,
+        location:course_locations(
+          id,
+          name
+        ),
+        offering:offerings_v2(
+          id,
+          name,
+          base_price,
+          currency
+        )
+      )
+    `)
+    .in('id', enrollmentIds)
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+  }
+
+  if (!enrollments || enrollments.length === 0) {
+    return { total: 0, currency: 'USD', items: [] }
+  }
+
+  const items: Array<{
+    enrollmentId: string
+    amount: number
+    currency: string
+    courseName: string
+    instanceName?: string
+    studentName: string
+  }> = []
+  let total = 0
+  let currency = 'USD'
+
+  for (const enrollment of enrollments) {
+    const instance = Array.isArray(enrollment.instance) 
+      ? enrollment.instance[0] 
+      : enrollment.instance
+    const offering = Array.isArray(instance?.offering)
+      ? instance.offering[0]
+      : instance?.offering
+
+    // 价格优先级：instance_v2.price_override > offerings_v2.base_price
+    const price = instance?.price_override ?? offering?.base_price ?? 0
+    const itemCurrency = enrollment.currency || offering?.currency || 'USD'
+    currency = itemCurrency // 使用第一个货币（假设所有项目使用相同货币）
+
+    // 构建实例描述（使用日期、时间和地点）
+    const location = Array.isArray(instance?.location)
+      ? instance.location[0]
+      : instance?.location
+    
+    const instanceDescription = instance 
+      ? [
+          instance.start_date ? new Date(instance.start_date).toLocaleDateString() : '',
+          instance.start_time ? instance.start_time.substring(0, 5) : '',
+          location?.name ? `at ${location.name}` : '',
+        ].filter(Boolean).join(' ')
+      : undefined
+
+    items.push({
+      enrollmentId: enrollment.id,
+      amount: price,
+      currency: itemCurrency,
+      courseName: offering?.name || 'Unknown Course',
+      instanceName: instanceDescription,
+      studentName: enrollment.student_name,
+    })
+
+    total += price
+  }
+
+  return { total, currency, items }
+}
+
+// 确认注册（支付成功后，使用 instance_enrollments 表）
+export async function confirmInstanceEnrollment(
+  enrollmentId: string,
+  userId: string,
+  paymentTransactionId: string,
+  amountPaid: number,
+  stripePaymentIntentId?: string
+): Promise<any> {
+  const { data: enrollment, error: fetchError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('*')
+    .eq('id', enrollmentId)
+    .single()
+  
+  if (fetchError || !enrollment) {
+    throw new Error('Enrollment not found')
+  }
+  
+  // 验证用户是付款人
+  if (enrollment.payer_user_id !== userId) {
+    throw new Error('Unauthorized: You are not the payer for this enrollment')
+  }
+
+  if (enrollment.status !== 'reserved') {
+    throw new Error(`Enrollment is not in reserved status. Current status: ${enrollment.status}`)
+  }
+
+  // 检查是否过期
+  if (enrollment.reserved_expires_at && new Date(enrollment.reserved_expires_at) < new Date()) {
+    throw new Error('Reservation has expired')
+  }
+
+  // 生成核销二维码（如果需要）
+  let qrCode: string | null = null
+  let qrCodeExpiresAt: string | null = null
+  
+  if (enrollment.instance_id) {
+    const { data: instance } = await supabaseAdmin
+      .from('instance_v2')
+      .select('end_date')
+      .eq('id', enrollment.instance_id)
+      .single()
+    
+    if (instance?.end_date) {
+      // 二维码在课程结束后过期
+      qrCodeExpiresAt = new Date(instance.end_date).toISOString()
+      // 生成二维码（使用简单的签名方式）
+      const qrData = {
+        enrollment_id: enrollmentId,
+        student_id: enrollment.student_id,
+        instance_id: enrollment.instance_id,
+        timestamp: new Date().toISOString()
+      }
+      const signature = crypto.createHmac('sha256', process.env.QR_CODE_SECRET || 'default-secret')
+        .update(JSON.stringify(qrData))
+        .digest('hex')
+      qrCode = Buffer.from(JSON.stringify({ ...qrData, signature })).toString('base64')
+    }
+  }
+
+  // 更新为 enrolled
+  const updateData: any = {
+    status: 'enrolled',
+    enrolled_at: new Date().toISOString(),
+    payment_status: 'paid',
+    payment_transaction_id: paymentTransactionId,
+    amount_paid: amountPaid,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (stripePaymentIntentId) {
+    updateData.stripe_payment_intent_id = stripePaymentIntentId
+  }
+
+  if (qrCode) {
+    updateData.check_in_qr_code = qrCode
+    updateData.check_in_qr_code_expires_at = qrCodeExpiresAt
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .update(updateData)
+    .eq('id', enrollmentId)
+    .eq('payer_user_id', userId)
+    .eq('status', 'reserved')
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to confirm enrollment: ${error.message}`)
+  }
+
+  // 注意：容量更新由数据库触发器自动处理（update_instance_v2_student_count）
+
+  return data
+}
+
+// 根据 Stripe Checkout Session ID 获取 instance_enrollments 记录
+export async function getInstanceEnrollmentByStripeSessionId(
+  sessionId: string
+): Promise<any | null> {
+  const { data, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      *,
+      instance:instance_v2(
+        *,
+        offering:offerings_v2(*)
+      ),
+      payer:users!instance_enrollments_payer_user_id_fkey(id, name, email)
+    `)
+    .eq('stripe_checkout_session_id', sessionId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+  }
+
+  return data
+}
+
+// 根据 Stripe Payment Intent ID 获取 instance_enrollments 记录
+export async function getInstanceEnrollmentByStripePaymentIntentId(
+  paymentIntentId: string
+): Promise<any | null> {
+  const { data, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      *,
+      instance:instance_v2(
+        *,
+        offering:offerings_v2(*)
+      ),
+      payer:users!instance_enrollments_payer_user_id_fkey(id, name, email)
+    `)
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+  }
+
+  return data
+}
+
+// 根据 ID 获取 instance_enrollments 记录
+export async function getInstanceEnrollmentById(enrollmentId: string): Promise<any | null> {
+  const { data, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      *,
+      instance:instance_v2(
+        *,
+        offering:offerings_v2(*),
+        location:course_locations(*)
+      ),
+      payer:users!instance_enrollments_payer_user_id_fkey(id, name, email),
+      user:users!instance_enrollments_user_id_fkey(id, name, email)
+    `)
+    .eq('id', enrollmentId)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+  }
+
+  return data
+}
+
+// 更新 instance_enrollments 的 Stripe 信息
+export async function updateInstanceEnrollmentStripeInfo(
+  enrollmentId: string,
+  stripeInfo: {
+    checkout_session_id?: string
+    payment_intent_id?: string
+    customer_id?: string
+  }
+): Promise<any> {
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  }
+
+  if (stripeInfo.checkout_session_id) {
+    updateData.stripe_checkout_session_id = stripeInfo.checkout_session_id
+  }
+  if (stripeInfo.payment_intent_id) {
+    updateData.stripe_payment_intent_id = stripeInfo.payment_intent_id
+  }
+  if (stripeInfo.customer_id) {
+    updateData.stripe_customer_id = stripeInfo.customer_id
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .update(updateData)
+    .eq('id', enrollmentId)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to update Stripe info: ${error.message}`)
+  }
+
+  return data
+}
+
+// ==================== Instance Enrollments 等待列表操作 ====================
+
+// 加入等待列表（使用 instance_enrollments 表）
+export async function addToInstanceWaitlist(
+  userId: string,
+  instanceId: string,
+  studentId: string | null,
+  studentName: string,
+  studentBirthDate?: string
+): Promise<any> {
+  // 1. 验证用户权限（学生账户可以加入等待列表）
+  // 注意：学生账户可以加入等待列表，但支付需要由付款人完成
+
+  // 2. 检查实例状态和容量（必须已满）
+  const { data: instance, error: instanceError } = await supabaseAdmin
+    .from('instance_v2')
+    .select('id, max_students, current_students, is_active, status, offering_id')
+    .eq('id', instanceId)
+    .single()
+
+  if (instanceError || !instance) {
+    throw new Error('Instance not found')
+  }
+
+  if (!instance.is_active || !['scheduled', 'ongoing'].includes(instance.status)) {
+    throw new Error('Instance is not available for enrollment')
+  }
+
+  const availableCapacity = (instance.max_students || 0) - instance.current_students
+  if (availableCapacity > 0) {
+    throw new Error('Instance has available capacity. Please add to cart instead.')
+  }
+
+  // 3. 检查先修条件
+  const prereqCheck = await checkStudentPrerequisites(
+    userId,
+    studentId,
+    studentName,
+    instance.offering_id
+  )
+
+  if (!prereqCheck.canEnroll) {
+    throw new Error(`Prerequisites not met for student ${studentName}`)
+  }
+
+  // 4. 检查该学生是否已在等待列表
+  const { data: existingWaitlist } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('id, status')
+    .eq('user_id', userId)
+    .eq('instance_id', instanceId)
+    .eq('student_name', studentName)
+    .eq('status', 'waitlisted')
+    .eq('is_synced', false)
+    .maybeSingle()
+
+  if (existingWaitlist) {
+    throw new Error(`Student ${studentName} is already on the waitlist`)
+  }
+
+  // 5. 检查该学生是否已注册
+  const { data: existingEnrollment } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('id, status')
+    .eq('user_id', userId)
+    .eq('instance_id', instanceId)
+    .eq('student_name', studentName)
+    .in('status', ['cart', 'reserved', 'enrolled'])
+    .eq('is_synced', false)
+    .maybeSingle()
+
+  if (existingEnrollment) {
+    throw new Error(`Student ${studentName} already has an active enrollment with status: ${existingEnrollment.status}`)
+  }
+
+  // 6. 计算等待列表位置（调用数据库函数）
+  const { data: waitlistCount } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('instance_id', instanceId)
+    .eq('status', 'waitlisted')
+    .eq('is_synced', false)
+
+  const waitlistPosition = (waitlistCount?.count || 0) + 1
+
+  // 7. 确定付款人
+  let payerUserId = userId
+  if (studentId) {
+    const payer = await getStudentPayer(studentId)
+    if (payer) {
+      payerUserId = payer
+    }
+  }
+
+  // 8. 创建 waitlisted 状态记录
+  const { data: enrollment, error: insertError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .insert({
+      user_id: userId,
+      payer_user_id: payerUserId,
+      instance_id: instanceId,
+      student_id: studentId,
+      student_name: studentName,
+      student_birth_date: studentBirthDate || null,
+      status: 'waitlisted',
+      waitlisted_at: new Date().toISOString(),
+      waitlist_position: waitlistPosition,
+      prerequisites_passed: true,
+      prerequisites_checked_at: new Date().toISOString(),
+      prerequisites_check_result: prereqCheck,
+      is_synced: false,
+    })
+    .select()
+    .single()
+
+  if (insertError) {
+    throw new Error(`Failed to add to waitlist: ${insertError.message}`)
+  }
+
+  // 9. 更新等待列表位置（调用数据库函数）
+  await supabaseAdmin.rpc('update_waitlist_positions', {
+    instance_id_param: instanceId
+  })
+
+  return enrollment
+}
+
+// 获取用户的等待列表（使用 instance_enrollments 表）
+export async function getUserInstanceWaitlist(userId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      *,
+      instance:instance_v2(
+        *,
+        offering:offerings_v2(*),
+        location:course_locations(*)
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('status', 'waitlisted')
+    .eq('is_synced', false)
+    .order('waitlist_position', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to fetch waitlist: ${error.message}`)
+  }
+
+  return data || []
+}
+
+// 从等待列表移除（使用 instance_enrollments 表）
+export async function removeFromInstanceWaitlist(
+  enrollmentId: string,
+  userId: string
+): Promise<boolean> {
+  // 验证enrollment属于当前用户
+  const { data: enrollment, error: fetchError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('id, instance_id, status, user_id')
+    .eq('id', enrollmentId)
+    .single()
+
+  if (fetchError || !enrollment) {
+    throw new Error('Enrollment not found')
+  }
+
+  if (enrollment.user_id !== userId) {
+    throw new Error('Unauthorized: You do not have permission to remove this enrollment')
+  }
+
+  if (enrollment.status !== 'waitlisted') {
+    throw new Error(`Enrollment is not in waitlisted status. Current status: ${enrollment.status}`)
+  }
+
+  // 更新状态为 cancelled
+  const { error: updateError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_reason: 'Removed from waitlist by user',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', enrollmentId)
+    .eq('user_id', userId)
+    .eq('status', 'waitlisted')
+
+  if (updateError) {
+    throw new Error(`Failed to remove from waitlist: ${updateError.message}`)
+  }
+
+  // 更新等待列表位置（调用数据库函数）
+  if (enrollment.instance_id) {
+    await supabaseAdmin.rpc('update_waitlist_positions', {
+      instance_id_param: enrollment.instance_id
+    })
+  }
+
+  return true
+}
+
+// 检查等待列表并通知（后台任务，使用 instance_enrollments 表）
+export async function checkInstanceWaitlistAndNotify(): Promise<number> {
+  // 1. 查找所有有等待列表的实例
+  const { data: waitlistItems } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('instance_id')
+    .eq('status', 'waitlisted')
+    .eq('is_synced', false)
+    .is('waitlist_notified_at', null)
+
+  if (!waitlistItems || waitlistItems.length === 0) {
+    return 0
+  }
+
+  const uniqueInstanceIds = [...new Set(waitlistItems.map(item => item.instance_id))]
+  let notifiedCount = 0
+
+  // 2. 检查每个实例的可用容量
+  for (const instanceId of uniqueInstanceIds) {
+    const { data: instance } = await supabaseAdmin
+      .from('instance_v2')
+      .select('id, max_students, current_students')
+      .eq('id', instanceId)
+      .single()
+
+    if (!instance) {
+      continue
+    }
+
+    const availableCapacity = (instance.max_students || 0) - instance.current_students
+
+    // 3. 如果有名额，通知第一个等待列表用户
+    if (availableCapacity > 0) {
+      const { data: firstWaitlist } = await supabaseAdmin
+        .from('instance_enrollments')
+        .select('*')
+        .eq('instance_id', instanceId)
+        .eq('status', 'waitlisted')
+        .eq('is_synced', false)
+        .is('waitlist_notified_at', null)
+        .order('waitlist_position', { ascending: true })
+        .limit(1)
+        .single()
+
+      if (firstWaitlist) {
+        // 设置通知过期时间（默认24小时）
+        const notificationHours = 24
+        const waitlistExpiresAt = new Date(Date.now() + notificationHours * 60 * 60 * 1000)
+
+        // 更新为已通知
+        await supabaseAdmin
+          .from('instance_enrollments')
+          .update({
+            waitlist_notified_at: new Date().toISOString(),
+            waitlist_expires_at: waitlistExpiresAt.toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', firstWaitlist.id)
+
+        // 创建通知记录
+        await supabaseAdmin
+          .from('waitlist_notifications')
+          .insert({
+            enrollment_id: firstWaitlist.id,
+            notification_type: 'spot_available',
+            notification_method: 'email',
+            sent_at: new Date().toISOString(),
+          })
+
+        notifiedCount++
+      }
+    }
+  }
+
+  return notifiedCount
+}
+
+// ==================== Instance Enrollments 退款操作 ====================
+
+// 计算退款政策选项（基于距离活动开始的天数）
+export interface RefundPolicyOptions {
+  daysUntilStart: number
+  canRefund: boolean
+  canCredit: boolean
+  refundAmount: number  // 可退款金额（扣除处理费后）
+  creditAmount: number  // 信用额度金额（全额）
+  processingFee: number  // 处理费（3%）
+  taxAmount: number  // 税费
+  refundPercentage: number  // 退款百分比
+  creditPercentage: number  // 信用额度百分比
+}
+
+export async function calculateRefundPolicy(
+  enrollmentId: string
+): Promise<RefundPolicyOptions> {
+  // 获取enrollment和instance信息
+  const { data: enrollment, error: enrollmentError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select(`
+      id,
+      amount_paid,
+      tax_amount,
+      instance_id,
+      instance:instance_v2(
+        id,
+        start_date,
+        status
+      )
+    `)
+    .eq('id', enrollmentId)
+    .single()
+
+  if (enrollmentError || !enrollment) {
+    throw new Error('Enrollment not found')
+  }
+
+  const instance = Array.isArray(enrollment.instance)
+    ? enrollment.instance[0]
+    : enrollment.instance
+
+  if (!instance) {
+    throw new Error('Instance not found')
+  }
+
+  const amountPaid = Number(enrollment.amount_paid) || 0
+  const taxAmount = Number(enrollment.tax_amount) || 0
+
+  // 计算距离活动开始的天数
+  const startDate = new Date(instance.start_date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  startDate.setHours(0, 0, 0, 0)
+  
+  const daysUntilStart = Math.floor((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+  // 根据退款政策计算选项
+  let canRefund = false
+  let canCredit = false
+  let refundAmount = 0
+  let creditAmount = amountPaid
+  let processingFee = 0
+  let refundPercentage = 0
+  let creditPercentage = 100
+
+  if (daysUntilStart >= 30) {
+    // 30天前：可以选择退款（扣除3%处理费）或信用额度（100%）
+    canRefund = true
+    canCredit = true
+    processingFee = amountPaid * 0.03
+    refundAmount = amountPaid - processingFee - taxAmount
+    refundPercentage = 100
+    creditPercentage = 100
+  } else if (daysUntilStart > 0 && daysUntilStart < 30) {
+    // 30天内到活动开始：只能选择信用额度（100%）
+    canRefund = false
+    canCredit = true
+    refundAmount = 0
+    refundPercentage = 0
+    creditPercentage = 100
+  } else {
+    // 活动已开始：除非特殊情况，否则不退款
+    canRefund = false
+    canCredit = false
+    refundAmount = 0
+    creditAmount = 0
+    refundPercentage = 0
+    creditPercentage = 0
+  }
+
+  return {
+    daysUntilStart,
+    canRefund,
+    canCredit,
+    refundAmount: Math.max(0, refundAmount),
+    creditAmount: Math.max(0, creditAmount),
+    processingFee,
+    taxAmount,
+    refundPercentage,
+    creditPercentage,
+  }
+}
+
+// 处理退款（使用 instance_enrollments 表）
+export async function processInstanceRefund(
+  enrollmentId: string,
+  userId: string,
+  refundType: 'refund' | 'credit',
+  reason?: string
+): Promise<{
+  enrollment: any
+  credit?: any
+  refundTransactionId?: string
+}> {
+  // 1. 验证用户是付款人
+  const { data: enrollment, error: fetchError } = await supabaseAdmin
+    .from('instance_enrollments')
+    .select('*')
+    .eq('id', enrollmentId)
+    .single()
+
+  if (fetchError || !enrollment) {
+    throw new Error('Enrollment not found')
+  }
+
+  if (enrollment.payer_user_id !== userId) {
+    throw new Error('Unauthorized: You are not the payer for this enrollment')
+  }
+
+  // 2. 验证enrollment状态
+  if (enrollment.payment_status !== 'paid') {
+    throw new Error(`Enrollment payment status is not paid. Current status: ${enrollment.payment_status}`)
+  }
+
+  if (!['enrolled', 'reserved'].includes(enrollment.status)) {
+    throw new Error(`Enrollment status is not eligible for refund. Current status: ${enrollment.status}`)
+  }
+
+  // 3. 计算退款政策
+  const policy = await calculateRefundPolicy(enrollmentId)
+
+  // 4. 验证退款类型是否可用
+  if (refundType === 'refund' && !policy.canRefund) {
+    throw new Error('Refund is not available. Only credit is available.')
+  }
+
+  if (refundType === 'credit' && !policy.canCredit) {
+    throw new Error('Credit is not available.')
+  }
+
+  // 5. 处理退款或创建信用额度
+  if (refundType === 'refund') {
+    // 处理退款
+    if (!enrollment.stripe_payment_intent_id) {
+      throw new Error('Stripe payment intent ID not found. Cannot process refund.')
+    }
+
+    // 调用 Stripe 退款 API
+    const { stripe } = await import('@/lib/stripe')
+    let refundTransactionId: string | undefined
+
+    try {
+      const refund = await stripe.refunds.create({
+        payment_intent: enrollment.stripe_payment_intent_id,
+        amount: Math.round(policy.refundAmount * 100), // 转换为分
+        reason: 'requested_by_customer',
+        metadata: {
+          enrollment_id: enrollmentId,
+          user_id: userId,
+          reason: reason || 'User requested refund',
+        },
+      })
+
+      refundTransactionId = refund.id
+
+      // 更新enrollment状态
+      const { data: updatedEnrollment, error: updateError } = await supabaseAdmin
+        .from('instance_enrollments')
+        .update({
+          payment_status: 'refunded',
+          status: 'cancelled',
+          refund_type: 'refund',
+          refund_reason: reason || 'User requested refund',
+          refund_requested_at: new Date().toISOString(),
+          refund_processed_at: new Date().toISOString(),
+          refund_transaction_id: refundTransactionId,
+          amount_refunded: policy.refundAmount,
+          processing_fee: policy.processingFee,
+          cancelled_at: new Date().toISOString(),
+          cancelled_reason: 'Refunded',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', enrollmentId)
+        .select()
+        .single()
+
+      if (updateError) {
+        throw new Error(`Failed to update enrollment: ${updateError.message}`)
+      }
+
+      // 注意：容量更新由数据库触发器自动处理
+
+      return {
+        enrollment: updatedEnrollment,
+        refundTransactionId,
+      }
+    } catch (stripeError: any) {
+      throw new Error(`Stripe refund failed: ${stripeError.message}`)
+    }
+  } else {
+    // 创建信用额度
+    const creditAmount = policy.creditAmount
+
+    // 创建用户信用额度记录
+    const { data: credit, error: creditError } = await supabaseAdmin
+      .from('user_credits')
+      .insert({
+        user_id: userId,
+        credit_amount: creditAmount,
+        used_amount: 0,
+        source_enrollment_id: enrollmentId,
+        expires_at: null, // 根据政策，信用额度无过期时间
+        notes: `Credit from enrollment ${enrollmentId}: ${reason || 'User requested credit'}`,
+      })
+      .select()
+      .single()
+
+    if (creditError) {
+      throw new Error(`Failed to create credit: ${creditError.message}`)
+    }
+
+    // 更新enrollment状态
+    const { data: updatedEnrollment, error: updateError } = await supabaseAdmin
+      .from('instance_enrollments')
+      .update({
+        payment_status: 'credited',
+        status: 'cancelled',
+        refund_type: 'credit',
+        refund_reason: reason || 'User requested credit',
+        refund_requested_at: new Date().toISOString(),
+        refund_processed_at: new Date().toISOString(),
+        amount_credited: creditAmount,
+        credit_id: credit.id,
+        cancelled_at: new Date().toISOString(),
+        cancelled_reason: 'Converted to credit',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', enrollmentId)
+      .select()
+      .single()
+
+    if (updateError) {
+      throw new Error(`Failed to update enrollment: ${updateError.message}`)
+    }
+
+    // 注意：容量更新由数据库触发器自动处理
+
+    return {
+      enrollment: updatedEnrollment,
+      credit,
+    }
+  }
+}
+
+// 获取用户的信用额度
+export async function getUserCredits(userId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('user_credits')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to fetch credits: ${error.message}`)
+  }
+
+  return data || []
+}
+
 // ==================== Learning Paths 操作 ====================
 
 // 获取所有学习路径
@@ -3889,13 +5151,13 @@ export async function getEnrollmentConfig(key: string): Promise<string | null> {
 // 获取实例可用容量
 export async function getInstanceAvailableCapacity(instanceId: string): Promise<number> {
   // 优先从 instance_v2 查询（新表）
-  const { data: instanceV2, error: instanceV2Error } = await supabaseAdmin
-    .from('instance_v2')
-    .select('max_students, current_students')
-    .eq('id', instanceId)
-    .single()
+    const { data: instanceV2, error: instanceV2Error } = await supabaseAdmin
+      .from('instance_v2')
+      .select('max_students, current_students')
+      .eq('id', instanceId)
+      .single()
 
-  if (!instanceV2Error && instanceV2) {
+    if (!instanceV2Error && instanceV2) {
     // 对于instance_v2表，直接使用表中的max_students和current_students字段
     // instance_v2表已经包含了容量信息，不需要查询course_enrollments表
     const maxStudents = instanceV2.max_students ?? 0
@@ -3915,13 +5177,13 @@ export async function getInstanceAvailableCapacity(instanceId: string): Promise<
   }
 
   // 向后兼容：查询旧表 course_instances
-  const { data: instanceData, error: instanceError } = await supabaseAdmin
-    .from('course_instances')
-    .select('max_students, current_students')
-    .eq('id', instanceId)
-    .single()
+      const { data: instanceData, error: instanceError } = await supabaseAdmin
+        .from('course_instances')
+        .select('max_students, current_students')
+        .eq('id', instanceId)
+        .single()
 
-  if (instanceError || !instanceData) {
+      if (instanceError || !instanceData) {
     // 如果旧表也找不到，尝试使用 RPC 函数（最后的后备方案）
     const { data: rpcData, error: rpcError } = await supabaseAdmin
       .rpc('get_instance_available_capacity', { instance_id_param: instanceId })
@@ -3932,49 +5194,49 @@ export async function getInstanceAvailableCapacity(instanceId: string): Promise<
     
     console.warn(`[getInstanceAvailableCapacity] Instance ${instanceId} not found in both instance_v2 and course_instances`)
     return 0
-  }
-
+    }
+    
   // 对于旧表，查询所有状态的注册数量
   const maxStudents = instanceData.max_students ?? 0
   
-  const [enrolled, reserved, cart] = await Promise.all([
-    supabaseAdmin
-      .from('course_enrollments')
-      .select('id', { count: 'exact', head: true })
-      .eq('instance_id', instanceId)
-      .eq('status', 'enrolled'),
-    supabaseAdmin
-      .from('course_enrollments')
-      .select('id', { count: 'exact', head: true })
-      .eq('instance_id', instanceId)
-      .eq('status', 'reserved')
-      .gt('reserved_expires_at', new Date().toISOString()),
-    supabaseAdmin
-      .from('course_enrollments')
-      .select('id', { count: 'exact', head: true })
-      .eq('instance_id', instanceId)
-      .eq('status', 'cart')
-      .gt('cart_expires_at', new Date().toISOString()),
-  ])
+    const [enrolled, reserved, cart] = await Promise.all([
+      supabaseAdmin
+        .from('course_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'enrolled'),
+      supabaseAdmin
+        .from('course_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'reserved')
+        .gt('reserved_expires_at', new Date().toISOString()),
+      supabaseAdmin
+        .from('course_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'cart')
+        .gt('cart_expires_at', new Date().toISOString()),
+    ])
 
-  const enrolledCount = enrolled.count || 0
-  const reservedCount = reserved.count || 0
-  const cartCount = cart.count || 0
+    const enrolledCount = enrolled.count || 0
+    const reservedCount = reserved.count || 0
+    const cartCount = cart.count || 0
 
-  const availableCapacity = Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
-  
+    const availableCapacity = Math.max(0, maxStudents - enrolledCount - reservedCount - cartCount)
+    
   // 调试日志
-  if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development') {
     console.log(`[getInstanceAvailableCapacity ${instanceId} - legacy table]`, {
-      max_students: maxStudents,
-      enrolled_count: enrolledCount,
-      reserved_count: reservedCount,
-      cart_count: cartCount,
-      available_capacity: availableCapacity,
-    })
-  }
-  
-  return availableCapacity
+        max_students: maxStudents,
+        enrolled_count: enrolledCount,
+        reserved_count: reservedCount,
+        cart_count: cartCount,
+        available_capacity: availableCapacity,
+      })
+    }
+
+    return availableCapacity
 }
 
 // 将课程实例加入注册清单

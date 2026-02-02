@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, User, LogIn } from 'lucide-react'
+import { Search, Bell, User, LogIn, LayoutDashboard, CreditCard, FileText } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -101,10 +101,28 @@ export function MobileTopBar() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile">Profile</Link>
+                  <Link href="/portal">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    Portal
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/enrollments/cart">Cart</Link>
+                  <Link href="/enrollments">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Enrollments
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/billing">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Billing
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
