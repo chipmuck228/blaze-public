@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "./ui/button"
-import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy } from "lucide-react"
+import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy, Rocket, Zap, Lightbulb } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
@@ -15,39 +15,72 @@ interface Category {
   poster_url?: string | null
 }
 
-const categoryIcons: Record<string, React.ReactNode> = {
-  courses: <BookOpen className="h-8 w-8 stroke-1" />,
-  camps: <GraduationCap className="h-8 w-8 stroke-1" />,
-  workshops: <Sparkles className="h-8 w-8 stroke-1" />,
-  competition: <Trophy className="h-8 w-8 stroke-1" />,
-}
-
+// 根据 v2_category 的 name 字段映射图标和颜色
 const getCategoryIcon = (categoryName: string) => {
-  const normalizedName = categoryName.toLowerCase()
-  if (normalizedName.includes('course')) {
-    return categoryIcons.courses
-  } else if (normalizedName.includes('camp')) {
-    return categoryIcons.camps
-  } else if (normalizedName.includes('workshop')) {
-    return categoryIcons.workshops
-  } else if (normalizedName.includes('competition')) {
-    return categoryIcons.competition
+  const normalizedName = categoryName.toLowerCase().trim()
+  
+  switch (normalizedName) {
+    case 'beginner_robotics':
+      return <BookOpen className="h-8 w-8 stroke-1" />
+    case 'intermediate_robotics':
+      return <GraduationCap className="h-8 w-8 stroke-1" />
+    case 'advanced_robotics':
+      return <Rocket className="h-8 w-8 stroke-1" />
+    case 'competition_robotics':
+      return <Trophy className="h-8 w-8 stroke-1" />
+    case 'innovation_lab':
+      return <Sparkles className="h-8 w-8 stroke-1" />
+    default:
+      // 向后兼容：如果 name 包含某些关键词，使用相应的图标
+      if (normalizedName.includes('beginner') || normalizedName.includes('初级')) {
+        return <BookOpen className="h-8 w-8 stroke-1" />
+      } else if (normalizedName.includes('intermediate') || normalizedName.includes('中级')) {
+        return <GraduationCap className="h-8 w-8 stroke-1" />
+      } else if (normalizedName.includes('advanced') || normalizedName.includes('高级')) {
+        return <Rocket className="h-8 w-8 stroke-1" />
+      } else if (normalizedName.includes('competition') || normalizedName.includes('竞赛')) {
+        return <Trophy className="h-8 w-8 stroke-1" />
+      } else if (normalizedName.includes('innovation') || normalizedName.includes('创新')) {
+        return <Sparkles className="h-8 w-8 stroke-1" />
+      }
+      return <BookOpen className="h-8 w-8 stroke-1" /> // default
   }
-  return categoryIcons.courses // default
 }
 
 const getCategoryGradient = (categoryName: string) => {
-  const normalizedName = categoryName.toLowerCase()
-  if (normalizedName.includes('course')) {
-    return { from: '#3B82F6', to: '#1E40AF' }
-  } else if (normalizedName.includes('camp')) {
-    return { from: '#10B981', to: '#047857' }
-  } else if (normalizedName.includes('workshop')) {
-    return { from: '#8B5CF6', to: '#6D28D9' }
-  } else if (normalizedName.includes('competition')) {
-    return { from: '#F59E0B', to: '#D97706' }
+  const normalizedName = categoryName.toLowerCase().trim()
+  
+  switch (normalizedName) {
+    case 'beginner_robotics':
+      // 蓝色系 - 代表入门和基础
+      return { from: '#3B82F6', to: '#1E40AF' }
+    case 'intermediate_robotics':
+      // 绿色系 - 代表成长和进步
+      return { from: '#10B981', to: '#047857' }
+    case 'advanced_robotics':
+      // 紫色系 - 代表高级和专业
+      return { from: '#8B5CF6', to: '#6D28D9' }
+    case 'competition_robotics':
+      // 橙色/金色系 - 代表竞赛和成就
+      return { from: '#F59E0B', to: '#D97706' }
+    case 'innovation_lab':
+      // 青色系 - 代表创新和未来
+      return { from: '#06B6D4', to: '#0891B2' }
+    default:
+      // 向后兼容：如果 name 包含某些关键词，使用相应的颜色
+      if (normalizedName.includes('beginner') || normalizedName.includes('初级')) {
+        return { from: '#3B82F6', to: '#1E40AF' }
+      } else if (normalizedName.includes('intermediate') || normalizedName.includes('中级')) {
+        return { from: '#10B981', to: '#047857' }
+      } else if (normalizedName.includes('advanced') || normalizedName.includes('高级')) {
+        return { from: '#8B5CF6', to: '#6D28D9' }
+      } else if (normalizedName.includes('competition') || normalizedName.includes('竞赛')) {
+        return { from: '#F59E0B', to: '#D97706' }
+      } else if (normalizedName.includes('innovation') || normalizedName.includes('创新')) {
+        return { from: '#06B6D4', to: '#0891B2' }
+      }
+      return { from: '#6B7280', to: '#4B5563' } // default gray
   }
-  return { from: '#6B7280', to: '#4B5563' } // default
 }
 
 export const Categories = () => {
@@ -105,10 +138,10 @@ export const Categories = () => {
     <section className="bg-[#0f172a] text-white pt-16 pb-8">
       <div className="text-center mb-12 md:mb-16">
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-          Our Programs
+          Inspire & Empower
         </h2>
         <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-          Explore our diverse range of educational programs designed to inspire and empower learners
+          Explore our diverse range of educational categories designed to inspire and empower learners
         </p>
       </div>
 

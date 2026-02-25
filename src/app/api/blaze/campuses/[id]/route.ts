@@ -15,10 +15,10 @@ export async function GET(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("blaze_campus")
+      .from("v2_campus")
       .select(`
         *,
-        franchise:blaze_franchise(
+        franchise:v2_franchise(
           id,
           code,
           name
@@ -81,16 +81,16 @@ export async function PUT(
     }
 
     if (franchise_id) {
-      // 验证 franchise_id 存在于 blaze_franchise 表中
+      // 验证 franchise_id 存在于 v2_franchise 表中
       const { data: franchise, error: franchiseError } = await supabaseAdmin
-        .from("blaze_franchise")
+        .from("v2_franchise")
         .select("id")
         .eq("id", franchise_id)
         .single()
 
       if (franchiseError || !franchise) {
         return NextResponse.json(
-          { error: "Invalid franchise_id. Franchise must exist in blaze_franchise table." },
+          { error: "Invalid franchise_id. Franchise must exist in v2_franchise table." },
           { status: 400 }
         )
       }
@@ -120,12 +120,12 @@ export async function PUT(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("blaze_campus")
+      .from("v2_campus")
       .update(updateData)
       .eq("id", id)
       .select(`
         *,
-        franchise:blaze_franchise(
+        franchise:v2_franchise(
           id,
           code,
           name
@@ -168,7 +168,7 @@ export async function DELETE(
 
     // 检查是否有实例使用此 campus
     const { data: instances, error: instancesError } = await supabaseAdmin
-      .from("blaze_instance")
+      .from("v2_instance")
       .select("id")
       .eq("campus_id", id)
       .limit(1)
@@ -185,7 +185,7 @@ export async function DELETE(
     }
 
     const { error } = await supabaseAdmin
-      .from("blaze_campus")
+      .from("v2_campus")
       .delete()
       .eq("id", id)
 

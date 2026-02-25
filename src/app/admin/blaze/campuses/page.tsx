@@ -148,8 +148,8 @@ export default function BlazeCampusesManagementPage() {
   const fetchFranchises = async () => {
     try {
       setIsLoadingFranchises(true)
-      // 使用 blaze_franchise API，如果不存在则使用旧的 API
-      const response = await fetch("/api/admin/franchises")
+      // 使用 v2_franchise 表
+      const response = await fetch("/api/admin/franchises/v2")
       if (!response.ok) {
         throw new Error("Failed to fetch franchises")
       }

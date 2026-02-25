@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
-// 获取所有活跃的课程类别（公开 API）
+// 获取所有活跃的课程类别（公开 API）- 使用 v2_category 表
 export async function GET() {
   try {
-    console.log('[Categories API] Fetching categories...');
+    console.log('[Categories API] Fetching categories from v2_category...');
     
     // 检查环境变量
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -18,10 +18,10 @@ export async function GET() {
       );
     }
     
-    // 只获取活跃的类别（is_active = true）
+    // 从 v2_category 表获取活跃的类别（is_active = true）
     const { data, error } = await supabaseAdmin
-      .from('course_categories')
-      .select('*')
+      .from('v2_category')
+      .select('id, name, display_name, description, poster_url, is_active, display_order')
       .eq('is_active', true)
       .order('display_order', { ascending: true })
 
@@ -32,10 +32,10 @@ export async function GET() {
         hint: error.hint,
         code: error.code
       });
-      throw new Error(`Failed to fetch course categories: ${error.message}`)
+      throw new Error(`Failed to fetch categories: ${error.message}`)
     }
 
-    console.log(`[Categories API] Successfully fetched ${data?.length || 0} categories`);
+    console.log(`[Categories API] Successfully fetched ${data?.length || 0} categories from v2_category`);
     return NextResponse.json({ categories: data || [] }, { status: 200 })
   } catch (error: any) {
     console.error("[Categories API] Error fetching categories:", {

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Calendar, Eye, Clock, Users, DollarSign, MapPin, X, AlertTriangle, Save } from "lucide-react"
+import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
 
 interface BlazeProgram {
   id: string
@@ -72,7 +73,7 @@ interface BlazeCategory {
   id: string
   name: string
   display_name: string
-  franchise_id: string
+  franchise_id?: string
 }
 
 interface BlazeFranchise {
@@ -154,6 +155,7 @@ export default function BlazeProgramsManagementPage() {
   const [offerings, setOfferings] = useState<any[]>([])
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false)
+  const [editingInstance, setEditingInstance] = useState<any | null>(null)
 
   const [formData, setFormData] = useState<Omit<BlazeProgram, 'id' | 'created_at' | 'updated_at' | 'category' | 'franchise'>>({
     category_id: "",
@@ -184,7 +186,7 @@ export default function BlazeProgramsManagementPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch("/api/blaze/programs/hierarchy")
+      const response = await fetch("/api/admin/programs/v2/hierarchy")
       
       if (!response.ok) {
         throw new Error("Failed to fetch hierarchy")
@@ -202,7 +204,7 @@ export default function BlazeProgramsManagementPage() {
 
   const fetchPrograms = async () => {
     try {
-      const response = await fetch("/api/blaze/programs")
+      const response = await fetch("/api/admin/programs/v2")
       if (response.ok) {
         const data = await response.json()
         setPrograms(data)
@@ -214,7 +216,7 @@ export default function BlazeProgramsManagementPage() {
 
   const fetchFranchises = async () => {
     try {
-      const response = await fetch("/api/blaze/franchises")
+      const response = await fetch("/api/admin/franchises/v2")
       if (response.ok) {
         const data = await response.json()
         setFranchises(data || [])
@@ -227,10 +229,17 @@ export default function BlazeProgramsManagementPage() {
   const fetchCategories = async (franchiseId: string) => {
     try {
       setIsLoadingCategories(true)
-      const response = await fetch(`/api/blaze/categories?franchise_id=${franchiseId}`)
+      const response = await fetch(`/api/admin/franchises/v2/${franchiseId}/categories`)
       if (response.ok) {
         const data = await response.json()
-        setCategories(data || [])
+        // 从 franchise_category_map 中提取 category 信息
+        const categories = data.map((item: any) => ({
+          id: item.category.id,
+          name: item.category.name,
+          display_name: item.category.display_name,
+          franchise_id: franchiseId, // 添加 franchise_id 以保持兼容性
+        }))
+        setCategories(categories)
       }
     } catch (error) {
       console.error("Error fetching categories:", error)
@@ -279,7 +288,7 @@ export default function BlazeProgramsManagementPage() {
     }
 
     try {
-      const response = await fetch(`/api/blaze/programs/${programId}`, {
+      const response = await fetch(`/api/admin/programs/v2/${programId}`, {
         method: "DELETE",
       })
 
@@ -345,8 +354,8 @@ export default function BlazeProgramsManagementPage() {
       }
 
       const url = editingProgram
-        ? `/api/blaze/programs/${editingProgram.id}`
-        : "/api/blaze/programs"
+        ? `/api/admin/programs/v2/${editingProgram.id}`
+        : "/api/admin/programs/v2"
       const method = editingProgram ? "PUT" : "POST"
 
       const response = await fetch(url, {
@@ -382,29 +391,9 @@ export default function BlazeProgramsManagementPage() {
 
   // Handle instance edit
   const handleInstanceEdit = (instance: any) => {
-    setSelectedInstance(instance)
-    setModalMode('edit')
-    setEditFormData({
-      start_date: instance.start_date || "",
-      end_date: instance.end_date || "",
-      start_time: instance.start_time || "",
-      end_time: instance.end_time || "",
-      max_students: instance.max_students || "",
-      current_students: instance.current_students || 0,
-      price_override: instance.price_override || "",
-      status: instance.status || "scheduled",
-      notes: instance.notes || "",
-      is_active: instance.is_active !== undefined ? instance.is_active : true,
-      campus_id: instance.campus_id || "",
-      age_min: instance.age_min || "",
-      age_max: instance.age_max || "",
-    })
-    // 根据 instance 的 franchise_id 获取对应的 campuses
-    if (instance.franchise_id) {
-      fetchCampuses(instance.franchise_id)
-    } else {
-      fetchCampuses()
-    }
+    setEditingInstance(instance)
+    setSelectedProgramId(instance.program_id)
+    setIsInstanceDialogOpen(true)
   }
 
   // Handle instance delete
@@ -671,11 +660,25 @@ export default function BlazeProgramsManagementPage() {
                                         </CardHeader>
                                         <CardContent>
                                           {/* Display Instances */}
+                                          <div className="flex items-center justify-between mb-2">
+                                            <p className="text-sm font-medium text-muted-foreground">
+                                              Instances ({programItem.instances?.length || 0})
+                                            </p>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() => {
+                                                setSelectedProgramId(programItem.id)
+                                                setEditingInstance(null)
+                                                setIsInstanceDialogOpen(true)
+                                              }}
+                                            >
+                                              <Plus className="mr-2 h-4 w-4" />
+                                              Add Instance
+                                            </Button>
+                                          </div>
                                           {programItem.instances && programItem.instances.length > 0 ? (
                                             <div className="space-y-2">
-                                              <p className="text-sm font-medium text-muted-foreground mb-2">
-                                                Instances ({programItem.instances.length})
-                                              </p>
                                               <div className="space-y-2">
                                                 {programItem.instances.map((instance: any) => {
                                                   const formatTime = (time?: string) => {
@@ -843,13 +846,11 @@ export default function BlazeProgramsManagementPage() {
                   <SelectValue placeholder={isLoadingCategories ? "Loading..." : formData.franchise_id ? "Select a category" : "Select a franchise first"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories
-                    .filter(c => c.franchise_id === formData.franchise_id)
-                    .map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.display_name}
-                      </SelectItem>
-                    ))}
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.display_name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {editingProgram && (
@@ -1421,6 +1422,20 @@ export default function BlazeProgramsManagementPage() {
           </div>
         </div>
       )}
+
+      {/* Instance Create/Edit Dialog */}
+      <InstanceCreateDialog
+        open={isInstanceDialogOpen}
+        onOpenChange={setIsInstanceDialogOpen}
+        programId={selectedProgramId || undefined}
+        onSuccess={() => {
+          fetchHierarchy()
+          setIsInstanceDialogOpen(false)
+          setEditingInstance(null)
+          setSelectedProgramId(null)
+        }}
+        editingInstance={editingInstance}
+      />
     </div>
   )
 }

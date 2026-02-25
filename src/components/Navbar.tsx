@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard } from "lucide-react";
+import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
 import Link from "next/link";
 
@@ -71,6 +71,38 @@ interface RouteProps {
     display_name: string;
     description?: string | null;
     poster_url?: string | null;
+  }
+
+  // 根据 v2_category 的 name 字段返回对应的图标
+  const getCategoryIcon = (categoryName: string) => {
+    const normalizedName = categoryName.toLowerCase().trim()
+    
+    switch (normalizedName) {
+      case 'beginner_robotics':
+        return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      case 'intermediate_robotics':
+        return <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      case 'advanced_robotics':
+        return <Rocket className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      case 'competition_robotics':
+        return <Trophy className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      case 'innovation_lab':
+        return <Sparkles className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      default:
+        // 向后兼容：如果 name 包含某些关键词，使用相应的图标
+        if (normalizedName.includes('beginner') || normalizedName.includes('初级')) {
+          return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        } else if (normalizedName.includes('intermediate') || normalizedName.includes('中级')) {
+          return <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        } else if (normalizedName.includes('advanced') || normalizedName.includes('高级')) {
+          return <Rocket className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        } else if (normalizedName.includes('competition') || normalizedName.includes('竞赛')) {
+          return <Trophy className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        } else if (normalizedName.includes('innovation') || normalizedName.includes('创新')) {
+          return <Sparkles className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        }
+        return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" /> // default
+    }
   }
   
   export const Navbar = () => {
@@ -261,15 +293,104 @@ interface RouteProps {
       fetchLocations();
     }, []);
 
-    // Fetch categories
+    // Fetch categories - filter by franchise if on location page
     useEffect(() => {
       const fetchCategories = async () => {
         try {
           setIsLoadingCategories(true);
-          const response = await fetch('/api/public/categories');
-          if (response.ok) {
-            const data = await response.json();
-            setCategories(data.categories || []);
+          
+          // Check if we're on a location page (/locations/[code])
+          const locationMatch = pathname?.match(/^\/locations\/([^/]+)/);
+          const franchiseCode = locationMatch ? locationMatch[1] : null;
+          
+          // 调试日志：显示路径匹配结果
+          console.log('[Navbar] Fetching categories:', {
+            pathname: pathname,
+            locationMatch: locationMatch,
+            franchiseCode: franchiseCode,
+            willUseFranchiseAPI: !!franchiseCode,
+          });
+          
+          let response;
+          let apiUrl = '';
+          try {
+            if (franchiseCode) {
+              // Fetch categories for this specific franchise
+              const decodedCode = decodeURIComponent(franchiseCode).toLowerCase();
+              apiUrl = `/api/public/franchises/${encodeURIComponent(decodedCode)}/categories`;
+              console.log('[Navbar] Calling franchise categories API:', apiUrl);
+              response = await fetch(apiUrl);
+            } else {
+              // Fetch all categories (for homepage and other pages)
+              apiUrl = '/api/public/categories';
+              console.log('[Navbar] Calling all categories API:', apiUrl);
+              response = await fetch(apiUrl);
+            }
+            
+            console.log('[Navbar] API Response received:', {
+              status: response.status,
+              statusText: response.statusText,
+              ok: response.ok,
+              apiUrl: apiUrl,
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const categoriesData = data.categories || [];
+              
+              // 添加调试日志（始终显示，不依赖 NODE_ENV）
+              console.log('[Navbar] Categories fetched:', {
+                pathname: pathname,
+                franchiseCode: franchiseCode || 'all',
+                apiUrl: apiUrl,
+                categoriesCount: categoriesData.length,
+                categories: categoriesData.map((c: any) => ({ id: c.id, name: c.name, display_name: c.display_name })),
+                rawData: data,
+              });
+              
+              setCategories(categoriesData);
+            } else {
+              // 添加错误日志
+              const errorData = await response.json().catch(() => ({}));
+              console.error('[Navbar] Failed to fetch categories:', {
+                pathname: pathname,
+                status: response.status,
+                statusText: response.statusText,
+                error: errorData,
+                franchiseCode: franchiseCode || 'all',
+                apiUrl: apiUrl,
+              });
+              // 如果 franchise categories API 失败，回退到所有 categories
+              if (franchiseCode) {
+                console.warn('[Navbar] Falling back to all categories due to franchise API failure');
+                const fallbackResponse = await fetch('/api/public/categories');
+                if (fallbackResponse.ok) {
+                  const fallbackData = await fallbackResponse.json();
+                  setCategories(fallbackData.categories || []);
+                }
+              }
+            }
+          } catch (fetchError: any) {
+            console.error('[Navbar] Fetch error:', {
+              pathname: pathname,
+              franchiseCode: franchiseCode || 'all',
+              apiUrl: apiUrl,
+              error: fetchError.message,
+              stack: fetchError.stack,
+            });
+            // 如果 fetch 失败，回退到所有 categories
+            if (franchiseCode) {
+              console.warn('[Navbar] Falling back to all categories due to fetch error');
+              try {
+                const fallbackResponse = await fetch('/api/public/categories');
+                if (fallbackResponse.ok) {
+                  const fallbackData = await fallbackResponse.json();
+                  setCategories(fallbackData.categories || []);
+                }
+              } catch (fallbackError) {
+                console.error('[Navbar] Fallback also failed:', fallbackError);
+              }
+            }
           }
         } catch (error) {
           console.error('Error fetching categories:', error);
@@ -279,7 +400,7 @@ interface RouteProps {
       };
 
       fetchCategories();
-    }, []);
+    }, [pathname]);
 
     // Filter franchise groups based on search query
     useEffect(() => {
@@ -443,7 +564,7 @@ interface RouteProps {
                                 className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors border-b border-slate-800 last:border-0 ${isCategoryActive ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
                               >
                                 <div className="flex items-start gap-3">
-                                  <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  {getCategoryIcon(category.name)}
                                   <div className="flex-1 min-w-0">
                                     <div className="font-medium">{category.display_name || category.name}</div>
                                     {category.description && (
@@ -789,7 +910,7 @@ interface RouteProps {
                             className={`block px-3 py-3 text-sm font-medium rounded-md ${isCategoryActive ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
                           >
                             <div className="flex items-start gap-2">
-                              <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                              {getCategoryIcon(category.name)}
                               <div className="flex-1 min-w-0">
                                 <div>{category.display_name || category.name}</div>
                                 {category.description && (

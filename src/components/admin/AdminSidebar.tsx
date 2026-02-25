@@ -167,6 +167,12 @@ const blazeContentMenuItems = [
     badge: "NEW",
   },
   {
+    title: "Instances",
+    href: "/admin/blaze/instance",
+    icon: Calendar,
+    badge: "NEW",
+  },
+  {
     title: "Offerings",
     href: "/admin/blaze/offerings",
     icon: Package,

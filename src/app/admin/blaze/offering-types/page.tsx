@@ -34,80 +34,53 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Shapes, Link as LinkIcon } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 
-interface BlazeOfferingType {
+interface V2OfferingType {
   id: string
   code: string
   name: string
   description?: string
   icon?: string
   color?: string
+  offering_schema: Record<string, any>
+  instance_schema: Record<string, any>
   display_order: number
   is_active: boolean
-  is_default: boolean
-  is_bound_to_category: boolean
-  category_id?: string
-  config_schema?: Record<string, any>
-  legacy_type_code?: string
   created_at: string
   updated_at: string
-  category?: {
-    id: string
-    name: string
-    display_name: string
-  }
-}
-
-interface BlazeCategory {
-  id: string
-  name: string
-  display_name: string
-  franchise_id: string
 }
 
 export default function BlazeOfferingTypesManagementPage() {
-  const [offeringTypes, setOfferingTypes] = useState<BlazeOfferingType[]>([])
-  const [filteredTypes, setFilteredTypes] = useState<BlazeOfferingType[]>([])
+  const [offeringTypes, setOfferingTypes] = useState<V2OfferingType[]>([])
+  const [filteredTypes, setFilteredTypes] = useState<V2OfferingType[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [editingType, setEditingType] = useState<BlazeOfferingType | null>(null)
+  const [editingType, setEditingType] = useState<V2OfferingType | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [categories, setCategories] = useState<BlazeCategory[]>([])
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
 
-  const [formData, setFormData] = useState<Omit<BlazeOfferingType, 'id' | 'created_at' | 'updated_at' | 'category'>>({
+  const [formData, setFormData] = useState<Omit<V2OfferingType, 'id' | 'created_at' | 'updated_at'>>({
     code: "",
     name: "",
     description: "",
     icon: "",
     color: "",
+    offering_schema: {},
+    instance_schema: {},
     display_order: 0,
     is_active: true,
-    is_default: false,
-    is_bound_to_category: false,
-    category_id: undefined,
-    config_schema: {},
-    legacy_type_code: "",
   })
 
-  const [configSchemaJson, setConfigSchemaJson] = useState("{}")
+  const [offeringSchemaJson, setOfferingSchemaJson] = useState("{}")
+  const [instanceSchemaJson, setInstanceSchemaJson] = useState("{}")
 
   useEffect(() => {
     fetchOfferingTypes()
-    fetchCategories()
   }, [])
 
   useEffect(() => {
@@ -116,8 +89,7 @@ export default function BlazeOfferingTypesManagementPage() {
         (type) =>
           type.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           type.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          type.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          type.category?.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
+          type.description?.toLowerCase().includes(searchQuery.toLowerCase())
       )
       setFilteredTypes(filtered)
     } else {
@@ -129,7 +101,7 @@ export default function BlazeOfferingTypesManagementPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch("/api/blaze/offering-types?includeInactive=true")
+      const response = await fetch("/api/admin/offering-types/v2?includeInactive=true")
       
       if (!response.ok) {
         throw new Error("Failed to fetch offering types")
@@ -146,22 +118,6 @@ export default function BlazeOfferingTypesManagementPage() {
     }
   }
 
-  const fetchCategories = async () => {
-    try {
-      setIsLoadingCategories(true)
-      const response = await fetch("/api/blaze/categories")
-      if (!response.ok) {
-        throw new Error("Failed to fetch categories")
-      }
-      const data = await response.json()
-      setCategories(data || [])
-    } catch (err) {
-      console.error("Error fetching categories:", err)
-    } finally {
-      setIsLoadingCategories(false)
-    }
-  }
-
   const handleDelete = async (typeId: string) => {
     const type = offeringTypes.find(t => t.id === typeId)
     if (!type) return
@@ -171,7 +127,7 @@ export default function BlazeOfferingTypesManagementPage() {
     }
 
     try {
-      const response = await fetch(`/api/blaze/offering-types/${typeId}`, {
+      const response = await fetch(`/api/admin/offering-types/v2/${typeId}`, {
         method: "DELETE",
       })
 
@@ -187,7 +143,7 @@ export default function BlazeOfferingTypesManagementPage() {
     }
   }
 
-  const handleEdit = (type: BlazeOfferingType) => {
+  const handleEdit = (type: V2OfferingType) => {
     setEditingType(type)
     setFormData({
       code: type.code,
@@ -195,15 +151,13 @@ export default function BlazeOfferingTypesManagementPage() {
       description: type.description || "",
       icon: type.icon || "",
       color: type.color || "",
+      offering_schema: type.offering_schema || {},
+      instance_schema: type.instance_schema || {},
       display_order: type.display_order,
       is_active: type.is_active,
-      is_default: type.is_default,
-      is_bound_to_category: type.is_bound_to_category,
-      category_id: type.category_id,
-      config_schema: type.config_schema || {},
-      legacy_type_code: type.legacy_type_code || "",
     })
-    setConfigSchemaJson(JSON.stringify(type.config_schema || {}, null, 2))
+    setOfferingSchemaJson(JSON.stringify(type.offering_schema || {}, null, 2))
+    setInstanceSchemaJson(JSON.stringify(type.instance_schema || {}, null, 2))
     setIsEditDialogOpen(true)
   }
 
@@ -215,15 +169,13 @@ export default function BlazeOfferingTypesManagementPage() {
       description: "",
       icon: "",
       color: "",
+      offering_schema: {},
+      instance_schema: {},
       display_order: 0,
       is_active: true,
-      is_default: false,
-      is_bound_to_category: false,
-      category_id: undefined,
-      config_schema: {},
-      legacy_type_code: "",
     })
-    setConfigSchemaJson("{}")
+    setOfferingSchemaJson("{}")
+    setInstanceSchemaJson("{}")
     setIsEditDialogOpen(true)
   }
 
@@ -233,28 +185,29 @@ export default function BlazeOfferingTypesManagementPage() {
 
     try {
       // 解析 JSON 配置
-      let configSchema = {}
+      let offeringSchema = {}
+      let instanceSchema = {}
       try {
-        configSchema = configSchemaJson ? JSON.parse(configSchemaJson) : {}
+        offeringSchema = offeringSchemaJson ? JSON.parse(offeringSchemaJson) : {}
+        instanceSchema = instanceSchemaJson ? JSON.parse(instanceSchemaJson) : {}
       } catch (err) {
-        alert("Invalid JSON in Config Schema")
+        alert("Invalid JSON in Schema fields")
         setIsSubmitting(false)
         return
       }
 
       const submitData = {
         ...formData,
-        config_schema: configSchema,
+        offering_schema: offeringSchema,
+        instance_schema: instanceSchema,
         description: formData.description || undefined,
         icon: formData.icon || undefined,
         color: formData.color || undefined,
-        legacy_type_code: formData.legacy_type_code || undefined,
-        category_id: formData.is_bound_to_category ? formData.category_id : undefined,
       }
 
       const url = editingType
-        ? `/api/blaze/offering-types/${editingType.id}`
-        : "/api/blaze/offering-types"
+        ? `/api/admin/offering-types/v2/${editingType.id}`
+        : "/api/admin/offering-types/v2"
       const method = editingType ? "PUT" : "POST"
 
       const response = await fetch(url, {
@@ -289,20 +242,12 @@ export default function BlazeOfferingTypesManagementPage() {
     })
   }
 
-  const getCategoryLabel = (type: BlazeOfferingType) => {
-    if (!type.category_id) return "N/A"
-    const c = categories.find(cat => cat.id === type.category_id)
-    if (c) return c.display_name || c.name
-    if (type.category) return type.category.display_name || type.category.name
-    return "N/A"
-  }
-
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Blaze Offering Types Management</h1>
+        <h1 className="text-3xl font-bold">V2 Offering Types Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage offering types (product type configurations) using the new Blaze system
+          Manage offering types (product type configurations) using the V2 database schema
         </p>
       </div>
 
@@ -312,7 +257,7 @@ export default function BlazeOfferingTypesManagementPage() {
             <div>
               <CardTitle>Offering Types</CardTitle>
               <CardDescription>
-                A list of all offering types in the Blaze system
+                A list of all offering types in the V2 system
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -358,10 +303,8 @@ export default function BlazeOfferingTypesManagementPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Icon</TableHead>
                     <TableHead>Color</TableHead>
-                    <TableHead>Category</TableHead>
                     <TableHead>Display Order</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Default</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -385,26 +328,11 @@ export default function BlazeOfferingTypesManagementPage() {
                           "N/A"
                         )}
                       </TableCell>
-                      <TableCell>
-                        {type.is_bound_to_category ? (
-                          <Badge variant="outline" className="gap-1">
-                            <LinkIcon className="h-3 w-3" />
-                            {getCategoryLabel(type)}
-                          </Badge>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
                       <TableCell>{type.display_order}</TableCell>
                       <TableCell>
                         <Badge variant={type.is_active ? "default" : "secondary"}>
                           {type.is_active ? "Active" : "Inactive"}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {type.is_default && (
-                          <Badge variant="default">Default</Badge>
-                        )}
                       </TableCell>
                       <TableCell>{formatDate(type.created_at)}</TableCell>
                       <TableCell className="text-right">
@@ -450,9 +378,10 @@ export default function BlazeOfferingTypesManagementPage() {
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto pr-1">
               <Tabs defaultValue="basic" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                  <TabsTrigger value="config">Configuration</TabsTrigger>
+                  <TabsTrigger value="offering-schema">Offering Schema</TabsTrigger>
+                  <TabsTrigger value="instance-schema">Instance Schema</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="basic" className="space-y-4 mt-4">
@@ -500,7 +429,7 @@ export default function BlazeOfferingTypesManagementPage() {
                         id="icon"
                         value={formData.icon}
                         onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                        placeholder="e.g., BookOpen, Calendar"
+                        placeholder="e.g., book, tent, tools"
                       />
                     </div>
 
@@ -527,7 +456,7 @@ export default function BlazeOfferingTypesManagementPage() {
                     />
                   </div>
 
-                  <div className="border-t pt-4 space-y-4">
+                  <div className="border-t pt-4">
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="is_active"
@@ -538,87 +467,39 @@ export default function BlazeOfferingTypesManagementPage() {
                         Active
                       </Label>
                     </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is_default"
-                        checked={formData.is_default}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_default: checked === true })}
-                      />
-                      <Label htmlFor="is_default" className="cursor-pointer">
-                        Default Type
-                      </Label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is_bound_to_category"
-                        checked={formData.is_bound_to_category}
-                        onCheckedChange={(checked) => {
-                          setFormData({ 
-                            ...formData, 
-                            is_bound_to_category: checked === true,
-                            category_id: checked === true ? formData.category_id : undefined
-                          })
-                        }}
-                      />
-                      <Label htmlFor="is_bound_to_category" className="cursor-pointer">
-                        Bound to Category
-                      </Label>
-                    </div>
-
-                    {formData.is_bound_to_category && (
-                      <div className="space-y-2 pl-6">
-                        <Label htmlFor="category_id">Category *</Label>
-                        <Select
-                          value={formData.category_id || ""}
-                          onValueChange={(value) =>
-                            setFormData({
-                              ...formData,
-                              category_id: value,
-                            })
-                          }
-                          required
-                        >
-                          <SelectTrigger id="category_id">
-                            <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Select a category"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((category) => (
-                              <SelectItem key={category.id} value={category.id}>
-                                {category.display_name || category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="legacy_type_code">Legacy Type Code</Label>
-                    <Input
-                      id="legacy_type_code"
-                      value={formData.legacy_type_code}
-                      onChange={(e) => setFormData({ ...formData, legacy_type_code: e.target.value })}
-                      placeholder="e.g., course, camp (for backward compatibility)"
-                    />
                   </div>
                 </TabsContent>
 
-                <TabsContent value="config" className="space-y-4 mt-4">
+                <TabsContent value="offering-schema" className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="config_schema">Config Schema (JSON)</Label>
+                    <Label htmlFor="offering_schema">Offering Schema (JSON) *</Label>
                     <Textarea
-                      id="config_schema"
-                      value={configSchemaJson}
-                      onChange={(e) => setConfigSchemaJson(e.target.value)}
-                      placeholder='{"visible_fields": {}, "instance_fields": {}}'
-                      rows={12}
+                      id="offering_schema"
+                      value={offeringSchemaJson}
+                      onChange={(e) => setOfferingSchemaJson(e.target.value)}
+                      placeholder='{"fields": {...}}'
+                      rows={20}
                       className="font-mono text-sm"
                     />
                     <p className="text-xs text-muted-foreground">
-                      JSON object for configuration schema (field visibility, instance field configuration, etc.)
+                      JSON object defining the schema for Offering fields (e.g., description, base_price, base_capacity)
+                    </p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="instance-schema" className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="instance_schema">Instance Schema (JSON) *</Label>
+                    <Textarea
+                      id="instance_schema"
+                      value={instanceSchemaJson}
+                      onChange={(e) => setInstanceSchemaJson(e.target.value)}
+                      placeholder='{"fields": {...}}'
+                      rows={20}
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      JSON object defining the schema for Instance fields (e.g., age_min, age_max, instructor_name)
                     </p>
                   </div>
                 </TabsContent>
@@ -634,8 +515,7 @@ export default function BlazeOfferingTypesManagementPage() {
                 disabled={
                   isSubmitting || 
                   !formData.name || 
-                  !formData.code ||
-                  (formData.is_bound_to_category && !formData.category_id)
+                  !formData.code
                 } 
                 className="w-full sm:w-auto"
               >

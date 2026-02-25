@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
 // 获取所有 campuses（支持按 franchiseId 筛选）
-// 使用新的 blaze_campus 表，关联 blaze_franchise
+// 使用 v2_campus 表，关联 v2_franchise
 export async function GET(request: Request) {
   try {
     const session = await auth()
@@ -12,14 +12,14 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    const franchiseId = searchParams.get("franchiseId")
+    const franchiseId = searchParams.get("franchise_id")
     const activeOnly = searchParams.get("activeOnly") === "true"
 
     let query = supabaseAdmin
-      .from("blaze_campus")
+      .from("v2_campus")
       .select(`
         *,
-        franchise:blaze_franchise(
+        franchise:v2_franchise(
           id,
           code,
           name
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       query = query.eq("is_active", true)
     }
 
-    // 如果提供了 franchiseId，只返回属于该 franchise 的 campuses
+    // 如果提供了 franchise_id，只返回属于该 franchise 的 campuses
     if (franchiseId) {
       query = query.eq("franchise_id", franchiseId)
     }
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 }
 
 // 创建新 campus
-// 使用新的 blaze_campus 表，franchise_id 必须引用 blaze_franchise
+// 使用 v2_campus 表，franchise_id 必须引用 v2_franchise
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -86,6 +86,13 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!display_name) {
+      return NextResponse.json(
+        { error: "Missing required field: display_name" },
+        { status: 400 }
+      )
+    }
+
     if (!franchise_id) {
       return NextResponse.json(
         { error: "Missing required field: franchise_id" },
@@ -93,22 +100,22 @@ export async function POST(request: Request) {
       )
     }
 
-    // 验证 franchise_id 存在于 blaze_franchise 表中
+    // 验证 franchise_id 存在于 v2_franchise 表中
     const { data: franchise, error: franchiseError } = await supabaseAdmin
-      .from("blaze_franchise")
+      .from("v2_franchise")
       .select("id")
       .eq("id", franchise_id)
       .single()
 
     if (franchiseError || !franchise) {
       return NextResponse.json(
-        { error: "Invalid franchise_id. Franchise must exist in blaze_franchise table." },
+        { error: "Invalid franchise_id. Franchise must exist in v2_franchise table." },
         { status: 400 }
       )
     }
 
     const { data, error } = await supabaseAdmin
-      .from("blaze_campus")
+      .from("v2_campus")
       .insert({
         franchise_id,
         name,
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
       })
       .select(`
         *,
-        franchise:blaze_franchise(
+        franchise:v2_franchise(
           id,
           code,
           name

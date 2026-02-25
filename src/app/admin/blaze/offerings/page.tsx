@@ -14,12 +14,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -42,21 +36,22 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Package, Eye } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 
-interface BlazeOffering {
+interface V2Offering {
   id: string
   name: string
-  slug?: string
-  description?: string
-  target_audience?: string
-  learning_outcomes?: string
-  prerequisites?: string
-  base_price?: number
+  slug?: string | null
+  description?: string | null
+  target_audience?: string | null
+  learning_outcomes?: string | null
+  prerequisites?: string | null
+  base_price?: number | null
   currency: string
-  poster_url?: string
+  poster_url?: string | null
   offering_type_id: string
   type_config?: Record<string, any>
+  type_config_data?: Record<string, any>
   status: 'draft' | 'published' | 'suspended' | 'archived'
   created_at: string
   updated_at: string
@@ -64,43 +59,83 @@ interface BlazeOffering {
     id: string
     code: string
     name: string
-    category_id?: string
-    is_bound_to_category: boolean
-    category?: {
-      id: string
-      name: string
-      display_name: string
-      franchise_id: string
-      franchise?: {
-        id: string
-        code: string
-        name: string
-      }
+    description?: string | null
+    icon?: string | null
+    color?: string | null
+    is_active: boolean
+    offering_schema?: {
+      fields?: Record<string, {
+        type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date'
+        label?: string
+        required?: boolean
+        default?: any
+        min?: number
+        max?: number
+        step?: number
+        placeholder?: string
+        description?: string
+        multiline?: boolean
+        options?: string[]
+        items?: { type: string }
+        condition?: {
+          field: string
+          equals: any
+        }
+      }>
     }
   }
 }
 
-interface BlazeOfferingType {
+interface V2OfferingType {
   id: string
   code: string
   name: string
+  description?: string | null
+  icon?: string | null
+  color?: string | null
   is_active: boolean
+  offering_schema?: {
+    fields?: Record<string, {
+      type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date'
+      label?: string
+      required?: boolean
+      default?: any
+      min?: number
+      max?: number
+      step?: number
+      placeholder?: string
+      description?: string
+      multiline?: boolean
+      options?: string[]
+      items?: { type: string }
+      condition?: {
+        field: string
+        equals: any
+      }
+    }>
+  }
 }
 
 export default function BlazeOfferingsManagementPage() {
-  const [offerings, setOfferings] = useState<BlazeOffering[]>([])
-  const [filteredOfferings, setFilteredOfferings] = useState<BlazeOffering[]>([])
+  const [offerings, setOfferings] = useState<V2Offering[]>([])
+  const [filteredOfferings, setFilteredOfferings] = useState<V2Offering[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isLoading, setIsLoading] = useState(true)
-  const [editingOffering, setEditingOffering] = useState<BlazeOffering | null>(null)
+  const [editingOffering, setEditingOffering] = useState<V2Offering | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [offeringTypes, setOfferingTypes] = useState<BlazeOfferingType[]>([])
+  const [offeringTypes, setOfferingTypes] = useState<V2OfferingType[]>([])
   const [isLoadingTypes, setIsLoadingTypes] = useState(true)
+  const [selectedOfferingType, setSelectedOfferingType] = useState<V2OfferingType | null>(null)
+  const [typeConfigData, setTypeConfigData] = useState<Record<string, any>>({})
+  const [isUploadingPoster, setIsUploadingPoster] = useState(false)
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
+  const [posterFile, setPosterFile] = useState<File | null>(null)
+  const [uploadedPosterUrl, setUploadedPosterUrl] = useState<string | null>(null)
 
-  const [formData, setFormData] = useState<Omit<BlazeOffering, 'id' | 'created_at' | 'updated_at' | 'offering_type'>>({
+  const [formData, setFormData] = useState<Omit<V2Offering, 'id' | 'created_at' | 'updated_at' | 'offering_type'>>({
     name: "",
     slug: "",
     description: "",
@@ -114,8 +149,6 @@ export default function BlazeOfferingsManagementPage() {
     type_config: {},
     status: "draft",
   })
-
-  const [typeConfigJson, setTypeConfigJson] = useState("{}")
 
   useEffect(() => {
     fetchOfferings()
@@ -146,7 +179,7 @@ export default function BlazeOfferingsManagementPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch("/api/blaze/offerings")
+      const response = await fetch("/api/admin/offering/v2?includeInactive=true")
       
       if (!response.ok) {
         throw new Error("Failed to fetch offerings")
@@ -166,7 +199,7 @@ export default function BlazeOfferingsManagementPage() {
   const fetchOfferingTypes = async () => {
     try {
       setIsLoadingTypes(true)
-      const response = await fetch("/api/blaze/offering-types?includeInactive=true")
+      const response = await fetch("/api/admin/offering-types/v2?includeInactive=true")
       if (!response.ok) {
         throw new Error("Failed to fetch offering types")
       }
@@ -179,28 +212,48 @@ export default function BlazeOfferingsManagementPage() {
     }
   }
 
-  // 按 Category -> Offering Type -> Offerings 分组
+  // 当选择 offering_type_id 时，获取对应的 offering_type 和 schema
+  useEffect(() => {
+    if (formData.offering_type_id) {
+      const type = offeringTypes.find(t => t.id === formData.offering_type_id)
+      if (type) {
+        setSelectedOfferingType(type)
+        // 初始化 type_config_data 的默认值
+        if (type.offering_schema?.fields) {
+          const defaults: Record<string, any> = {}
+          Object.entries(type.offering_schema.fields).forEach(([fieldName, fieldConfig]) => {
+            if (fieldConfig.default !== undefined) {
+              defaults[fieldName] = fieldConfig.default
+            }
+          })
+          setTypeConfigData(prev => ({ ...defaults, ...prev }))
+        } else {
+          setTypeConfigData({})
+        }
+      } else {
+        setSelectedOfferingType(null)
+        setTypeConfigData({})
+      }
+    } else {
+      setSelectedOfferingType(null)
+      setTypeConfigData({})
+    }
+  }, [formData.offering_type_id, offeringTypes])
+
+  // 按 Offering Type -> Offerings 分组
   const groupedOfferings = useMemo(() => {
-    const groups: Record<string, Record<string, BlazeOffering[]>> = {}
+    const groups: Record<string, V2Offering[]> = {}
     
     filteredOfferings.forEach((offering) => {
-      const categoryId = offering.offering_type?.category_id || 'uncategorized'
-      const categoryName = offering.offering_type?.category?.display_name || offering.offering_type?.category?.name || 'Uncategorized'
       const typeId = offering.offering_type_id
       const typeName = offering.offering_type?.name || 'Unknown Type'
-      
-      const groupKey = `${categoryId}|${categoryName}`
-      
-      if (!groups[groupKey]) {
-        groups[groupKey] = {}
-      }
-      
       const typeKey = `${typeId}|${typeName}`
-      if (!groups[groupKey][typeKey]) {
-        groups[groupKey][typeKey] = []
+      
+      if (!groups[typeKey]) {
+        groups[typeKey] = []
       }
       
-      groups[groupKey][typeKey].push(offering)
+      groups[typeKey].push(offering)
     })
     
     return groups
@@ -220,7 +273,7 @@ export default function BlazeOfferingsManagementPage() {
     }
 
     try {
-      const response = await fetch(`/api/blaze/offerings/${offeringId}`, {
+      const response = await fetch(`/api/admin/offering/v2/${offeringId}`, {
         method: "DELETE",
       })
 
@@ -236,7 +289,7 @@ export default function BlazeOfferingsManagementPage() {
     }
   }
 
-  const handleEdit = (offering: BlazeOffering) => {
+  const handleEdit = async (offering: V2Offering) => {
     if (offering.status === 'archived') {
       alert('Cannot edit archived offerings.')
       return
@@ -256,7 +309,38 @@ export default function BlazeOfferingsManagementPage() {
       type_config: offering.type_config || {},
       status: offering.status,
     })
-    setTypeConfigJson(JSON.stringify(offering.type_config || {}, null, 2))
+    setPosterPreviewUrl(offering.poster_url || null)
+    setPosterFile(null)
+    setUploadedPosterUrl(null)
+    
+    // 获取完整的 offering 数据（包含 offering_type 和 offering_schema）
+    try {
+      const response = await fetch(`/api/admin/offering/v2/${offering.id}`)
+      if (response.ok) {
+        const fullOffering = await response.json()
+        if (fullOffering.type_config_data) {
+          setTypeConfigData(fullOffering.type_config_data)
+        } else if (fullOffering.type_config) {
+          setTypeConfigData(fullOffering.type_config)
+        } else {
+          setTypeConfigData({})
+        }
+        // 设置 selectedOfferingType（包含 offering_schema）
+        if (fullOffering.offering_type) {
+          const type = offeringTypes.find(t => t.id === fullOffering.offering_type.id)
+          if (type) {
+            setSelectedOfferingType({
+              ...type,
+              offering_schema: fullOffering.offering_type.offering_schema
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching full offering:", err)
+      setTypeConfigData(offering.type_config_data || offering.type_config || {})
+    }
+    
     setIsEditDialogOpen(true)
   }
 
@@ -276,40 +360,59 @@ export default function BlazeOfferingsManagementPage() {
       type_config: {},
       status: "draft",
     })
-    setTypeConfigJson("{}")
+    setTypeConfigData({})
+    setPosterPreviewUrl(null)
+    setPosterFile(null)
+    setUploadedPosterUrl(null)
     setIsEditDialogOpen(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    let uploadedPosterUrlToCleanup: string | null = null
 
     try {
-      // 解析 JSON 配置
-      let typeConfig = {}
-      try {
-        typeConfig = typeConfigJson ? JSON.parse(typeConfigJson) : {}
-      } catch (err) {
-        alert("Invalid JSON in Type Config")
-        setIsSubmitting(false)
-        return
+      // 如果有新选择的文件，先上传 poster
+      if (posterFile) {
+        setIsUploadingPoster(true)
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", posterFile)
+
+        const uploadResponse = await fetch("/api/admin/offering/v2/upload", {
+          method: "POST",
+          body: uploadFormData,
+        })
+
+        const uploadData = await uploadResponse.json()
+
+        if (!uploadResponse.ok) {
+          setIsUploadingPoster(false)
+          setError(uploadData.error || "Failed to upload poster")
+          return
+        }
+
+        uploadedPosterUrlToCleanup = uploadData.url
+        setUploadedPosterUrl(uploadData.url)
+        setIsUploadingPoster(false)
       }
 
       const submitData = {
         ...formData,
-        type_config: typeConfig,
+        type_config_data: typeConfigData,
         slug: formData.slug || undefined,
         description: formData.description || undefined,
         target_audience: formData.target_audience || undefined,
         learning_outcomes: formData.learning_outcomes || undefined,
         prerequisites: formData.prerequisites || undefined,
         base_price: formData.base_price || undefined,
-        poster_url: formData.poster_url || undefined,
+        // 如果有新上传的 poster，使用新 URL；否则使用已有的 poster_url
+        poster_url: uploadedPosterUrlToCleanup || formData.poster_url || undefined,
       }
 
       const url = editingOffering
-        ? `/api/blaze/offerings/${editingOffering.id}`
-        : "/api/blaze/offerings"
+        ? `/api/admin/offering/v2/${editingOffering.id}`
+        : "/api/admin/offering/v2"
       const method = editingOffering ? "PUT" : "POST"
 
       const response = await fetch(url, {
@@ -324,16 +427,94 @@ export default function BlazeOfferingsManagementPage() {
         fetchOfferings()
         setIsEditDialogOpen(false)
         setEditingOffering(null)
+        // 清理预览 URL
+        if (posterPreviewUrl && posterPreviewUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(posterPreviewUrl)
+        }
+        setPosterPreviewUrl(null)
+        setPosterFile(null)
+        setUploadedPosterUrl(null)
       } else {
+        // 如果创建失败，删除已上传的 poster
+        if (uploadedPosterUrlToCleanup) {
+          try {
+            await fetch(`/api/admin/offering/v2/upload?url=${encodeURIComponent(uploadedPosterUrlToCleanup)}`, {
+              method: "DELETE",
+            })
+          } catch (deleteError) {
+            console.error("Failed to cleanup uploaded poster:", deleteError)
+          }
+          setUploadedPosterUrl(null)
+        }
         const error = await response.json()
         alert(error.error || "Failed to save offering")
       }
     } catch (error) {
+      // 如果发生错误，删除已上传的 poster
+      if (uploadedPosterUrlToCleanup) {
+        try {
+          await fetch(`/api/admin/offering/v2/upload?url=${encodeURIComponent(uploadedPosterUrlToCleanup)}`, {
+            method: "DELETE",
+          })
+        } catch (deleteError) {
+          console.error("Failed to cleanup uploaded poster:", deleteError)
+        }
+        setUploadedPosterUrl(null)
+      }
       console.error("Error saving offering:", error)
       alert("Failed to save offering")
     } finally {
       setIsSubmitting(false)
+      setIsUploadingPoster(false)
     }
+  }
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // 验证文件类型
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if (!allowedTypes.includes(file.type)) {
+      setError("Invalid file type. Only JPEG, PNG, and WebP are allowed.")
+      event.target.value = ""
+      return
+    }
+
+    // 验证文件大小 (最大 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      setError("File size must be less than 5MB")
+      event.target.value = ""
+      return
+    }
+
+    setError(null)
+
+    // 清理之前的预览 URL
+    if (posterPreviewUrl && posterPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(posterPreviewUrl)
+    }
+
+    // 创建预览 URL（不上传，只预览）
+    const localPreviewUrl = URL.createObjectURL(file)
+    setPosterPreviewUrl(localPreviewUrl)
+    setPosterFile(file)
+    // 清除之前上传的 URL（如果有）
+    setUploadedPosterUrl(null)
+    event.target.value = ""
+  }
+
+  const handleRemovePoster = () => {
+    setFormData({ ...formData, poster_url: "" })
+    if (posterPreviewUrl) {
+      if (posterPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(posterPreviewUrl)
+      }
+      setPosterPreviewUrl(null)
+    }
+    setPosterFile(null)
+    setUploadedPosterUrl(null)
   }
 
   const formatDate = (dateString: string) => {
@@ -344,7 +525,7 @@ export default function BlazeOfferingsManagementPage() {
     })
   }
 
-  const getStatusBackgroundColor = (status: BlazeOffering['status']): string => {
+  const getStatusBackgroundColor = (status: V2Offering['status']): string => {
     switch (status) {
       case 'draft':
         return 'bg-gray-100 dark:bg-gray-800'
@@ -362,9 +543,9 @@ export default function BlazeOfferingsManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Blaze Offerings Management</h1>
+        <h1 className="text-3xl font-bold">V2 Offerings Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage offerings (global product definitions) using the new Blaze system
+          Manage offerings (global product definitions) using the V2 database schema
         </p>
       </div>
 
@@ -421,130 +602,105 @@ export default function BlazeOfferingsManagementPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {Object.entries(groupedOfferings).map(([categoryKey, typeGroups]) => {
-                const [categoryId, categoryName] = categoryKey.split('|')
-                const categoryOfferings = Object.values(typeGroups).flat()
+              {Object.entries(groupedOfferings).map(([typeKey, typeOfferings]) => {
+                const [typeId, typeName] = typeKey.split('|')
                 
                 return (
-                  <Card key={categoryId} className={getStatusBackgroundColor('published')}>
+                  <Card key={typeId} className={getStatusBackgroundColor('published')}>
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-xl font-semibold">
-                          {categoryName}
+                          {typeName}
                         </CardTitle>
                         <Badge variant="secondary" className="text-sm">
-                          {categoryOfferings.length} Offering{categoryOfferings.length !== 1 ? 's' : ''}
+                          {typeOfferings.length} Offering{typeOfferings.length !== 1 ? 's' : ''}
                         </Badge>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <Accordion type="multiple" className="w-full">
-                        {Object.entries(typeGroups).map(([typeKey, typeOfferings]) => {
-                          const [typeId, typeName] = typeKey.split('|')
+                      <div className="space-y-2">
+                        {typeOfferings.map((offering) => {
+                          const slugText = offering.slug ? `Slug: ${offering.slug}` : ''
                           
                           return (
-                            <AccordionItem key={typeId} value={typeId} className="border rounded-lg px-4 mb-2">
-                              <AccordionTrigger className="hover:no-underline">
-                                <div className="flex items-center justify-between w-full pr-4">
-                                  <div className="flex flex-col items-start text-left">
-                                    <div className="flex items-center gap-3">
-                                      <span className="font-medium">{typeName}</span>
-                                      <Badge variant="outline" className="text-xs">
-                                        {typeOfferings.length} Offering{typeOfferings.length !== 1 ? 's' : ''}
-                                      </Badge>
+                            <div
+                              key={offering.id}
+                              className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <span className="font-medium">{offering.name}</span>
+                                    <Badge
+                                      variant={
+                                        offering.status === 'published' ? 'default' :
+                                        offering.status === 'draft' ? 'secondary' :
+                                        offering.status === 'suspended' ? 'destructive' :
+                                        'outline'
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {offering.status === 'published' ? 'Published' :
+                                       offering.status === 'draft' ? 'Draft' :
+                                       offering.status === 'suspended' ? 'Suspended' :
+                                       'Archived'}
+                                    </Badge>
+                                  </div>
+                                  {(slugText || offering.description) && (
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      {slugText && <div>{slugText}</div>}
+                                      {offering.description && (
+                                        <div className="line-clamp-2">{offering.description}</div>
+                                      )}
                                     </div>
+                                  )}
+                                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                                    {offering.base_price && (
+                                      <span>{offering.currency} ${offering.base_price.toFixed(2)}</span>
+                                    )}
+                                    <span>Created: {formatDate(offering.created_at)}</span>
                                   </div>
                                 </div>
-                              </AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-2 pt-2">
-                                  {typeOfferings.map((offering) => {
-                                    const slugText = offering.slug ? `Slug: ${offering.slug}` : ''
-                                    
-                                    return (
-                                      <div
-                                        key={offering.id}
-                                        className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                              <span className="font-medium">{offering.name}</span>
-                                              <Badge
-                                                variant={
-                                                  offering.status === 'published' ? 'default' :
-                                                  offering.status === 'draft' ? 'secondary' :
-                                                  offering.status === 'suspended' ? 'destructive' :
-                                                  'outline'
-                                                }
-                                                className="text-xs"
-                                              >
-                                                {offering.status === 'published' ? 'Published' :
-                                                 offering.status === 'draft' ? 'Draft' :
-                                                 offering.status === 'suspended' ? 'Suspended' :
-                                                 'Archived'}
-                                              </Badge>
-                                            </div>
-                                            {(slugText || offering.description) && (
-                                              <div className="text-xs text-muted-foreground space-y-1">
-                                                {slugText && <div>{slugText}</div>}
-                                                {offering.description && (
-                                                  <div className="line-clamp-2">{offering.description}</div>
-                                                )}
-                                              </div>
-                                            )}
-                                            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                              {offering.base_price && (
-                                                <span>{offering.currency} ${offering.base_price.toFixed(2)}</span>
-                                              )}
-                                              <span>Created: {formatDate(offering.created_at)}</span>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            {offering.poster_url && (
-                                              <div className="relative w-16 h-16 rounded overflow-hidden border">
-                                                <Image
-                                                  src={offering.poster_url}
-                                                  alt={offering.name}
-                                                  fill
-                                                  className="object-cover"
-                                                  sizes="64px"
-                                                />
-                                              </div>
-                                            )}
-                                            <DropdownMenu>
-                                              <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon">
-                                                  <MoreVertical className="h-4 w-4" />
-                                                </Button>
-                                              </DropdownMenuTrigger>
-                                              <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleEdit(offering)}>
-                                                  <Edit className="mr-2 h-4 w-4" />
-                                                  Edit
-                                                </DropdownMenuItem>
-                                                {offering.status === 'draft' && (
-                                                  <DropdownMenuItem
-                                                    className="text-destructive"
-                                                    onClick={() => handleDelete(offering.id)}
-                                                  >
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Delete
-                                                  </DropdownMenuItem>
-                                                )}
-                                              </DropdownMenuContent>
-                                            </DropdownMenu>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
+                                <div className="flex items-center gap-2">
+                                  {offering.poster_url && (
+                                    <div className="relative w-16 h-16 rounded overflow-hidden border">
+                                      <Image
+                                        src={offering.poster_url}
+                                        alt={offering.name}
+                                        fill
+                                        className="object-cover"
+                                        sizes="64px"
+                                      />
+                                    </div>
+                                  )}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => handleEdit(offering)}>
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Edit
+                                      </DropdownMenuItem>
+                                      {offering.status === 'draft' && (
+                                        <DropdownMenuItem
+                                          className="text-destructive"
+                                          onClick={() => handleDelete(offering.id)}
+                                        >
+                                          <Trash2 className="mr-2 h-4 w-4" />
+                                          Delete
+                                        </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
-                              </AccordionContent>
-                            </AccordionItem>
+                              </div>
+                            </div>
                           )
                         })}
-                      </Accordion>
+                      </div>
                     </CardContent>
                   </Card>
                 )
@@ -554,7 +710,19 @@ export default function BlazeOfferingsManagementPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog 
+        open={isEditDialogOpen} 
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open)
+          if (!open) {
+            // 清理预览 URL 当对话框关闭时
+            if (posterPreviewUrl && posterPreviewUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(posterPreviewUrl)
+            }
+            setPosterPreviewUrl(null)
+          }
+        }}
+      >
         <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editingOffering ? "Edit Offering" : "Add New Offering"}</DialogTitle>
@@ -576,12 +744,12 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="offering_type_id">Offering Type *</Label>
                     <Select
                       value={formData.offering_type_id}
-                      onValueChange={(value) =>
+                      onValueChange={(value) => {
                         setFormData({
                           ...formData,
                           offering_type_id: value,
                         })
-                      }
+                      }}
                       required
                       disabled={!!editingOffering}
                     >
@@ -620,7 +788,7 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="slug">Slug</Label>
                     <Input
                       id="slug"
-                      value={formData.slug}
+                      value={formData.slug || ""}
                       onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
                       placeholder="e.g., introduction-to-robotics"
                     />
@@ -633,7 +801,7 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="description">Description</Label>
                     <Textarea
                       id="description"
-                      value={formData.description}
+                      value={formData.description || ""}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       placeholder="Offering description"
                       rows={4}
@@ -641,13 +809,45 @@ export default function BlazeOfferingsManagementPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="poster_url">Poster URL</Label>
-                    <Input
-                      id="poster_url"
-                      value={formData.poster_url}
-                      onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
-                      placeholder="https://example.com/poster.jpg"
-                    />
+                    <Label htmlFor="poster_url">Poster</Label>
+                    <div className="space-y-2">
+                      {(posterPreviewUrl || formData.poster_url) && (
+                        <div className="relative w-full h-48 rounded-lg overflow-hidden border">
+                          <Image
+                            src={posterPreviewUrl || formData.poster_url || ""}
+                            alt="Poster preview"
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, 400px"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="absolute top-2 right-2"
+                            onClick={handleRemovePoster}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="poster_file"
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp"
+                          onChange={handleFileSelect}
+                          disabled={isUploadingPoster || isSubmitting}
+                          className="flex-1"
+                        />
+                        {(isUploadingPoster || isSubmitting) && (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Upload an image file (JPG, PNG, WebP). Maximum file size: 5MB. Image will be stored in Vercel Blob.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -679,7 +879,7 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="target_audience">Target Audience</Label>
                     <Textarea
                       id="target_audience"
-                      value={formData.target_audience}
+                      value={formData.target_audience || ""}
                       onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
                       placeholder="Who is this offering for?"
                       rows={2}
@@ -690,7 +890,7 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="learning_outcomes">Learning Outcomes</Label>
                     <Textarea
                       id="learning_outcomes"
-                      value={formData.learning_outcomes}
+                      value={formData.learning_outcomes || ""}
                       onChange={(e) => setFormData({ ...formData, learning_outcomes: e.target.value })}
                       placeholder="What will students learn?"
                       rows={4}
@@ -701,7 +901,7 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="prerequisites">Prerequisites</Label>
                     <Textarea
                       id="prerequisites"
-                      value={formData.prerequisites}
+                      value={formData.prerequisites || ""}
                       onChange={(e) => setFormData({ ...formData, prerequisites: e.target.value })}
                       placeholder="What are the prerequisites?"
                       rows={2}
@@ -712,7 +912,7 @@ export default function BlazeOfferingsManagementPage() {
                     <Label htmlFor="status">Status</Label>
                     <Select
                       value={formData.status}
-                      onValueChange={(value: BlazeOffering['status']) =>
+                      onValueChange={(value: V2Offering['status']) =>
                         setFormData({ ...formData, status: value })
                       }
                     >
@@ -733,20 +933,209 @@ export default function BlazeOfferingsManagementPage() {
                 </TabsContent>
 
                 <TabsContent value="config" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="type_config">Type Config (JSON)</Label>
-                    <Textarea
-                      id="type_config"
-                      value={typeConfigJson}
-                      onChange={(e) => setTypeConfigJson(e.target.value)}
-                      placeholder='{"customField": "value"}'
-                      rows={12}
-                      className="font-mono text-sm"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      JSON object for type-specific configuration (defined by offering type's config_schema)
-                    </p>
-                  </div>
+                  {!formData.offering_type_id ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Please select an offering type first to configure type-specific fields.
+                    </div>
+                  ) : !selectedOfferingType?.offering_schema?.fields || Object.keys(selectedOfferingType.offering_schema.fields).length === 0 ? (
+                    <div className="space-y-2">
+                      <Label>Type Config (JSON)</Label>
+                      <Textarea
+                        value={JSON.stringify(typeConfigData, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            setTypeConfigData(JSON.parse(e.target.value))
+                          } catch {
+                            // Invalid JSON, ignore
+                          }
+                        }}
+                        placeholder='{"customField": "value"}'
+                        rows={12}
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        No schema defined for this offering type. Enter JSON configuration manually.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Configure type-specific fields for <strong>{selectedOfferingType.name}</strong>
+                      </p>
+                      {Object.entries(selectedOfferingType.offering_schema.fields).map(([fieldName, fieldConfig]) => {
+                        // 检查条件显示
+                        if (fieldConfig.condition) {
+                          const conditionValue = typeConfigData[fieldConfig.condition.field]
+                          if (conditionValue !== fieldConfig.condition.equals) {
+                            return null
+                          }
+                        }
+
+                        const fieldValue = typeConfigData[fieldName] ?? fieldConfig.default ?? ''
+
+                        return (
+                          <div key={fieldName} className="space-y-2">
+                            <Label htmlFor={`config_${fieldName}`}>
+                              {fieldConfig.label || fieldName}
+                              {fieldConfig.required && <span className="text-red-500 ml-1">*</span>}
+                            </Label>
+                            
+                            {fieldConfig.type === 'text' && (
+                              fieldConfig.multiline ? (
+                                <Textarea
+                                  id={`config_${fieldName}`}
+                                  value={fieldValue}
+                                  onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })}
+                                  placeholder={fieldConfig.placeholder}
+                                  rows={4}
+                                  required={fieldConfig.required}
+                                />
+                              ) : (
+                                <Input
+                                  id={`config_${fieldName}`}
+                                  value={fieldValue}
+                                  onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })}
+                                  placeholder={fieldConfig.placeholder}
+                                  required={fieldConfig.required}
+                                />
+                              )
+                            )}
+
+                            {fieldConfig.type === 'number' && (
+                              <Input
+                                id={`config_${fieldName}`}
+                                type="number"
+                                value={fieldValue}
+                                onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                placeholder={fieldConfig.placeholder}
+                                min={fieldConfig.min}
+                                max={fieldConfig.max}
+                                step={fieldConfig.step}
+                                required={fieldConfig.required}
+                              />
+                            )}
+
+                            {fieldConfig.type === 'boolean' && (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  id={`config_${fieldName}`}
+                                  type="checkbox"
+                                  checked={fieldValue || false}
+                                  onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.checked })}
+                                  className="h-4 w-4"
+                                />
+                                <Label htmlFor={`config_${fieldName}`} className="cursor-pointer">
+                                  {fieldConfig.description || 'Enable'}
+                                </Label>
+                              </div>
+                            )}
+
+                            {fieldConfig.type === 'select' && fieldConfig.options && (
+                              <Select
+                                value={fieldValue || ''}
+                                onValueChange={(value) => setTypeConfigData({ ...typeConfigData, [fieldName]: value })}
+                                required={fieldConfig.required}
+                              >
+                                <SelectTrigger id={`config_${fieldName}`}>
+                                  <SelectValue placeholder={fieldConfig.placeholder || 'Select...'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {fieldConfig.options.map((option) => (
+                                    <SelectItem key={option} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+
+                            {fieldConfig.type === 'multiselect' && fieldConfig.options && (
+                              <div className="space-y-2">
+                                {fieldConfig.options.map((option) => {
+                                  const selectedValues = Array.isArray(fieldValue) ? fieldValue : []
+                                  const isSelected = selectedValues.includes(option)
+                                  return (
+                                    <div key={option} className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={(e) => {
+                                          const currentValues = Array.isArray(fieldValue) ? fieldValue : []
+                                          if (e.target.checked) {
+                                            setTypeConfigData({ ...typeConfigData, [fieldName]: [...currentValues, option] })
+                                          } else {
+                                            setTypeConfigData({ ...typeConfigData, [fieldName]: currentValues.filter(v => v !== option) })
+                                          }
+                                        }}
+                                        className="h-4 w-4"
+                                      />
+                                      <Label className="cursor-pointer">{option}</Label>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {fieldConfig.type === 'array' && fieldConfig.items?.type === 'string' && (
+                              <div className="space-y-2">
+                                {(Array.isArray(fieldValue) ? fieldValue : []).map((item, index) => (
+                                  <div key={index} className="flex items-center gap-2">
+                                    <Input
+                                      value={item}
+                                      onChange={(e) => {
+                                        const newArray = [...(Array.isArray(fieldValue) ? fieldValue : [])]
+                                        newArray[index] = e.target.value
+                                        setTypeConfigData({ ...typeConfigData, [fieldName]: newArray })
+                                      }}
+                                      placeholder={`Item ${index + 1}`}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        const newArray = [...(Array.isArray(fieldValue) ? fieldValue : [])]
+                                        newArray.splice(index, 1)
+                                        setTypeConfigData({ ...typeConfigData, [fieldName]: newArray })
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newArray = [...(Array.isArray(fieldValue) ? fieldValue : []), '']
+                                    setTypeConfigData({ ...typeConfigData, [fieldName]: newArray })
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Item
+                                </Button>
+                              </div>
+                            )}
+
+                            {fieldConfig.type === 'date' && (
+                              <Input
+                                id={`config_${fieldName}`}
+                                type="date"
+                                value={fieldValue || ''}
+                                onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })}
+                                required={fieldConfig.required}
+                              />
+                            )}
+
+                            {fieldConfig.description && (
+                              <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </div>
