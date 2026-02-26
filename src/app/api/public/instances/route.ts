@@ -138,15 +138,15 @@ export async function GET(request: Request) {
       })
     }
 
-    // 对于未找到的 franchise_id，尝试通过 legacy_franchise_id 映射
+    // 对于未找到的 franchise_id，尝试通过 legacy_franchise_id 映射（仅加入 is_active=true 的 franchise）
     const missingFranchiseIds = Array.from(franchiseIds).filter(id => !franchiseMap.has(id))
     if (missingFranchiseIds.length > 0) {
       try {
         const { getFranchiseV2ByLegacyId } = await import("@/lib/db-v2")
         for (const legacyId of missingFranchiseIds) {
           const franchiseV2 = await getFranchiseV2ByLegacyId(legacyId)
-          if (franchiseV2) {
-            // 使用新表的 ID 作为 key，但保留旧表 ID 的映射
+          if (franchiseV2 && franchiseV2.is_active === true) {
+            // 只将 active 的 franchise 加入 map
             franchiseMap.set(legacyId, {
               id: franchiseV2.id,
               code: franchiseV2.code,
@@ -157,8 +157,8 @@ export async function GET(request: Request) {
               code: franchiseV2.code,
               name: franchiseV2.name,
             })
-          } else {
-            // 如果新表没有，尝试从旧表获取（向后兼容）
+          } else if (!franchiseV2) {
+            // 如果新表没有，尝试从旧表获取（向后兼容，仅 is_active=true）
             const { data: legacyFranchise } = await supabaseAdmin
               .from("franchises")
               .select("id, code, name")
@@ -234,7 +234,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2. 然后添加 instances
+    // 2. 然后添加 instances（只包含 franchise 为 active 的 instance；franchiseMap 仅含 is_active=true 的 franchise）
     for (const instance of instancesV2) {
       // 确保 instance.id 不为空
       if (!instance.id || instance.id.trim() === '') {
@@ -264,7 +264,7 @@ export async function GET(request: Request) {
       const franchiseId = series.franchise_id
       if (!franchiseId) continue
 
-      // 获取 franchise 信息
+      // 只保留 franchise 为 active 的 instance（franchiseMap 仅包含 is_active=true 的 franchise）
       let franchise = franchiseMap.get(franchiseId)
       if (!franchise) {
         continue
