@@ -14,9 +14,6 @@ export const Hero = () => {
       </div>
       <div className="relative z-10 w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-12 lg:py-0">
         <div className="max-w-xl">
-          <span className="inline-block bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase mb-6 shadow-lg shadow-blue-500/20">
-            Winter 2026 Enrollment Open
-          </span>
           <h1 className="text-5xl lg:text-7xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
             Build Your <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#38bdf8] to-[#2563eb]">Future.</span>
@@ -29,7 +26,7 @@ export const Hero = () => {
               href="/programs"
               className="bg-white text-[#0f172a] px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition-all flex items-center shadow-xl hover:shadow-2xl hover:-translate-y-1"
             >
-              Find Your Program
+              Find Your Sessions
               <ArrowRight className="ml-2 w-5 h-5" />
             </Link>
           </div>

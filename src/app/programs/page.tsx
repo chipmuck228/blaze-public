@@ -367,12 +367,9 @@ function ProgramsPageContent() {
           </div>
           
           <div className="max-w-7xl mx-auto px-4 relative z-10 text-center">
-            <span className="inline-flex items-center space-x-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-blue-500/20">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Academic Catalog 2026</span>
-            </span>
+            
             <h1 className="text-4xl md:text-6xl font-black text-white mb-6">
-              Programs {activeLocName ? `in ${activeLocName}` : 'Across Blaze'}
+              Offerings {activeLocName ? `in ${activeLocName}` : 'Across Blaze'}
             </h1>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto">
               Discover our full range of engineering pathways, from foundational logic to world-class competitive robotics.
@@ -389,7 +386,7 @@ function ProgramsPageContent() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input 
                 type="text"
-                placeholder="Search programs..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -606,9 +603,9 @@ function ProgramsPageContent() {
                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Search className="w-10 h-10 text-slate-300" />
                 </div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Programs</h2>
+                <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Offerings</h2>
                 <p className="text-slate-500 max-w-md mx-auto mb-8">
-                  We couldn't find any programs matching your filters {activeLocName ? `at the ${activeLocName} campus` : ''}.
+                  We couldn't find any offerings matching your filters {activeLocName ? `at the ${activeLocName} campus` : ''}.
                 </p>
                 <button 
                   onClick={() => { 

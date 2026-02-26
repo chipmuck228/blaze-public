@@ -1,71 +1,19 @@
 'use client'
 
-import { useState, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useState, useEffect, useMemo } from "react"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Calendar, MapPin, Loader2, ArrowRight, Home, Clock, UtensilsCrossed, Building2, Trophy, GraduationCap, Users, Wrench, MessageSquare, Award, Sparkles, Target, Zap } from "lucide-react"
+import { Calendar, MapPin, Loader2, ArrowRight, Home, Clock, UtensilsCrossed, Building2, Trophy, GraduationCap, Users, Wrench, MessageSquare, Award, Sparkles, Target, Zap, Rocket, Code, Printer } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
-interface Instance {
-  id: string
-  start_date: string
-  end_date: string
-  location?: {
-    name: string
-  }
-  offering?: {
-    id: string
-    name: string
-    poster_url?: string | null
-    base_price?: number
-  }
-  price_override?: number
-}
-
-interface Program {
-  id: string
-  name: string
-  display_name: string
-  category?: {
-    id: string
-    name: string
-    display_name: string
-  }
-  instances: Instance[]
-}
-
-interface Franchise {
-  id: string
-  code: string
-  name: string
-  programs: Program[]
-}
-
-function CampsPageContent() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const locationSlug = searchParams.get('location')
-  
-  const [franchises, setFranchises] = useState<Franchise[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [categories, setCategories] = useState<any[]>([])
-
-  // 获取当前 location 的名称
-  const activeLocName = useMemo(() => {
-    if (locationSlug) {
-      const franchise = franchises.find(f => f.code === locationSlug)
-      return franchise?.name || null
-    }
-    return null
-  }, [locationSlug, franchises])
+export default function CampOfferingPage() {
+  const [apiCategories, setApiCategories] = useState<any[]>([])
 
   // 获取 camps category 的链接
   const campsCategoryLink = useMemo(() => {
-    const campsCategory = categories.find(cat => {
+    const campsCategory = apiCategories.find(cat => {
       const categoryName = (cat.name || '').toLowerCase()
       return categoryName.includes('camp')
     })
@@ -73,120 +21,24 @@ function CampsPageContent() {
       return `/programs?category=${encodeURIComponent(campsCategory.id)}`
     }
     return '/programs'
-  }, [categories])
+  }, [apiCategories])
 
   useEffect(() => {
-    const fetchCamps = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-
-        // 获取所有 instances，然后过滤出 camps
-        const response = await fetch('/api/public/instances')
-        if (!response.ok) {
-          throw new Error("Failed to load camps")
-        }
-        const data = await response.json()
-        
-        // 过滤出 camps（根据 offering_type 或 category）
-        const franchisesData = (data.franchises || []).map((franchise: Franchise) => ({
-          ...franchise,
-          programs: franchise.programs
-            .map((program: Program) => ({
-              ...program,
-              instances: program.instances.filter((instance: Instance) => {
-                // 过滤 camps：category name 包含 "camp" 或 offering_type 是 "camp"
-                const categoryName = program.category?.name?.toLowerCase() || ''
-                return categoryName.includes('camp')
-              })
-            }))
-            .filter((program: Program) => program.instances.length > 0)
-        })).filter((franchise: Franchise) => franchise.programs.length > 0)
-
-        // 如果指定了 location，只保留该 location
-        if (locationSlug) {
-          const filtered = franchisesData.filter((f: Franchise) => f.code === locationSlug)
-          setFranchises(filtered)
-        } else {
-          setFranchises(franchisesData)
-        }
-      } catch (err: any) {
-        console.error("Error fetching camps:", err)
-        setError(err.message || "Failed to load camps")
-        setFranchises([])
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     // 获取 categories
     const fetchCategories = async () => {
       try {
         const response = await fetch('/api/public/categories')
         if (response.ok) {
           const data = await response.json()
-          setCategories(data.categories || [])
+          setApiCategories(data.categories || [])
         }
       } catch (err) {
         console.error("Error fetching categories:", err)
       }
     }
 
-    fetchCamps()
     fetchCategories()
-  }, [locationSlug])
-
-  // 组织 camps 数据
-  const sections = useMemo(() => {
-    const allInstances: Instance[] = []
-    franchises.forEach((franchise) => {
-      franchise.programs.forEach((program) => {
-        allInstances.push(...program.instances)
-      })
-    })
-
-    // 按日期分组
-    const summerCamps = allInstances.filter((inst) => {
-      const startDate = new Date(inst.start_date)
-      const month = startDate.getMonth()
-      return month >= 5 && month <= 7 // June, July, August
-    })
-
-    const midWinterSpringCamps = allInstances.filter((inst) => {
-      const startDate = new Date(inst.start_date)
-      const month = startDate.getMonth()
-      return month === 0 || month === 1 || month === 2 || month === 3 // Jan, Feb, Mar, Apr
-    })
-
-    return [
-      { 
-        title: 'Summer 2026', 
-        subtitle: 'Robotics, Math, Programming, 3D Design & Printing', 
-        instances: summerCamps 
-      },
-      { 
-        title: 'Mid-Winter & Spring Break', 
-        subtitle: 'Intensive week-long skill builders', 
-        instances: midWinterSpringCamps 
-      }
-    ]
-  }, [franchises])
-
-  const filteredCamps = useMemo(() => {
-    const allInstances: Instance[] = []
-    franchises.forEach((franchise) => {
-      franchise.programs.forEach((program) => {
-        program.instances.forEach((inst) => {
-          allInstances.push({
-            ...inst,
-            program: program.display_name || program.name,
-            category: program.category?.display_name || program.category?.name || '',
-          } as any)
-        })
-      })
-    })
-    return allInstances
-  }, [franchises])
+  }, [])
 
   return (
     <>
@@ -198,18 +50,18 @@ function CampsPageContent() {
           <div className="max-w-7xl mx-auto px-4 relative z-10 flex flex-col md:flex-row items-center gap-12">
             <div className="md:w-3/5 text-white">
               <h1 className="text-5xl md:text-6xl font-black mb-6 leading-none">
-                Blaze Robotics Camps
+                Blaze Robotics Camp Offerings
               </h1>
               <p className="text-lg md:text-xl text-gray-300 mb-2">
-                Breakthrough innovations {activeLocName ? `at our ${activeLocName} location` : 'across our franchise network'}.
+                Summer Camps | Mid-Winter Breaks | Spring Intensives
               </p>
               <p className="text-base text-gray-400 max-w-xl leading-relaxed mb-8">
-                Summer camps, mid-winter breaks, and spring intensives. Build robots, code solutions, and compete with peers in week-long immersive experiences.
+                Empowering students through immersive STEM experiences across all locations. Spark curiosity, build skills, and ignite passion for robotics and engineering.
               </p>
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-2xl border border-[#38bdf8]/20 mb-8 max-w-2xl">
-                <h3 className="text-white font-bold text-lg mb-3">Your Robotics Journey Starts Here</h3>
+                <h3 className="text-white font-bold text-lg mb-3">Step 1: Explore - Your Robotics Journey Begins</h3>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  Our camps are the first step in The Robotics Journey - the perfect introduction to robotics, coding, and engineering. Through hands-on exploration and fun, high-energy activities, students discover their passion for building and programming. This foundational experience prepares them to progress to structured courses (Step 2: Build) and eventually competitive teams (Step 3: Compete). Start your journey with us!
+                  Our camps are the foundational first step in The Robotics Journey, designed to ignite curiosity and passion for robotics, coding, and engineering. Through hands-on exploration and fun, high-energy activities, students discover the exciting world of building and programming.
                 </p>
               </div>
               <div className="flex flex-wrap gap-4">
@@ -236,73 +88,179 @@ function CampsPageContent() {
                 </Button>
               </div>
             </div>
-            <div className="md:w-2/5 grid grid-cols-1 gap-4">
+            <div className="md:w-2/5 grid grid-cols-2 gap-4">
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-3xl border border-white/10">
                 <Clock className="text-[#38bdf8] w-10 h-10 mb-4" />
-                <h3 className="text-white font-bold text-lg mb-1">Extended Care</h3>
+                <h3 className="text-white font-bold text-lg">Extended Care</h3>
                 <p className="text-gray-400 text-xs">8:30 AM – 9:00 AM or 4:00 PM – 5:00 PM</p>
               </div>
-              <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-3xl border border-white/10">
+              <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-3xl border border-white/10 mt-8">
                 <UtensilsCrossed className="text-[#38bdf8] w-10 h-10 mb-4" />
-                <h3 className="text-white font-bold text-lg mb-1">Camp Lunch</h3>
+                <h3 className="text-white font-bold text-lg">Camp Lunch</h3>
                 <p className="text-gray-400 text-xs">Pizza & Drink option available daily</p>
               </div>
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-3xl border border-white/10">
                 <Building2 className="text-[#38bdf8] w-10 h-10 mb-4" />
-                <h3 className="text-white font-bold text-lg mb-1">{activeLocName || 'All'} Locations</h3>
+                <h3 className="text-white font-bold text-lg">All Locations</h3>
                 <p className="text-gray-400 text-xs">Certified Instructors & 1:1 Kits</p>
+              </div>
+              <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-3xl border border-white/10 mt-8">
+                <Rocket className="text-[#38bdf8] w-10 h-10 mb-4" />
+                <h3 className="text-white font-bold text-lg">90% Return</h3>
+                <p className="text-gray-400 text-xs">Campers come back</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Main Camp Content */}
-        <div id="main-content" className="max-w-7xl mx-auto px-4 mt-20">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        {/* Camp Highlights - Visual Cards */}
+        <section id="main-content" className="py-20 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-slate-900 mb-4">Why Choose Blaze Camps?</h2>
+              <p className="text-lg text-slate-600 max-w-3xl mx-auto">
+                Three key elements that make our camps exceptional learning experiences
+              </p>
             </div>
-          ) : error ? (
-            <div className="text-center py-20 text-red-600">
-              <p>{error}</p>
-            </div>
-          ) : (
-            <>
-              {/* Camps Description Section */}
-              <div className="mb-16 bg-gradient-to-br from-blue-50 to-slate-50 dark:from-slate-800 dark:to-slate-900 p-10 rounded-3xl border border-blue-100 dark:border-slate-700">
-                <div className="max-w-4xl mx-auto text-center">
-                  <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-6">
-                    Step 1: Explore - Your Robotics Journey Begins
-                  </h2>
-                  <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-6">
-                    Our camps are the foundational first step in The Robotics Journey, designed to ignite curiosity and passion for robotics, coding, and engineering. Through hands-on exploration and fun, high-energy activities, students discover the exciting world of building and programming.
-                  </p>
-                  <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
-                    This immersive experience prepares students to progress seamlessly to <strong>Step 2: Build</strong> - where they'll master fundamentals in structured courses - and eventually advance to <strong>Step 3: Compete</strong> - joining competitive teams and competing at local and global events. Start your journey with us and transform curiosity into engineering mastery!
-                  </p>
-                  <Button 
-                    size="lg"
-                    className="bg-[#2563eb] hover:bg-blue-600 text-white px-8 py-6 text-lg font-bold rounded-full"
-                    asChild
-                  >
-                    <Link href={campsCategoryLink}>
-                      View All Camps
-                      <ArrowRight className="ml-2 w-5 h-5" />
-                    </Link>
-                  </Button>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+              {/* Sparking STEM Curiosity */}
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-8 border-2 border-blue-200 hover:shadow-xl transition-all">
+                <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-lg">
+                  <Rocket className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-4 text-center">Sparking STEM Curiosity</h3>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Building2 className="w-6 h-6 text-blue-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">6000 sq ft Robot House</p>
+                      <p className="text-sm text-slate-600">Dedicated facility for all ages</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Award className="w-6 h-6 text-blue-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">90% Return Rate</p>
+                      <p className="text-sm text-slate-600">Campers come back for more</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Users className="w-6 h-6 text-blue-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">Inspiring Community</p>
+                      <p className="text-sm text-slate-600">Curious and dedicated learners</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {filteredCamps.length === 0 && (
-                <div className="text-center py-24 mb-24">
-                  <Calendar className="w-16 h-16 text-slate-200 mx-auto mb-6" />
-                  <h2 className="text-2xl font-bold text-slate-900 mb-2">No Seasonal Camps Available</h2>
-                  <p className="text-slate-500">There are currently no camps scheduled. Stay tuned for updates!</p>
+              {/* Hands-On Experience */}
+              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl p-8 border-2 border-indigo-200 hover:shadow-xl transition-all">
+                <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-lg">
+                  <Zap className="w-8 h-8 text-white" />
                 </div>
-              )}
-            </>
-          )}
-        </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-4 text-center">Hands-On Experience</h3>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Wrench className="w-6 h-6 text-indigo-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">Build Robots</p>
+                      <p className="text-sm text-slate-600">Practical construction activities</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Code className="w-6 h-6 text-indigo-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">Program & Code</p>
+                      <p className="text-sm text-slate-600">Interactive programming sessions</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Printer className="w-6 h-6 text-indigo-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">3D Design & Print</p>
+                      <p className="text-sm text-slate-600">Create and bring ideas to life</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expert Guidance */}
+              <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-3xl p-8 border-2 border-cyan-200 hover:shadow-xl transition-all">
+                <div className="w-16 h-16 bg-cyan-600 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-lg">
+                  <GraduationCap className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-4 text-center">Expert Guidance</h3>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Trophy className="w-6 h-6 text-cyan-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">Competition Coaches</p>
+                      <p className="text-sm text-slate-600">Mentors from winning teams</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Target className="w-6 h-6 text-cyan-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">Personalized Support</p>
+                      <p className="text-sm text-slate-600">Individual attention for each camper</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="w-6 h-6 text-cyan-600 mt-1 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1">Nurturing Environment</p>
+                      <p className="text-sm text-slate-600">Reach highest potential</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Camp Introduction */}
+        <section className="py-20 px-4 bg-slate-50">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-gradient-to-br from-blue-50 to-slate-50 dark:from-slate-800 dark:to-slate-900 p-10 rounded-3xl border border-blue-100 dark:border-slate-700">
+              <div className="max-w-4xl mx-auto">
+                <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-6 text-center">
+                  Our Camp Experience
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+                  <div className="text-center">
+                    <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <Rocket className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-3">Sparking Curiosity</h3>
+                    <p className="text-slate-600 text-sm leading-relaxed">
+                      Our 6000 sq ft Robot House creates an inspiring environment where 90% of campers return, building a community of passionate learners.
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <Zap className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-3">Hands-On Learning</h3>
+                    <p className="text-slate-600 text-sm leading-relaxed">
+                      Campers actively build robots, program solutions, and create 3D printed projects, developing deep understanding through practical experience.
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-20 h-20 bg-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <GraduationCap className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-3">Expert Mentors</h3>
+                    <p className="text-slate-600 text-sm leading-relaxed">
+                      Competition team coaches provide personalized guidance in a nurturing setting, helping every camper reach their highest potential.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Why Join Blaze */}
         <section className="bg-[#0f172a] dark:bg-slate-900 py-16 sm:py-20 lg:py-24 relative overflow-hidden">
@@ -421,49 +379,8 @@ function CampsPageContent() {
             </div>
           </div>
         </section>
-
-        {/* Single-Day Explorer Camps */}
-        <div className="max-w-7xl mx-auto px-4">
-          <section className="bg-slate-100 p-12 rounded-[40px] mt-20">
-                <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
-                  <div>
-                    <h2 className="text-3xl font-bold text-slate-900 mb-2">Single-Day "Explorer" Camps</h2>
-                    <p className="text-slate-600">Perfect for busy schedules and trial experiences.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {['Dec 22', 'Dec 23', 'Dec 26', 'Jan 19', 'Jan 26'].map(date => (
-                      <span key={date} className="bg-white px-4 py-2 rounded-xl text-sm font-bold text-slate-900 shadow-sm border border-slate-200">{date}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="bg-white p-8 rounded-3xl border border-slate-200">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex-grow">
-                      <h3 className="text-xl font-bold text-slate-900 mb-2">The One-Day Robotics Immersion</h3>
-                      <p className="text-slate-500 text-sm">A full day of building, testing, and competing at one of our locations. Includes foundational coding and hands-on hardware assembly.</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-3xl font-black text-slate-900 mb-2">$145</p>
-                      <button className="bg-[#2563eb] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#0f172a] transition-colors">Register for Day</button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-        </div>
       </div>
       <Footer />
     </>
-  )
-}
-
-export default function CampsPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    }>
-      <CampsPageContent />
-    </Suspense>
   )
 }

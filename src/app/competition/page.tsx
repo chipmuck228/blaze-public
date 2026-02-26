@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect, useMemo } from "react"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
 import { Trophy, ShieldCheck, Target, Users, GraduationCap, MessageSquare, Wrench, Award, ArrowRight, Mail, Phone, Calendar, Sparkles, Zap, Home } from "lucide-react"
@@ -8,6 +9,37 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 export default function CompetitionPage() {
+  const [apiCategories, setApiCategories] = useState<any[]>([])
+
+  // 获取 competition category 的链接
+  const competitionCategoryLink = useMemo(() => {
+    // 找到包含 competition 或 team 的 category
+    const competitionCategory = apiCategories.find(cat => {
+      const categoryName = (cat.name || '').toLowerCase()
+      return categoryName.includes('competition') || categoryName.includes('team')
+    })
+    if (competitionCategory) {
+      return `/programs?category=${encodeURIComponent(competitionCategory.id)}`
+    }
+    return '/programs'
+  }, [apiCategories])
+
+  useEffect(() => {
+    // 获取 categories
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/public/categories')
+        if (response.ok) {
+          const data = await response.json()
+          setApiCategories(data.categories || [])
+        }
+      } catch (err) {
+        console.error("Error fetching categories:", err)
+      }
+    }
+
+    fetchCategories()
+  }, [])
   return (
     <>
       <Navbar />
@@ -24,10 +56,27 @@ export default function CompetitionPage() {
               <p className="text-base text-gray-400 max-w-xl leading-relaxed mb-8">
                 Competitive teams representing Blaze Robotics in state championships and global competitions. Apply skills in real-game scenarios, collaborate with peers, and compete at the highest levels.
               </p>
+              <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-2xl border border-[#38bdf8]/20 mb-8 max-w-2xl">
+                <h3 className="text-white font-bold text-lg mb-3">Step 3: Compete - Apply Your Skills</h3>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  Our competition teams are the final step in The Robotics Journey, where students apply all the skills and knowledge gained from camps (Step 1: Explore) and courses (Step 2: Build). Join tournament-ready teams, compete at local and global events, and experience the thrill of real-world engineering challenges. This is where curiosity becomes mastery and mastery becomes excellence!
+                </p>
+              </div>
               <div className="flex flex-wrap gap-4">
                 <Button 
                   size="lg"
                   className="bg-[#2563eb] hover:bg-blue-600 text-white px-8 py-6 text-lg font-bold rounded-full"
+                  asChild
+                >
+                  <Link href={competitionCategoryLink}>
+                    View All Competitions
+                    <ArrowRight className="ml-2 w-5 h-5" />
+                  </Link>
+                </Button>
+                <Button 
+                  size="lg"
+                  variant="outline"
+                  className="bg-transparent border-white/30 text-white hover:bg-white/10 px-8 py-6 text-lg font-bold rounded-full"
                   asChild
                 >
                   <Link href="#team-interest">
@@ -86,9 +135,34 @@ export default function CompetitionPage() {
           </div>
         </section>
 
-        {/* Competition Types - Visual Grid */}
+        {/* Competition Description Section */}
         <section className="py-16 bg-white">
           <div className="max-w-7xl mx-auto px-4">
+            {/* Competition Description */}
+            <div className="mb-16 bg-gradient-to-br from-blue-50 to-slate-50 dark:from-slate-800 dark:to-slate-900 p-10 rounded-3xl border border-blue-100 dark:border-slate-700">
+              <div className="max-w-4xl mx-auto text-center">
+                <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-6">
+                  Step 3: Compete - Apply Your Skills
+                </h2>
+                <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-6">
+                  Our competition teams are the final step in The Robotics Journey, where students apply all the skills and knowledge gained from camps (Step 1: Explore) and courses (Step 2: Build). Join tournament-ready teams and compete at local and global events.
+                </p>
+                <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
+                  This is where curiosity becomes mastery and mastery becomes excellence. Experience the thrill of real-world engineering challenges, collaborate with peers, and represent Blaze Robotics on the world stage!
+                </p>
+                <Button 
+                  size="lg"
+                  className="bg-[#2563eb] hover:bg-blue-600 text-white px-8 py-6 text-lg font-bold rounded-full"
+                  asChild
+                >
+                  <Link href={competitionCategoryLink}>
+                    View All Competitions
+                    <ArrowRight className="ml-2 w-5 h-5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+
             <h2 className="text-4xl font-bold text-slate-900 mb-12 text-center">Current Season</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
