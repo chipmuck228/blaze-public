@@ -92,6 +92,8 @@ export async function GET(request: Request) {
                 end_date,
                 display_order,
                 is_active,
+                featured,
+                poster_url,
                 created_at,
                 updated_at
               `)
@@ -115,6 +117,7 @@ export async function GET(request: Request) {
                   .from("v2_instance")
                   .select(`
                     id,
+                    program_id,
                     offering_id,
                     campus_id,
                     price_override,
@@ -138,7 +141,8 @@ export async function GET(request: Request) {
                       currency,
                       offering_type:v2_offering_type(
                         code,
-                        name
+                        name,
+                        instance_schema
                       )
                     ),
                     campus:v2_campus(

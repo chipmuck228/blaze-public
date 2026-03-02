@@ -24,6 +24,7 @@ import { Loader2, Upload, X, Image as ImageIcon } from "lucide-react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { toast } from "sonner"
 
 interface Offering {
@@ -125,25 +126,13 @@ export function OfferingEditDialog({
     offeringRef.current = offering
   }, [offering])
 
-  const fetchSubcategories = useCallback(async () => {
-    try {
-      const response = await fetch("/api/admin/subcategories")
-      if (response.ok) {
-        const data = await response.json()
-        setSubcategories(data)
-      }
-    } catch (error) {
-      console.error("Error fetching subcategories:", error)
-    }
-  }, [])
-
   const fetchOfferingTypes = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/offering-types")
+      const response = await fetch("/api/admin/offering-types/v2?includeInactive=true")
       if (response.ok) {
         const data = await response.json()
-        // 只显示激活的类型
-        const activeTypes = data.filter((type: OfferingType) => type.is_active)
+        const list = Array.isArray(data) ? data : []
+        const activeTypes = list.filter((t: OfferingType) => t.is_active)
         setOfferingTypes(activeTypes)
       }
     } catch (error) {
@@ -170,6 +159,7 @@ export function OfferingEditDialog({
     setPosterUrl(null)
     setSelectedSubcategoryIds([])
     setTargetGradesInput("")
+    // Subcategories removed (Legacy); v2 does not use subcategory_ids
     setSlugManuallyEdited(false)
   }, [])
 
@@ -194,8 +184,6 @@ export function OfferingEditDialog({
     // 标记为已初始化
     initializedOfferingIdRef.current = currentOfferingId
     
-    fetchSubcategories()
-    
     // 使用 offeringRef.current 来获取最新的 offering 对象
     const currentOffering = offeringRef.current
     if (currentOffering) {
@@ -211,7 +199,7 @@ export function OfferingEditDialog({
         base_price: currentOffering.base_price,
         currency: currentOffering.currency || "USD",
         poster_url: currentOffering.poster_url || null,
-        offering_type: currentOffering.offering_type || "course",
+        offering_type: ((currentOffering as any).offering_type?.code ?? (currentOffering as any).offering_type) || "course",
         type_config: currentOffering.type_config || {},
         status: currentOffering.status || "draft",
       })
@@ -229,7 +217,7 @@ export function OfferingEditDialog({
         setFormData(prev => ({ ...prev, offering_type: offeringTypes[0].code as Offering['offering_type'] }))
       }
     }
-  }, [open, offering?.id, fetchSubcategories, resetForm, fetchOfferingTypes])
+  }, [open, offering?.id, resetForm, fetchOfferingTypes])
 
   // 当 offeringTypes 加载完成后，如果是新 offering，设置第一个类型
   useEffect(() => {
@@ -729,10 +717,13 @@ export function OfferingEditDialog({
       
       const submitData: any = {
         name: formData.name,
-        offering_type: formData.offering_type,
+        offering_type_id: selectedOfferingType?.id,
         status: formData.status,
-        type_config: typeConfig, // 包含类型特定的配置
+        type_config: typeConfig,
+        type_config_data: typeConfig,
       }
+      const categoryId = (offering as any)?.category_id ?? (formData as any).category_id
+      if (categoryId) submitData.category_id = categoryId
 
       // 通用字段
       if (!visibleFields || visibleFields.general?.slug !== false) {
@@ -767,13 +758,9 @@ export function OfferingEditDialog({
       }
 
       // Removed cancellation_policy - now managed at Franchise level
+      // Subcategories removed (Legacy); v2 does not use subcategory_ids
 
-      // 分类标签
-      if (!visibleFields || visibleFields.tags?.subcategory_tags !== false) {
-        submitData.subcategory_ids = selectedSubcategoryIds
-      }
-
-      const url = offering?.id ? `/api/admin/offerings/${offering.id}` : "/api/admin/offerings"
+      const url = offering?.id ? `/api/admin/offering/v2/${offering.id}` : "/api/admin/offering/v2"
       const method = offering?.id ? "PUT" : "POST"
 
       const response = await fetch(url, {
@@ -824,7 +811,7 @@ export function OfferingEditDialog({
       const uploadFormData = new FormData()
       uploadFormData.append("file", file)
 
-      const response = await fetch("/api/admin/courses/upload", {
+      const response = await fetch("/api/admin/offering/v2/upload", {
         method: "POST",
         body: uploadFormData,
       })
@@ -969,88 +956,20 @@ export function OfferingEditDialog({
 
           {/* Poster Upload */}
           {isFieldVisible('general.poster_url') && (
-          <div className="space-y-2">
-            <Label htmlFor="poster">Offering Poster</Label>
-            <div className="space-y-3">
-              {posterUrl ? (
-                <div className="relative group">
-                  <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
-                    <Image
-                      src={posterUrl}
-                      alt="Offering poster"
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={handleRemovePoster}
-                    disabled={isArchived || isUploadingPoster}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                  <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground mb-2">
-                    No poster uploaded
-                  </p>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Input
-                  id="poster"
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/webp"
-                  onChange={handlePosterUpload}
-                  disabled={isArchived || isUploadingPoster}
-                  className="hidden"
-                />
-                <Label
-                  htmlFor="poster"
-                  className={`flex items-center gap-2 px-4 py-2 border border-border rounded-md cursor-pointer hover:bg-accent transition-colors ${
-                    isArchived || isUploadingPoster ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  {isUploadingPoster ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      <span>{posterUrl ? "Replace Poster" : "Upload Poster"}</span>
-                    </>
-                  )}
-                </Label>
-                {posterUrl && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRemovePoster}
-                    disabled={isArchived || isUploadingPoster}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Remove
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Recommended: 1200x800px, max 5MB. Formats: JPEG, PNG, WebP
-              </p>
-            </div>
-          </div>
+            <PosterUploadField
+              id="poster"
+              label="Offering Poster"
+              hint="Recommended: 1200x800px, max 5MB. JPEG, PNG, WebP"
+              previewSrc={posterUrl}
+              onFileChange={handlePosterUpload}
+              onClear={handleRemovePoster}
+              disabled={isArchived || isUploadingPoster}
+              isLoading={isUploadingPoster}
+            />
           )}
 
           {/* Subcategory Tags */}
-          {offering && isFieldVisible('tags.subcategory_tags') && (
+          {false && offering && isFieldVisible('tags.subcategory_tags') && (
           <div className="space-y-2">
             <Label>Subcategory Tags (Optional)</Label>
             <div className="border rounded-md p-3 min-h-[100px] max-h-[200px] overflow-y-auto">

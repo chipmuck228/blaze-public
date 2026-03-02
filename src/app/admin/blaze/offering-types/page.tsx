@@ -38,6 +38,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { SchemaEditor } from "@/components/admin/SchemaEditor"
 
 interface V2OfferingType {
   id: string
@@ -301,9 +302,6 @@ export default function BlazeOfferingTypesManagementPage() {
                   <TableRow>
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead>Icon</TableHead>
-                    <TableHead>Color</TableHead>
-                    <TableHead>Display Order</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -314,21 +312,6 @@ export default function BlazeOfferingTypesManagementPage() {
                     <TableRow key={type.id}>
                       <TableCell className="font-mono text-sm">{type.code}</TableCell>
                       <TableCell className="font-medium">{type.name}</TableCell>
-                      <TableCell>{type.icon || "N/A"}</TableCell>
-                      <TableCell>
-                        {type.color ? (
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-4 h-4 rounded border" 
-                              style={{ backgroundColor: type.color }}
-                            />
-                            <span className="text-xs font-mono">{type.color}</span>
-                          </div>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
-                      <TableCell>{type.display_order}</TableCell>
                       <TableCell>
                         <Badge variant={type.is_active ? "default" : "secondary"}>
                           {type.is_active ? "Active" : "Inactive"}
@@ -384,124 +367,98 @@ export default function BlazeOfferingTypesManagementPage() {
                   <TabsTrigger value="instance-schema">Instance Schema</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="basic" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="code">Code *</Label>
-                    <Input
-                      id="code"
-                      value={formData.code}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-                      placeholder="e.g., course, camp, workshop"
-                      required
-                      disabled={!!editingType}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Lowercase letters, numbers, and underscores only. Cannot be changed after creation.
-                    </p>
-                  </div>
+                <TabsContent value="basic" className="mt-4">
+                  <div className="space-y-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Identity</CardTitle>
+                        <CardDescription>Code and display name. Code cannot be changed after creation.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="code">Code *</Label>
+                            <Input
+                              id="code"
+                              value={formData.code}
+                              onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                              placeholder="e.g. course, camp, workshop"
+                              required
+                              disabled={!!editingType}
+                              className="font-mono"
+                            />
+                            <p className="text-xs text-muted-foreground">Lowercase, numbers, underscores only.</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="name">Display name *</Label>
+                            <Input
+                              id="name"
+                              value={formData.name}
+                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                              placeholder="e.g. Course, Camp, Workshop"
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="description">Description</Label>
+                          <Textarea
+                            id="description"
+                            value={formData.description}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            placeholder="Brief description of this offering type"
+                            rows={3}
+                            className="resize-none"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., Course, Camp, Workshop"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Offering type description"
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="icon">Icon</Label>
-                      <Input
-                        id="icon"
-                        value={formData.icon}
-                        onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                        placeholder="e.g., book, tent, tools"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="color">Color</Label>
-                      <Input
-                        id="color"
-                        type="color"
-                        value={formData.color || "#000000"}
-                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                        className="h-10"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="display_order">Display Order</Label>
-                    <Input
-                      id="display_order"
-                      type="number"
-                      value={formData.display_order}
-                      onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div className="border-t pt-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is_active"
-                        checked={formData.is_active}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked === true })}
-                      />
-                      <Label htmlFor="is_active" className="cursor-pointer">
-                        Active
-                      </Label>
-                    </div>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Status</CardTitle>
+                        <CardDescription>Whether this offering type is active. Inactive types cannot be used for new offerings.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="is_active"
+                            checked={formData.is_active}
+                            onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked === true })}
+                          />
+                          <Label htmlFor="is_active" className="cursor-pointer font-medium">
+                            Active
+                          </Label>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="offering-schema" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="offering_schema">Offering Schema (JSON) *</Label>
-                    <Textarea
-                      id="offering_schema"
-                      value={offeringSchemaJson}
-                      onChange={(e) => setOfferingSchemaJson(e.target.value)}
-                      placeholder='{"fields": {...}}'
-                      rows={20}
-                      className="font-mono text-sm"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      JSON object defining the schema for Offering fields (e.g., description, base_price, base_capacity)
-                    </p>
-                  </div>
+                <TabsContent value="offering-schema" className="mt-4">
+                  <SchemaEditor
+                    title="Offering Schema"
+                    value={offeringSchemaJson}
+                    onChange={setOfferingSchemaJson}
+                    placeholder='{"fields": {"description": {"type": "text", "label": "Description", "required": true}, ...}}'
+                    minHeight="360px"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Defines fields for this offering type (e.g. description, base_price, base_capacity). Use Visual to edit fields or JSON for raw edit.
+                  </p>
                 </TabsContent>
 
-                <TabsContent value="instance-schema" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="instance_schema">Instance Schema (JSON) *</Label>
-                    <Textarea
-                      id="instance_schema"
-                      value={instanceSchemaJson}
-                      onChange={(e) => setInstanceSchemaJson(e.target.value)}
-                      placeholder='{"fields": {...}}'
-                      rows={20}
-                      className="font-mono text-sm"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      JSON object defining the schema for Instance fields (e.g., age_min, age_max, instructor_name)
-                    </p>
-                  </div>
+                <TabsContent value="instance-schema" className="mt-4">
+                  <SchemaEditor
+                    title="Instance Schema"
+                    value={instanceSchemaJson}
+                    onChange={setInstanceSchemaJson}
+                    placeholder='{"fields": {"start_date": {"type": "date", "label": "Start Date", "required": true}, ...}}'
+                    minHeight="360px"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Defines fields for each instance of this type (e.g. start_date, max_students, notes). Use Visual to edit fields or JSON for raw edit.
+                  </p>
                 </TabsContent>
               </Tabs>
             </div>

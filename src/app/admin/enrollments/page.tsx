@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -117,7 +117,10 @@ export default function EnrollmentsManagementPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [filteredEnrollments, setFilteredEnrollments] = useState<Enrollment[]>([])
   const [stats, setStats] = useState<EnrollmentStats | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState<string | null>(null)
+  const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState<string | null>(null)
   const [selectedEnrollment, setSelectedEnrollment] = useState<Enrollment | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [enrollmentHistory, setEnrollmentHistory] = useState<any[]>([])
@@ -133,18 +136,10 @@ export default function EnrollmentsManagementPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [franchiseFilter, setFranchiseFilter] = useState<string>("all")
 
-  useEffect(() => {
-    fetchEnrollments()
-    fetchStats()
-  }, [franchiseFilter])
-
-  useEffect(() => {
-    applyFilters()
-  }, [enrollments, statusFilter, paymentStatusFilter, searchQuery])
-
-  const fetchEnrollments = async () => {
+  const fetchEnrollments = useCallback(async () => {
+    setListLoading(true)
+    setListError(null)
     try {
-      setIsLoading(true)
       const params = new URLSearchParams()
       params.set("limit", "100")
       if (franchiseFilter !== "all") {
@@ -152,18 +147,20 @@ export default function EnrollmentsManagementPage() {
       }
       const query = params.toString()
       const response = await fetch(`/api/admin/enrollments?${query}`)
-      if (response.ok) {
-        const data = await response.json()
-        setEnrollments(data.enrollments || [])
-      }
+      if (!response.ok) throw new Error("Failed to fetch enrollments")
+      const data = await response.json()
+      setEnrollments(data.enrollments || [])
     } catch (error) {
       console.error("Error fetching enrollments:", error)
+      setListError(error instanceof Error ? error.message : "Failed to load enrollments")
     } finally {
-      setIsLoading(false)
+      setListLoading(false)
     }
-  }
+  }, [franchiseFilter])
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true)
+    setStatsError(null)
     try {
       const params = new URLSearchParams()
       if (franchiseFilter !== "all") {
@@ -171,14 +168,28 @@ export default function EnrollmentsManagementPage() {
       }
       const query = params.toString()
       const response = await fetch(`/api/admin/enrollments/stats${query ? `?${query}` : ""}`)
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data)
-      }
+      if (!response.ok) throw new Error("Failed to fetch stats")
+      const data = await response.json()
+      setStats(data)
     } catch (error) {
       console.error("Error fetching stats:", error)
+      setStatsError(error instanceof Error ? error.message : "Failed to load stats")
+    } finally {
+      setStatsLoading(false)
     }
-  }
+  }, [franchiseFilter])
+
+  useEffect(() => {
+    fetchEnrollments()
+  }, [fetchEnrollments])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
+
+  useEffect(() => {
+    applyFilters()
+  }, [enrollments, statusFilter, paymentStatusFilter, searchQuery])
 
   const applyFilters = () => {
     let filtered = [...enrollments]
@@ -309,8 +320,9 @@ export default function EnrollmentsManagementPage() {
         setSelectedEnrollment(data.enrollment)
         setIsEditingStatus(false)
         setEditReason("")
-        // 刷新列表
+        // 刷新列表和统计
         fetchEnrollments()
+        fetchStats()
         // 重新获取详情和历史
         await handleViewDetails(data.enrollment)
       } else {
@@ -334,48 +346,74 @@ export default function EnrollmentsManagementPage() {
         </p>
       </div>
 
-      {/* 统计卡片 */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Enrollments</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
+      {/* 统计卡片 - lazy loaded */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {statsLoading && (
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Loading...</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
+        {statsError && !statsLoading && (
+          <Card className="md:col-span-4">
+            <CardContent className="pt-6">
+              <p className="text-sm text-destructive mb-2">{statsError}</p>
+              <Button variant="outline" size="sm" onClick={fetchStats}>Retry</Button>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active (Enrolled)</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.by_status.enrolled}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Payment</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.by_status.reserved}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${stats.revenue.total.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">This month: ${stats.revenue.this_month.toFixed(2)}</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        )}
+        {!statsLoading && !statsError && stats && (
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Enrollments</CardTitle>
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.total}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active (Enrolled)</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.by_status.enrolled}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Payment</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.by_status.reserved}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${stats.revenue.total.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">This month: ${stats.revenue.this_month.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
 
       <Card>
         <CardHeader>
@@ -449,14 +487,19 @@ export default function EnrollmentsManagementPage() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" onClick={fetchEnrollments}>
+            <Button variant="outline" onClick={() => { fetchEnrollments(); fetchStats(); }}>
               Refresh
             </Button>
           </div>
 
-          {isLoading ? (
+          {listLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : listError ? (
+            <div className="text-center py-12">
+              <p className="text-destructive mb-2">{listError}</p>
+              <Button variant="outline" onClick={fetchEnrollments}>Retry</Button>
             </div>
           ) : filteredEnrollments.length === 0 ? (
             <div className="text-center py-12">

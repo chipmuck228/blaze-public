@@ -26,7 +26,8 @@ export async function GET(
           icon,
           color,
           is_active,
-          offering_schema
+          offering_schema,
+          instance_schema
         )
       `)
       .eq("id", id)
@@ -76,6 +77,7 @@ export async function PUT(
       currency,
       poster_url,
       offering_type_id,
+      category_id,
       type_config,
       type_config_data,
       status,
@@ -84,7 +86,7 @@ export async function PUT(
     // 获取现有的 offering
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from("v2_offering")
-      .select("id, slug, offering_type_id")
+      .select("id, slug, offering_type_id, category_id")
       .eq("id", id)
       .single()
 
@@ -95,8 +97,9 @@ export async function PUT(
       )
     }
 
-    // 确定要使用的 offering_type_id（如果改变）
+    // 确定要使用的 offering_type_id 和 category_id（如果改变）
     const targetOfferingTypeId = offering_type_id || existing.offering_type_id
+    const targetCategoryId = category_id || existing.category_id
 
     // 获取 offering type 的 schema（用于验证）
     const { data: offeringType, error: offeringTypeError } = await supabaseAdmin
@@ -122,8 +125,54 @@ export async function PUT(
       }
     }
 
+    // 如果 category_id 改变，验证新的 category 存在且激活
+    if (category_id && category_id !== existing.category_id) {
+      const { data: category, error: categoryError } = await supabaseAdmin
+        .from("v2_category")
+        .select("id, config_base, is_active")
+        .eq("id", category_id)
+        .single()
+
+      if (categoryError || !category) {
+        return NextResponse.json(
+          { error: "Invalid category_id. Category must exist in v2_category table." },
+          { status: 400 }
+        )
+      }
+
+      if (!category.is_active) {
+        return NextResponse.json(
+          { error: "Cannot update offering to inactive category" },
+          { status: 400 }
+        )
+      }
+    }
+
+    // 获取 category 的 config_base（如果 category_id 改变或需要合并配置）
+    let categoryConfigBase = {}
+    if (targetCategoryId) {
+      const { data: category } = await supabaseAdmin
+        .from("v2_category")
+        .select("config_base")
+        .eq("id", targetCategoryId)
+        .single()
+
+      if (category && category.config_base && typeof category.config_base === 'object') {
+        categoryConfigBase = category.config_base
+      }
+    }
+
     // 处理 type_config_data（优先使用 type_config_data，兼容 type_config）
-    const configData = type_config_data !== undefined ? type_config_data : (type_config !== undefined ? type_config : undefined)
+    // 如果提供了新的配置数据，合并 category 的 config_base
+    let configData = type_config_data !== undefined ? type_config_data : (type_config !== undefined ? type_config : undefined)
+    
+    // 如果提供了新的配置数据，合并 category 的 config_base（category 作为基础，用户配置覆盖）
+    if (configData !== undefined) {
+      configData = {
+        ...categoryConfigBase,
+        ...configData,
+      }
+    }
     
     // 如果提供了 configData，进行基础验证
     if (configData !== undefined && offeringType.offering_schema && typeof offeringType.offering_schema === 'object') {
@@ -193,6 +242,7 @@ export async function PUT(
     if (base_price !== undefined) updateData.base_price = base_price || null
     if (currency !== undefined) updateData.currency = currency
     if (poster_url !== undefined) updateData.poster_url = poster_url || null
+    if (category_id !== undefined) updateData.category_id = category_id
     if (offering_type_id !== undefined) updateData.offering_type_id = offering_type_id
     if (configData !== undefined) updateData.type_config_data = configData
     if (status !== undefined) updateData.status = status
@@ -211,7 +261,8 @@ export async function PUT(
           icon,
           color,
           is_active,
-          offering_schema
+          offering_schema,
+          instance_schema
         )
       `)
       .single()
@@ -272,9 +323,9 @@ export async function DELETE(
       )
     }
 
-    // 检查是否有 instances 使用此 offering
+    // 检查是否有 instances 使用此 offering（表名为 v2_instance）
     const { data: instancesData, error: instancesError } = await supabaseAdmin
-      .from("instance_v2")
+      .from("v2_instance")
       .select("id")
       .eq("offering_id", id)
       .limit(1)

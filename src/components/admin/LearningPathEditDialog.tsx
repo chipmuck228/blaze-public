@@ -83,31 +83,34 @@ export function LearningPathEditDialog({
     display_order: 0,
   })
 
-  // 获取分类列表
+  // 获取分类列表（Blaze v2）
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/categories")
+      const response = await fetch("/api/admin/categories/v2?includeInactive=true")
       if (response.ok) {
         const data = await response.json()
-        setCategories(data.categories || [])
+        setCategories(Array.isArray(data) ? data : [])
       }
     } catch (error) {
       console.error("Error fetching categories:", error)
     }
   }, [])
 
-  // 获取可用课程列表
+  // 获取可用项目列表（Blaze v2 programs，作为学习路径中的“课程”）
   const fetchCourses = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/courses")
+      const response = await fetch("/api/admin/programs/v2?activeOnly=true")
       if (response.ok) {
         const data = await response.json()
-        // 只显示已发布的课程
-        const published = data.filter((c: Course) => c.status === 'published')
-        setAvailableCourses(published)
+        const list = Array.isArray(data) ? data : []
+        setAvailableCourses(list.map((p: { id: string; name: string; display_name?: string; is_active?: boolean }) => ({
+          id: p.id,
+          name: p.display_name || p.name,
+          status: p.is_active ? 'published' : 'draft',
+        })))
       }
     } catch (error) {
-      console.error("Error fetching courses:", error)
+      console.error("Error fetching programs:", error)
     }
   }, [])
 

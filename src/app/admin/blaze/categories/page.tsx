@@ -43,8 +43,9 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Eye, EyeOff, ArrowUp, ArrowDown } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Eye, EyeOff, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from "lucide-react"
 
 interface V2Category {
   id: string
@@ -86,6 +87,9 @@ export default function BlazeCategoriesManagementPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isConfigBaseOpen, setIsConfigBaseOpen] = useState(false)
+  const [configBaseJson, setConfigBaseJson] = useState("")
+  const [configBaseError, setConfigBaseError] = useState<string | null>(null)
   
   // Franchise subscription management
   const [franchises, setFranchises] = useState<V2Franchise[]>([])
@@ -93,6 +97,8 @@ export default function BlazeCategoriesManagementPage() {
   const [franchiseSubscriptions, setFranchiseSubscriptions] = useState<FranchiseCategorySubscription[]>([])
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"categories" | "subscriptions">("categories")
+  const [posterFile, setPosterFile] = useState<File | null>(null)
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<Omit<V2Category, 'id' | 'created_at' | 'updated_at'>>({
     name: "",
@@ -114,6 +120,13 @@ export default function BlazeCategoriesManagementPage() {
       fetchFranchiseSubscriptions(selectedFranchise)
     }
   }, [selectedFranchise, activeTab])
+
+  useEffect(() => {
+    if (!isEditDialogOpen && posterPreviewUrl) {
+      URL.revokeObjectURL(posterPreviewUrl)
+      setPosterPreviewUrl(null)
+    }
+  }, [isEditDialogOpen, posterPreviewUrl])
 
   useEffect(() => {
     if (searchQuery) {
@@ -204,20 +217,46 @@ export default function BlazeCategoriesManagementPage() {
 
   const handleEdit = (category: V2Category) => {
     setEditingCategory(category)
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
+    const configBase = category.config_base || {}
     setFormData({
       name: category.name,
       display_name: category.display_name,
       description: category.description || "",
       poster_url: category.poster_url || "",
-      config_base: category.config_base || {},
+      config_base: configBase,
       display_order: category.display_order,
       is_active: category.is_active,
     })
+    setConfigBaseJson(JSON.stringify(configBase, null, 2))
+    setConfigBaseError(null)
+    setIsConfigBaseOpen(false)
     setIsEditDialogOpen(true)
+  }
+
+  const handlePosterFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterPreviewUrl(null)
+    setPosterFile(file || null)
+    if (file) setPosterPreviewUrl(URL.createObjectURL(file))
+    e.target.value = ""
+  }
+
+  const clearPosterFile = () => {
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
+    if (!editingCategory) setFormData((prev) => ({ ...prev, poster_url: "" }))
   }
 
   const handleAdd = () => {
     setEditingCategory(null)
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
     setFormData({
       name: "",
       display_name: "",
@@ -227,45 +266,135 @@ export default function BlazeCategoriesManagementPage() {
       display_order: 0,
       is_active: true,
     })
+    setConfigBaseJson("{}")
+    setConfigBaseError(null)
+    setIsConfigBaseOpen(false)
     setIsEditDialogOpen(true)
+  }
+
+  const handleConfigBaseChange = (value: string) => {
+    setConfigBaseJson(value)
+    setConfigBaseError(null)
+    
+    try {
+      const parsed = JSON.parse(value)
+      setFormData({ ...formData, config_base: parsed })
+    } catch (err) {
+      // JSON 无效时不更新 formData，但允许用户继续编辑
+      if (value.trim() !== "") {
+        setConfigBaseError("Invalid JSON format")
+      }
+    }
+  }
+
+  const uploadPosterFile = async (): Promise<string | null> => {
+    if (!posterFile) return null
+    const uploadFormData = new FormData()
+    uploadFormData.append("file", posterFile)
+    const res = await fetch("/api/blaze/categories/upload", {
+      method: "POST",
+      body: uploadFormData,
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || "Failed to upload poster")
+    }
+    const data = await res.json()
+    return data.url ?? null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (configBaseJson.trim() !== "") {
+      try {
+        JSON.parse(configBaseJson)
+      } catch (err) {
+        setConfigBaseError("Invalid JSON format. Please fix the JSON before submitting.")
+        setIsConfigBaseOpen(true)
+        return
+      }
+    }
+    
     setIsSubmitting(true)
 
     try {
+      let configBase = {}
+      if (configBaseJson.trim() !== "") {
+        configBase = JSON.parse(configBaseJson)
+      }
+
+      if (editingCategory) {
+        // Edit: if new file selected, upload first then PUT with poster_url
+        let posterUrl: string | undefined = formData.poster_url || undefined
+        if (posterFile) {
+          const url = await uploadPosterFile()
+          posterUrl = url ?? undefined
+        }
+        const submitData = {
+          ...formData,
+          description: formData.description || undefined,
+          poster_url: posterUrl,
+          config_base: configBase,
+        }
+        const response = await fetch(`/api/admin/categories/v2/${editingCategory.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submitData),
+        })
+        if (response.ok) {
+          fetchCategories()
+          setIsEditDialogOpen(false)
+          setEditingCategory(null)
+          clearPosterFile()
+        } else {
+          const err = await response.json()
+          alert(err.error || "Failed to update category")
+        }
+        return
+      }
+
+      // Create: save category first without poster; upload only after create succeeds
       const submitData = {
         ...formData,
         description: formData.description || undefined,
-        poster_url: formData.poster_url || undefined,
-        config_base: formData.config_base || {},
+        poster_url: undefined,
+        config_base: configBase,
       }
-
-      const url = editingCategory
-        ? `/api/admin/categories/v2/${editingCategory.id}`
-        : "/api/admin/categories/v2"
-      const method = editingCategory ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const createRes = await fetch("/api/admin/categories/v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitData),
       })
 
-      if (response.ok) {
-        fetchCategories()
-        setIsEditDialogOpen(false)
-        setEditingCategory(null)
-      } else {
-        const error = await response.json()
-        alert(error.error || "Failed to save category")
+      if (!createRes.ok) {
+        const err = await createRes.json()
+        alert(err.error || "Failed to create category")
+        return
       }
-    } catch (error) {
+
+      const created = await createRes.json()
+      if (posterFile) {
+        try {
+          const posterUrl = await uploadPosterFile()
+          if (posterUrl) {
+            await fetch(`/api/admin/categories/v2/${created.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ poster_url: posterUrl }),
+            })
+          }
+        } catch (uploadErr: any) {
+          alert("Category created but poster upload failed: " + (uploadErr.message || "Unknown error"))
+        }
+      }
+      fetchCategories()
+      setIsEditDialogOpen(false)
+      setEditingCategory(null)
+      clearPosterFile()
+    } catch (error: any) {
       console.error("Error saving category:", error)
-      alert("Failed to save category")
+      alert(error?.message || "Failed to save category")
     } finally {
       setIsSubmitting(false)
     }
@@ -477,6 +606,7 @@ export default function BlazeCategoriesManagementPage() {
                         <TableHead>Name</TableHead>
                         <TableHead>Display Name</TableHead>
                         <TableHead>Description</TableHead>
+                        <TableHead>Config Base</TableHead>
                         <TableHead>Display Order</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Created</TableHead>
@@ -489,6 +619,28 @@ export default function BlazeCategoriesManagementPage() {
                           <TableCell className="font-medium font-mono text-sm">{category.name}</TableCell>
                           <TableCell>{category.display_name}</TableCell>
                           <TableCell className="max-w-xs truncate">{category.description || "N/A"}</TableCell>
+                          <TableCell>
+                            {category.config_base && Object.keys(category.config_base).length > 0 ? (
+                              <div className="flex flex-col gap-1">
+                                <Badge variant="outline" className="font-mono text-xs w-fit">
+                                  {Object.keys(category.config_base).length} fields
+                                </Badge>
+                                <div className="text-xs text-muted-foreground space-y-0.5">
+                                  {category.config_base.target_age_min && category.config_base.target_age_max && (
+                                    <div>Age: {category.config_base.target_age_min}-{category.config_base.target_age_max}</div>
+                                  )}
+                                  {category.config_base.primary_product && (
+                                    <div>Product: {category.config_base.primary_product}</div>
+                                  )}
+                                  {category.config_base.skill_level && (
+                                    <div>Level: {category.config_base.skill_level}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">Empty</span>
+                            )}
+                          </TableCell>
                           <TableCell>{category.display_order}</TableCell>
                           <TableCell>
                             <Badge variant={category.is_active ? "default" : "secondary"}>
@@ -683,93 +835,166 @@ export default function BlazeCategoriesManagementPage() {
 
       {/* Edit/Add Category Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editingCategory ? "Edit Category" : "Add New Category"}</DialogTitle>
             <DialogDescription>
               {editingCategory ? "Update global category information" : "Create a new global category"}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value.toLowerCase().trim() })}
-                placeholder="e.g., robotics_basics, coding_intro"
-                required
-                disabled={!!editingCategory}
-              />
-              <p className="text-xs text-muted-foreground">
-                Internal name (lowercase, numbers, underscores only). Must be unique globally. Cannot be changed after creation.
-              </p>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-6">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Identity</CardTitle>
+                  <CardDescription>Internal name and display name. Name cannot be changed after creation.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Name *</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value.toLowerCase().trim() })}
+                        placeholder="e.g. robotics_basics, coding_intro"
+                        required
+                        disabled={!!editingCategory}
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-muted-foreground">Lowercase, numbers, underscores only. Unique globally.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="display_name">Display Name *</Label>
+                      <Input
+                        id="display_name"
+                        value={formData.display_name}
+                        onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                        placeholder="e.g. Robotics Basics, Coding Introduction"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Category description"
+                      rows={3}
+                      className="resize-none"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Media &amp; display</CardTitle>
+                  <CardDescription>Poster image (uploaded to blob storage) and ordering in lists.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <PosterUploadField
+                    id="poster_file"
+                    label="Poster image"
+                    hint="JPEG, PNG, WebP. Max 5MB. Upload happens only after category is saved (create or update)."
+                    previewSrc={posterPreviewUrl || (editingCategory && formData.poster_url && !posterFile ? formData.poster_url : null) || null}
+                    onFileChange={handlePosterFileChange}
+                    onClear={clearPosterFile}
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="display_order">Display Order</Label>
+                      <Input
+                        id="display_order"
+                        type="number"
+                        min={0}
+                        value={formData.display_order}
+                        onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value, 10) || 0 })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="is_active">Status</Label>
+                      <Select
+                        value={formData.is_active ? "active" : "inactive"}
+                        onValueChange={(v) => setFormData({ ...formData, is_active: v === "active" })}
+                      >
+                        <SelectTrigger id="is_active">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full justify-between p-0 h-auto hover:bg-transparent"
+                    onClick={() => setIsConfigBaseOpen(!isConfigBaseOpen)}
+                  >
+                    <div>
+                      <CardTitle className="text-base">Base Configuration (config_base)</CardTitle>
+                      <CardDescription className="mt-1">
+                        Category-level default settings for offerings in this category.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="secondary">
+                        {Object.keys(formData.config_base || {}).length} fields
+                      </Badge>
+                      {isConfigBaseOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </Button>
+                </CardHeader>
+                {isConfigBaseOpen && (
+                  <CardContent className="pt-0 border-t">
+                    <div className="pt-4 space-y-2">
+                      <Label htmlFor="config_base" className="text-sm font-medium">
+                        JSON Configuration
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Example: {"{"}"target_age_min": 8, "target_age_max": 12, "primary_product": "VEX IQ"{"}"}
+                      </p>
+                      <Textarea
+                        id="config_base"
+                        value={configBaseJson}
+                        onChange={(e) => handleConfigBaseChange(e.target.value)}
+                        placeholder='{"target_age_min": 8, "target_age_max": 12, ...}'
+                        rows={8}
+                        className={`font-mono text-sm resize-y ${configBaseError ? "border-destructive" : ""}`}
+                      />
+                      {configBaseError && (
+                        <p className="text-xs text-destructive">{configBaseError}</p>
+                      )}
+                      {!configBaseError && configBaseJson.trim() !== "" && (
+                        <p className="text-xs text-green-600">✓ Valid JSON</p>
+                      )}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="display_name">Display Name *</Label>
-              <Input
-                id="display_name"
-                value={formData.display_name}
-                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                placeholder="e.g., Robotics Basics, Coding Introduction"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Category description"
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="poster_url">Poster URL</Label>
-              <Input
-                id="poster_url"
-                value={formData.poster_url}
-                onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
-                placeholder="https://example.com/poster.jpg"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="display_order">Display Order</Label>
-                <Input
-                  id="display_order"
-                  type="number"
-                  value={formData.display_order}
-                  onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
-                  placeholder="0"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="is_active">Status</Label>
-                <select
-                  id="is_active"
-                  value={formData.is_active ? "active" : "inactive"}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.value === "active" })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !formData.name || !formData.display_name}>
+              <Button type="submit" disabled={isSubmitting || !formData.name || !formData.display_name} className="w-full sm:w-auto">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

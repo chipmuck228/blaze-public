@@ -54,7 +54,7 @@ async function runMigration() {
   
   try {
     // 读取 SQL 文件
-    const sqlPath = path.join(__dirname, '..', 'migrate-create-offering-prerequisites.sql');
+    const sqlPath = path.join(__dirname, '..', 'sql', 'root-migrations', 'migrate-create-offering-prerequisites.sql');
     const sql = fs.readFileSync(sqlPath, 'utf-8');
     
     // 执行 SQL
@@ -78,7 +78,7 @@ async function runMigration() {
             const { error: stmtError } = await supabase.from('_migration').select('*').limit(0);
             // 这里需要根据实际的 Supabase 客户端 API 来执行 SQL
             // 如果无法直接执行，需要手动在 Supabase Dashboard 中执行
-            console.log('⚠️  无法自动执行 SQL，请在 Supabase Dashboard 中手动执行 migrate-create-offering-prerequisites.sql');
+            console.log('⚠️  无法自动执行 SQL，请在 Supabase Dashboard 中手动执行 sql/root-migrations/migrate-create-offering-prerequisites.sql');
             break;
           } catch (e) {
             // 忽略错误
@@ -95,7 +95,7 @@ async function runMigration() {
     
   } catch (error) {
     console.error('\n❌ 迁移失败:', error.message);
-    console.error('\n💡 请手动在 Supabase Dashboard 的 SQL Editor 中执行 migrate-create-offering-prerequisites.sql');
+    console.error('\n💡 请手动在 Supabase Dashboard 的 SQL Editor 中执行 sql/root-migrations/migrate-create-offering-prerequisites.sql');
     process.exit(1);
   }
 }

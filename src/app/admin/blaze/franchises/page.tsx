@@ -37,7 +37,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Code, X, ChevronDown } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Code, X, ChevronDown, ImageIcon } from "lucide-react"
+import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface V2Franchise {
@@ -46,6 +47,7 @@ interface V2Franchise {
   name: string
   domain?: string
   logo_url?: string
+  poster_url?: string | null
   branding_config: Record<string, any>
   marketing_config: Record<string, any>
   contact_email?: string
@@ -67,12 +69,15 @@ export default function BlazeFranchisesManagementPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [posterFile, setPosterFile] = useState<File | null>(null)
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<Omit<V2Franchise, 'id' | 'created_at' | 'updated_at'>>({
     code: "",
     name: "",
     domain: "",
     logo_url: "",
+    poster_url: "",
     branding_config: {},
     marketing_config: {},
     contact_email: "",
@@ -279,13 +284,52 @@ export default function BlazeFranchisesManagementPage() {
     }
   }
 
+  const handlePosterFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    if (file) {
+      setPosterFile(file)
+      setPosterPreviewUrl(URL.createObjectURL(file))
+    } else {
+      setPosterFile(null)
+      setPosterPreviewUrl(null)
+    }
+  }
+
+  const clearPosterFile = () => {
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
+    if (!editingFranchise) setFormData((prev) => ({ ...prev, poster_url: "" }))
+  }
+
+  const uploadPosterFile = async (): Promise<string | null> => {
+    if (!posterFile) return null
+    const uploadFormData = new FormData()
+    uploadFormData.append("file", posterFile)
+    const res = await fetch("/api/admin/franchises/v2/upload", {
+      method: "POST",
+      body: uploadFormData,
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || "Failed to upload poster")
+    }
+    const data = await res.json()
+    return data.url ?? null
+  }
+
   const handleEdit = (franchise: V2Franchise) => {
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
     setEditingFranchise(franchise)
     setFormData({
       code: franchise.code,
       name: franchise.name,
       domain: franchise.domain || "",
       logo_url: franchise.logo_url || "",
+      poster_url: franchise.poster_url ?? "",
       branding_config: franchise.branding_config || {},
       marketing_config: franchise.marketing_config || {},
       contact_email: franchise.contact_email || "",
@@ -410,11 +454,15 @@ export default function BlazeFranchisesManagementPage() {
 
   const handleAdd = () => {
     setEditingFranchise(null)
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
     setFormData({
       code: "",
       name: "",
       domain: "",
       logo_url: "",
+      poster_url: "",
       branding_config: {},
       marketing_config: {},
       contact_email: "",
@@ -540,6 +588,11 @@ export default function BlazeFranchisesManagementPage() {
     setIsSubmitting(true)
 
     try {
+      let posterUrl: string | undefined = formData.poster_url || undefined
+      if (posterFile) {
+        posterUrl = (await uploadPosterFile()) ?? undefined
+      }
+
       // Convert form data to JSON config
       // Clean up empty values from branding config
       const cleanBrandingConfig: any = {}
@@ -652,6 +705,7 @@ export default function BlazeFranchisesManagementPage() {
         marketing_config: cleanMarketingConfig,
         domain: formData.domain || undefined,
         logo_url: formData.logo_url || undefined,
+        poster_url: posterUrl,
         contact_email: formData.contact_email || undefined,
         contact_phone: formData.contact_phone || undefined,
         address: formData.address || undefined,
@@ -674,6 +728,7 @@ export default function BlazeFranchisesManagementPage() {
         fetchFranchises()
         setIsEditDialogOpen(false)
         setEditingFranchise(null)
+        clearPosterFile()
       } else {
         const error = await response.json()
         alert(error.error || "Failed to save franchise")
@@ -751,6 +806,7 @@ export default function BlazeFranchisesManagementPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[72px]">Poster</TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Domain</TableHead>
@@ -765,6 +821,22 @@ export default function BlazeFranchisesManagementPage() {
                 <TableBody>
                   {filteredFranchises.map((franchise) => (
                     <TableRow key={franchise.id}>
+                      <TableCell className="w-[72px] p-2 align-middle">
+                        <div className="w-14 h-14 rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex-shrink-0">
+                          {franchise.poster_url ? (
+                            <img
+                              src={franchise.poster_url}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-0.5">
+                              <ImageIcon className="h-6 w-6" strokeWidth={1.5} />
+                              <span className="text-[9px] leading-tight">No poster</span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-mono text-sm">{franchise.code}</TableCell>
                       <TableCell className="font-medium">{franchise.name}</TableCell>
                       <TableCell>{franchise.domain || "N/A"}</TableCell>
@@ -826,488 +898,307 @@ export default function BlazeFranchisesManagementPage() {
                   <TabsTrigger value="marketing">Marketing Config</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="basic" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="code">Code *</Label>
-                    <Input
-                      id="code"
-                      value={formData.code}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-                      placeholder="e.g., san_jose, new_york"
-                      required
-                      disabled={!!editingFranchise}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Lowercase letters, numbers, and underscores only. Cannot be changed after creation.
-                    </p>
-                  </div>
+                <TabsContent value="basic" className="mt-4">
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">Identity</CardTitle>
+                        <CardDescription className="text-xs">Code and name. Code cannot be changed after creation.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="code" className="text-xs">Code *</Label>
+                            <Input
+                              id="code"
+                              value={formData.code}
+                              onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                              placeholder="e.g. san_jose, new_york"
+                              required
+                              disabled={!!editingFranchise}
+                              className="h-9 font-mono text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="name" className="text-xs">Name *</Label>
+                            <Input
+                              id="name"
+                              value={formData.name}
+                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                              placeholder="e.g. San Jose, New York"
+                              required
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="domain" className="text-xs">Domain</Label>
+                            <Input
+                              id="domain"
+                              value={formData.domain}
+                              onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                              placeholder="sanjose.blazerobotics.com"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="logo_url" className="text-xs">Logo URL</Label>
+                            <Input
+                              id="logo_url"
+                              value={formData.logo_url}
+                              onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
+                              placeholder="https://example.com/logo.png"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., San Jose, New York"
-                      required
-                    />
-                  </div>
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">Poster</CardTitle>
+                        <CardDescription className="text-xs">Franchise poster image. JPEG, PNG or WebP, max 5MB. Uploaded when you save.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <PosterUploadField
+                          id="franchise_poster"
+                          label="Poster image"
+                          hint="Optional. Upload happens when you save the franchise."
+                          previewSrc={posterPreviewUrl || (editingFranchise && formData.poster_url && !posterFile ? (formData.poster_url as string) : null) || null}
+                          onFileChange={handlePosterFileChange}
+                          onClear={clearPosterFile}
+                        />
+                      </CardContent>
+                    </Card>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="domain">Domain</Label>
-                    <Input
-                      id="domain"
-                      value={formData.domain}
-                      onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                      placeholder="e.g., sanjose.blazerobotics.com"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Domain for multi-tenant routing (optional, must be unique)
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="logo_url">Logo URL</Label>
-                    <Input
-                      id="logo_url"
-                      value={formData.logo_url}
-                      onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                      placeholder="https://example.com/logo.png"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="contact_email">Contact Email</Label>
-                      <Input
-                        id="contact_email"
-                        type="email"
-                        value={formData.contact_email}
-                        onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                        placeholder="contact@example.com"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="contact_phone">Contact Phone</Label>
-                      <Input
-                        id="contact_phone"
-                        value={formData.contact_phone}
-                        onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                        placeholder="+1 (555) 123-4567"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      placeholder="Street address"
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="timezone">Timezone *</Label>
-                      <Input
-                        id="timezone"
-                        value={formData.timezone}
-                        onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                        placeholder="UTC"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="locale">Locale *</Label>
-                      <Input
-                        id="locale"
-                        value={formData.locale}
-                        onChange={(e) => setFormData({ ...formData, locale: e.target.value })}
-                        placeholder="en"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="border-t pt-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is_active"
-                        checked={formData.is_active}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked === true })}
-                      />
-                      <Label htmlFor="is_active" className="cursor-pointer">
-                        Active
-                      </Label>
-                    </div>
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">Contact &amp; location</CardTitle>
+                        <CardDescription className="text-xs">Email, phone, address, timezone and locale.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="contact_email" className="text-xs">Contact Email</Label>
+                            <Input
+                              id="contact_email"
+                              type="email"
+                              value={formData.contact_email}
+                              onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                              placeholder="contact@example.com"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="contact_phone" className="text-xs">Contact Phone</Label>
+                            <Input
+                              id="contact_phone"
+                              value={formData.contact_phone}
+                              onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                              placeholder="+1 (555) 123-4567"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="address" className="text-xs">Address</Label>
+                          <Textarea
+                            id="address"
+                            value={formData.address}
+                            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                            placeholder="Street address"
+                            rows={2}
+                            className="resize-none text-sm min-h-[60px]"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="timezone" className="text-xs">Timezone *</Label>
+                            <Input
+                              id="timezone"
+                              value={formData.timezone}
+                              onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                              placeholder="UTC"
+                              required
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="locale" className="text-xs">Locale *</Label>
+                            <Input
+                              id="locale"
+                              value={formData.locale}
+                              onChange={(e) => setFormData({ ...formData, locale: e.target.value })}
+                              placeholder="en"
+                              required
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <Checkbox
+                            id="is_active"
+                            checked={formData.is_active}
+                            onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked === true })}
+                          />
+                          <Label htmlFor="is_active" className="text-sm cursor-pointer">Active</Label>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="branding" className="space-y-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <Label className="text-base font-semibold">Branding Configuration</Label>
+                <TabsContent value="branding" className="mt-4">
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-sm font-medium text-muted-foreground">Branding configuration</span>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
+                      className="h-8 text-xs"
                       onClick={() => setShowJsonEditor({ ...showJsonEditor, branding: !showJsonEditor.branding })}
                     >
-                      <Code className="h-4 w-4 mr-2" />
-                      {showJsonEditor.branding ? "Hide" : "Show"} JSON Editor
+                      <Code className="h-3.5 w-3.5 mr-1.5" />
+                      {showJsonEditor.branding ? "Form" : "JSON"}
                     </Button>
                   </div>
 
                   {showJsonEditor.branding ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="branding_config_json">Branding Config (JSON)</Label>
-                      <Textarea
-                        id="branding_config_json"
-                        value={JSON.stringify(brandingConfig, null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const parsed = JSON.parse(e.target.value)
-                            setBrandingConfig(parsed)
-                          } catch (err) {
-                            // Invalid JSON, ignore
-                          }
-                        }}
-                        rows={20}
-                        className="font-mono text-sm"
-                      />
-                    </div>
+                    <Textarea
+                      id="branding_config_json"
+                      value={JSON.stringify(brandingConfig, null, 2)}
+                      onChange={(e) => {
+                        try {
+                          const parsed = JSON.parse(e.target.value)
+                          setBrandingConfig(parsed)
+                        } catch (err) {
+                          // Invalid JSON, ignore
+                        }
+                      }}
+                      rows={18}
+                      className="font-mono text-sm resize-y min-h-[280px]"
+                    />
                   ) : (
-                    <div className="space-y-4">
-                      <Accordion type="multiple" className="w-full">
+                    <Accordion type="multiple" className="w-full space-y-1">
                         {/* Branding Colors & Theme */}
-                        <AccordionItem value="branding-colors">
-                          <AccordionTrigger>Branding Colors & Theme</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="primaryColor">Primary Color</Label>
-                                <div className="flex gap-2">
-                                  <Input
-                                    id="primaryColor"
-                                    type="color"
-                                    value={brandingConfig.branding.primaryColor || "#2563EB"}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, primaryColor: e.target.value }
-                                    })}
-                                    className="w-16 h-10"
-                                  />
-                                  <Input
-                                    value={brandingConfig.branding.primaryColor || ""}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, primaryColor: e.target.value }
-                                    })}
-                                    placeholder="#2563EB"
-                                    className="flex-1"
-                                  />
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="secondaryColor">Secondary Color</Label>
-                                <div className="flex gap-2">
-                                  <Input
-                                    id="secondaryColor"
-                                    type="color"
-                                    value={brandingConfig.branding.secondaryColor || "#1E40AF"}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, secondaryColor: e.target.value }
-                                    })}
-                                    className="w-16 h-10"
-                                  />
-                                  <Input
-                                    value={brandingConfig.branding.secondaryColor || ""}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, secondaryColor: e.target.value }
-                                    })}
-                                    placeholder="#1E40AF"
-                                    className="flex-1"
-                                  />
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="accentColor">Accent Color</Label>
-                                <div className="flex gap-2">
-                                  <Input
-                                    id="accentColor"
-                                    type="color"
-                                    value={brandingConfig.branding.accentColor || "#3B82F6"}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, accentColor: e.target.value }
-                                    })}
-                                    className="w-16 h-10"
-                                  />
-                                  <Input
-                                    value={brandingConfig.branding.accentColor || ""}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, accentColor: e.target.value }
-                                    })}
-                                    placeholder="#3B82F6"
-                                    className="flex-1"
-                                  />
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="backgroundColor">Background Color</Label>
-                                <div className="flex gap-2">
-                                  <Input
-                                    id="backgroundColor"
-                                    type="color"
-                                    value={brandingConfig.branding.backgroundColor || "#FFFFFF"}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, backgroundColor: e.target.value }
-                                    })}
-                                    className="w-16 h-10"
-                                  />
-                                  <Input
-                                    value={brandingConfig.branding.backgroundColor || ""}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      branding: { ...brandingConfig.branding, backgroundColor: e.target.value }
-                                    })}
-                                    placeholder="#FFFFFF"
-                                    className="flex-1"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="logoUrl">Logo URL</Label>
-                                <Input
-                                  id="logoUrl"
-                                  value={brandingConfig.branding.logoUrl || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    branding: { ...brandingConfig.branding, logoUrl: e.target.value }
-                                  })}
-                                  placeholder="https://example.com/logo.png"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="faviconUrl">Favicon URL</Label>
-                                <Input
-                                  id="faviconUrl"
-                                  value={brandingConfig.branding.faviconUrl || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    branding: { ...brandingConfig.branding, faviconUrl: e.target.value }
-                                  })}
-                                  placeholder="https://example.com/favicon.ico"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="theme">Theme</Label>
-                              <Input
-                                id="theme"
-                                value={brandingConfig.branding.theme || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  branding: { ...brandingConfig.branding, theme: e.target.value }
-                                })}
-                                placeholder="e.g., modern, classic"
-                              />
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-
-                        {/* Hero Section */}
-                        <AccordionItem value="hero">
-                          <AccordionTrigger>Hero Section</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="heroTitle">Title</Label>
-                              <Input
-                                id="heroTitle"
-                                value={brandingConfig.hero.title || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  hero: { ...brandingConfig.hero, title: e.target.value }
-                                })}
-                                placeholder="Blaze Robotics Academy"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="heroSubtitle">Subtitle</Label>
-                              <Input
-                                id="heroSubtitle"
-                                value={brandingConfig.hero.subtitle || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  hero: { ...brandingConfig.hero, subtitle: e.target.value }
-                                })}
-                                placeholder="Empowering the Next Generation"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="heroDescription">Description</Label>
-                              <Textarea
-                                id="heroDescription"
-                                value={brandingConfig.hero.description || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  hero: { ...brandingConfig.hero, description: e.target.value }
-                                })}
-                                placeholder="Join us for hands-on robotics and coding programs."
-                                rows={3}
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="heroBackgroundImage">Background Image URL</Label>
-                                <Input
-                                  id="heroBackgroundImage"
-                                  value={brandingConfig.hero.backgroundImage || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    hero: { ...brandingConfig.hero, backgroundImage: e.target.value }
-                                  })}
-                                  placeholder="https://example.com/hero-bg.jpg"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="heroCtaText">CTA Text</Label>
-                                <Input
-                                  id="heroCtaText"
-                                  value={brandingConfig.hero.ctaText || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    hero: { ...brandingConfig.hero, ctaText: e.target.value }
-                                  })}
-                                  placeholder="Explore Programs"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="heroCtaLink">CTA Link</Label>
-                              <Input
-                                id="heroCtaLink"
-                                value={brandingConfig.hero.ctaLink || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  hero: { ...brandingConfig.hero, ctaLink: e.target.value }
-                                })}
-                                placeholder="/programs"
-                              />
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-
-                        {/* Contact Information */}
-                        <AccordionItem value="contact">
-                          <AccordionTrigger>Contact Information</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="contactEmail">Email</Label>
-                                <Input
-                                  id="contactEmail"
-                                  type="email"
-                                  value={brandingConfig.contact.email || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    contact: { ...brandingConfig.contact, email: e.target.value }
-                                  })}
-                                  placeholder="contact@example.com"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="contactPhone">Phone</Label>
-                                <Input
-                                  id="contactPhone"
-                                  value={brandingConfig.contact.phone || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    contact: { ...brandingConfig.contact, phone: e.target.value }
-                                  })}
-                                  placeholder="+1 (555) 123-4567"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Address</Label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <Input
-                                  value={brandingConfig.contact.address.street || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    contact: {
-                                      ...brandingConfig.contact,
-                                      address: { ...brandingConfig.contact.address, street: e.target.value }
-                                    }
-                                  })}
-                                  placeholder="Street"
-                                />
-                                <Input
-                                  value={brandingConfig.contact.address.city || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    contact: {
-                                      ...brandingConfig.contact,
-                                      address: { ...brandingConfig.contact.address, city: e.target.value }
-                                    }
-                                  })}
-                                  placeholder="City"
-                                />
-                                <Input
-                                  value={brandingConfig.contact.address.state || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    contact: {
-                                      ...brandingConfig.contact,
-                                      address: { ...brandingConfig.contact.address, state: e.target.value }
-                                    }
-                                  })}
-                                  placeholder="State"
-                                />
-                                <Input
-                                  value={brandingConfig.contact.address.zip || ""}
-                                  onChange={(e) => setBrandingConfig({
-                                    ...brandingConfig,
-                                    contact: {
-                                      ...brandingConfig.contact,
-                                      address: { ...brandingConfig.contact.address, zip: e.target.value }
-                                    }
-                                  })}
-                                  placeholder="ZIP Code"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Business Hours</Label>
-                              <div className="grid grid-cols-2 gap-2">
-                                {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
-                                  <div key={day} className="space-y-1">
-                                    <Label className="text-xs capitalize">{day}</Label>
-                                    <Input
-                                      value={brandingConfig.contact.businessHours[day as keyof typeof brandingConfig.contact.businessHours] || ""}
+                        <AccordionItem value="branding-colors" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Branding Colors & Theme</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {[
+                                { key: 'primaryColor', label: 'Primary', placeholder: '#2563EB', def: brandingConfig.branding.primaryColor || '#2563EB' },
+                                { key: 'secondaryColor', label: 'Secondary', placeholder: '#1E40AF', def: brandingConfig.branding.secondaryColor || '#1E40AF' },
+                                { key: 'accentColor', label: 'Accent', placeholder: '#3B82F6', def: brandingConfig.branding.accentColor || '#3B82F6' },
+                                { key: 'backgroundColor', label: 'Background', placeholder: '#FFFFFF', def: brandingConfig.branding.backgroundColor || '#FFFFFF' },
+                              ].map(({ key, label, placeholder, def }) => (
+                                <div key={key} className="space-y-1">
+                                  <Label htmlFor={key} className="text-xs">{label}</Label>
+                                  <div className="flex gap-1.5">
+                                    <input
+                                      type="color"
+                                      id={key}
+                                      value={(brandingConfig.branding as Record<string, string>)[key] || def}
                                       onChange={(e) => setBrandingConfig({
                                         ...brandingConfig,
-                                        contact: {
-                                          ...brandingConfig.contact,
-                                          businessHours: {
-                                            ...brandingConfig.contact.businessHours,
-                                            [day]: e.target.value
-                                          }
-                                        }
+                                        branding: { ...brandingConfig.branding, [key]: e.target.value }
                                       })}
-                                      placeholder={day === 'sunday' ? "Closed" : "9:00 AM - 6:00 PM"}
+                                      className="w-9 h-8 rounded border border-input cursor-pointer p-0.5 bg-transparent"
                                     />
+                                    <Input
+                                      value={(brandingConfig.branding as Record<string, string>)[key] || ""}
+                                      onChange={(e) => setBrandingConfig({
+                                        ...brandingConfig,
+                                        branding: { ...brandingConfig.branding, [key]: e.target.value }
+                                      })}
+                                      placeholder={placeholder}
+                                      className="flex-1 h-8 text-xs font-mono"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label htmlFor="logoUrl" className="text-xs">Logo URL</Label>
+                                <Input id="logoUrl" value={brandingConfig.branding.logoUrl || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, branding: { ...brandingConfig.branding, logoUrl: e.target.value } })} placeholder="https://example.com/logo.png" className="h-8 text-sm" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="faviconUrl" className="text-xs">Favicon URL</Label>
+                                <Input id="faviconUrl" value={brandingConfig.branding.faviconUrl || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, branding: { ...brandingConfig.branding, faviconUrl: e.target.value } })} placeholder="https://example.com/favicon.ico" className="h-8 text-sm" />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="theme" className="text-xs">Theme</Label>
+                              <Input id="theme" value={brandingConfig.branding.theme || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, branding: { ...brandingConfig.branding, theme: e.target.value } })} placeholder="e.g. modern, classic" className="h-8 text-sm" />
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+
+                        <AccordionItem value="hero" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Hero Section</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label htmlFor="heroTitle" className="text-xs">Title</Label>
+                                <Input id="heroTitle" value={brandingConfig.hero.title || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, hero: { ...brandingConfig.hero, title: e.target.value } })} placeholder="Blaze Robotics Academy" className="h-8 text-sm" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="heroSubtitle" className="text-xs">Subtitle</Label>
+                                <Input id="heroSubtitle" value={brandingConfig.hero.subtitle || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, hero: { ...brandingConfig.hero, subtitle: e.target.value } })} placeholder="Empowering the Next Generation" className="h-8 text-sm" />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="heroDescription" className="text-xs">Description</Label>
+                              <Textarea id="heroDescription" value={brandingConfig.hero.description || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, hero: { ...brandingConfig.hero, description: e.target.value } })} placeholder="Join us for hands-on robotics and coding programs." rows={2} className="text-sm resize-none min-h-[52px]" />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div className="space-y-1">
+                                <Label htmlFor="heroBackgroundImage" className="text-xs">Background Image URL</Label>
+                                <Input id="heroBackgroundImage" value={brandingConfig.hero.backgroundImage || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, hero: { ...brandingConfig.hero, backgroundImage: e.target.value } })} placeholder="https://..." className="h-8 text-sm" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="heroCtaText" className="text-xs">CTA Text</Label>
+                                <Input id="heroCtaText" value={brandingConfig.hero.ctaText || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, hero: { ...brandingConfig.hero, ctaText: e.target.value } })} placeholder="Explore Programs" className="h-8 text-sm" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="heroCtaLink" className="text-xs">CTA Link</Label>
+                                <Input id="heroCtaLink" value={brandingConfig.hero.ctaLink || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, hero: { ...brandingConfig.hero, ctaLink: e.target.value } })} placeholder="/programs" className="h-8 text-sm" />
+                              </div>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+
+                        <AccordionItem value="contact" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Contact Information</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label htmlFor="contactEmail" className="text-xs">Email</Label>
+                                <Input id="contactEmail" type="email" value={brandingConfig.contact.email || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, email: e.target.value } })} placeholder="contact@example.com" className="h-8 text-sm" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="contactPhone" className="text-xs">Phone</Label>
+                                <Input id="contactPhone" value={brandingConfig.contact.phone || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, phone: e.target.value } })} placeholder="+1 (555) 123-4567" className="h-8 text-sm" />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Address</Label>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <Input value={brandingConfig.contact.address.street || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, address: { ...brandingConfig.contact.address, street: e.target.value } } })} placeholder="Street" className="h-8 text-sm" />
+                                <Input value={brandingConfig.contact.address.city || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, address: { ...brandingConfig.contact.address, city: e.target.value } } })} placeholder="City" className="h-8 text-sm" />
+                                <Input value={brandingConfig.contact.address.state || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, address: { ...brandingConfig.contact.address, state: e.target.value } } })} placeholder="State" className="h-8 text-sm" />
+                                <Input value={brandingConfig.contact.address.zip || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, address: { ...brandingConfig.contact.address, zip: e.target.value } } })} placeholder="ZIP" className="h-8 text-sm" />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Business Hours</Label>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
+                                  <div key={day} className="space-y-0.5">
+                                    <Label className="text-xs capitalize">{day}</Label>
+                                    <Input value={brandingConfig.contact.businessHours[day as keyof typeof brandingConfig.contact.businessHours] || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, contact: { ...brandingConfig.contact, businessHours: { ...brandingConfig.contact.businessHours, [day]: e.target.value } } })} placeholder={day === 'sunday' ? "Closed" : "9–6"} className="h-8 text-sm" />
                                   </div>
                                 ))}
                               </div>
@@ -1315,134 +1206,79 @@ export default function BlazeFranchisesManagementPage() {
                           </AccordionContent>
                         </AccordionItem>
 
-                        {/* Social Media */}
-                        <AccordionItem value="social">
-                          <AccordionTrigger>Social Media</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                        <AccordionItem value="social" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Social Media</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               {['facebook', 'instagram', 'twitter', 'youtube', 'linkedin'].map((platform) => (
-                                <div key={platform} className="space-y-2">
-                                  <Label className="capitalize">{platform}</Label>
-                                  <Input
-                                    value={brandingConfig.social[platform as keyof typeof brandingConfig.social] || ""}
-                                    onChange={(e) => setBrandingConfig({
-                                      ...brandingConfig,
-                                      social: {
-                                        ...brandingConfig.social,
-                                        [platform]: e.target.value
-                                      }
-                                    })}
-                                    placeholder={`https://${platform}.com/...`}
-                                  />
+                                <div key={platform} className="space-y-1">
+                                  <Label className="text-xs capitalize">{platform}</Label>
+                                  <Input value={brandingConfig.social[platform as keyof typeof brandingConfig.social] || ""} onChange={(e) => setBrandingConfig({ ...brandingConfig, social: { ...brandingConfig.social, [platform]: e.target.value } })} placeholder={`${platform}.com/...`} className="h-8 text-sm" />
                                 </div>
                               ))}
                             </div>
                           </AccordionContent>
                         </AccordionItem>
 
-                        {/* Highlights */}
-                        <AccordionItem value="highlights">
-                          <AccordionTrigger>Highlights</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="highlightsPrograms">Programs</Label>
-                              <Textarea
-                                id="highlightsPrograms"
-                                value={brandingConfig.highlights.programs || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  highlights: { ...brandingConfig.highlights, programs: e.target.value }
-                                })}
-                                placeholder="Age-appropriate robotics, coding, and STEM programs..."
-                                rows={2}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="highlightsSchedule">Schedule</Label>
-                              <Textarea
-                                id="highlightsSchedule"
-                                value={brandingConfig.highlights.schedule || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  highlights: { ...brandingConfig.highlights, schedule: e.target.value }
-                                })}
-                                placeholder="After-school and weekend offerings..."
-                                rows={2}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="highlightsFocus">Focus</Label>
-                              <Textarea
-                                id="highlightsFocus"
-                                value={brandingConfig.highlights.focus || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  highlights: { ...brandingConfig.highlights, focus: e.target.value }
-                                })}
-                                placeholder="Hands-on learning, teamwork..."
-                                rows={2}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="highlightsAchievements">Achievements</Label>
-                              <Textarea
-                                id="highlightsAchievements"
-                                value={brandingConfig.highlights.achievements || ""}
-                                onChange={(e) => setBrandingConfig({
-                                  ...brandingConfig,
-                                  highlights: { ...brandingConfig.highlights, achievements: e.target.value }
-                                })}
-                                placeholder="Our students have won multiple competitions..."
-                                rows={2}
-                              />
+                        <AccordionItem value="highlights" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Highlights</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {(['programs', 'schedule', 'focus', 'achievements'] as const).map((field) => (
+                                <div key={field} className="space-y-1">
+                                  <Label className="text-xs capitalize">{field}</Label>
+                                  <Textarea
+                                    value={brandingConfig.highlights[field] || ""}
+                                    onChange={(e) => setBrandingConfig({ ...brandingConfig, highlights: { ...brandingConfig.highlights, [field]: e.target.value } })}
+                                    placeholder={field === 'programs' ? "Age-appropriate robotics, coding..." : field === 'achievements' ? "Our students have won..." : "..."}
+                                    rows={2}
+                                    className="text-sm resize-none min-h-[52px]"
+                                  />
+                                </div>
+                              ))}
                             </div>
                           </AccordionContent>
                         </AccordionItem>
                       </Accordion>
-                    </div>
                   )}
                 </TabsContent>
 
-                <TabsContent value="marketing" className="space-y-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <Label className="text-base font-semibold">Marketing Configuration</Label>
+                <TabsContent value="marketing" className="mt-4">
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-sm font-medium text-muted-foreground">Marketing configuration</span>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
+                      className="h-8 text-xs"
                       onClick={() => setShowJsonEditor({ ...showJsonEditor, marketing: !showJsonEditor.marketing })}
                     >
-                      <Code className="h-4 w-4 mr-2" />
-                      {showJsonEditor.marketing ? "Hide" : "Show"} JSON Editor
+                      <Code className="h-3.5 w-3.5 mr-1.5" />
+                      {showJsonEditor.marketing ? "Form" : "JSON"}
                     </Button>
                   </div>
 
                   {showJsonEditor.marketing ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="marketing_config_json">Marketing Config (JSON)</Label>
-                      <Textarea
-                        id="marketing_config_json"
-                        value={JSON.stringify(marketingConfig, null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const parsed = JSON.parse(e.target.value)
-                            setMarketingConfig(parsed)
-                          } catch (err) {
-                            // Invalid JSON, ignore
-                          }
-                        }}
-                        rows={20}
-                        className="font-mono text-sm"
-                      />
-                    </div>
+                    <Textarea
+                      id="marketing_config_json"
+                      value={JSON.stringify(marketingConfig, null, 2)}
+                      onChange={(e) => {
+                        try {
+                          const parsed = JSON.parse(e.target.value)
+                          setMarketingConfig(parsed)
+                        } catch (err) {
+                          // Invalid JSON, ignore
+                        }
+                      }}
+                      rows={18}
+                      className="font-mono text-sm resize-y min-h-[280px]"
+                    />
                   ) : (
-                    <div className="space-y-4">
-                      <Accordion type="multiple" className="w-full">
-                        {/* SEO */}
-                        <AccordionItem value="seo">
-                          <AccordionTrigger>SEO Settings</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div className="space-y-2">
+                    <Accordion type="multiple" className="w-full space-y-1">
+                        <AccordionItem value="seo" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">SEO Settings</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
+                            <div className="space-y-1">
                               <Label htmlFor="seoTitle">Title</Label>
                               <Input
                                 id="seoTitle"
@@ -1509,9 +1345,9 @@ export default function BlazeFranchisesManagementPage() {
                         </AccordionItem>
 
                         {/* Slogan */}
-                        <AccordionItem value="slogan">
-                          <AccordionTrigger>Slogan</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
+                        <AccordionItem value="slogan" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Slogan</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
                             <div className="space-y-2">
                               <Label htmlFor="sloganMain">Main Slogan</Label>
                               <Input
@@ -1552,9 +1388,9 @@ export default function BlazeFranchisesManagementPage() {
                         </AccordionItem>
 
                         {/* Descriptions */}
-                        <AccordionItem value="descriptions">
-                          <AccordionTrigger>Page Descriptions</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
+                        <AccordionItem value="descriptions" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Page Descriptions</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
                             <div className="space-y-2">
                               <Label className="font-semibold">Homepage</Label>
                               <div className="space-y-2 pl-4 border-l-2">
@@ -1637,10 +1473,9 @@ export default function BlazeFranchisesManagementPage() {
                           </AccordionContent>
                         </AccordionItem>
 
-                        {/* CTA */}
-                        <AccordionItem value="cta">
-                          <AccordionTrigger>Call-to-Action Buttons</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
+                        <AccordionItem value="cta" className="border rounded-md px-3">
+                          <AccordionTrigger className="py-2.5 text-sm hover:no-underline">Call-to-Action Buttons</AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3 pt-0">
                             <div className="space-y-2">
                               <Label className="font-semibold">Primary CTA</Label>
                               <div className="grid grid-cols-2 gap-4 pl-4 border-l-2">
@@ -1714,7 +1549,6 @@ export default function BlazeFranchisesManagementPage() {
                           </AccordionContent>
                         </AccordionItem>
                       </Accordion>
-                    </div>
                   )}
                 </TabsContent>
               </Tabs>

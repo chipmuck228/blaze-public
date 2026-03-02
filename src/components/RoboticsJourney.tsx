@@ -16,15 +16,16 @@ interface JourneyStep {
   badge?: string
 }
 
+// Step descriptions aligned with v2_category design (Beginner / Intermediate / Advanced / Competition / Innovation)
 const journeySteps: JourneyStep[] = [
   {
     id: 1,
     stepNumber: "Step 1",
     title: "Explore",
-    description: "Discover the world of building and coding through our fun, high-energy camps.",
-    ctaText: "Join Our Camps",
-    ctaLink: "/camps",
-    icon: <Zap className="w-8 h-8" />,
+    description: "Beginner level for ages 8–12. Spark interest in robotics through camps and VEX IQ—build foundational skills and hands-on confidence with game-style learning.",
+    ctaText: "Learn More",
+    ctaLink: "/journey/explore",
+    icon: <Zap className="w-8 h-8" strokeWidth={1} />,
     gradientFrom: "#0f172a",
     gradientTo: "#0f172a",
     badge: "Start Here"
@@ -33,21 +34,21 @@ const journeySteps: JourneyStep[] = [
     id: 2,
     stepNumber: "Step 2",
     title: "Build",
-    description: "Master the fundamentals of mechanics and programming in our structured courses.",
-    ctaText: "Enroll in Our Courses",
-    ctaLink: "/course",
-    icon: <Target className="w-8 h-8" />,
+    description: "Intermediate to advanced, ages 12–18. Develop core robotics skills in structured courses—programming, control, sensors, and automation—and prepare for competition or career paths.",
+    ctaText: "Learn More",
+    ctaLink: "/journey/build",
+    icon: <Target className="w-8 h-8" strokeWidth={1} />,
     gradientFrom: "#2563eb",
     gradientTo: "#2563eb"
   },
   {
     id: 3,
     stepNumber: "Step 3",
-    title: "Compete",
-    description: "Join a team, build a tournament-ready robot, and compete at local and global events.",
-    ctaText: "Join Our Teams",
-    ctaLink: "/competition",
-    icon: <Users className="w-8 h-8" />,
+    title: "Compete & Innovate",
+    description: "Competition and innovation tracks: join a team, build competition-ready robots, and compete in local and global VEX events—or explore AI, IoT, and automation in our Innovation Lab.",
+    ctaText: "Learn More",
+    ctaLink: "/journey/compete",
+    icon: <Users className="w-8 h-8" strokeWidth={1} />,
     gradientFrom: "#e0f2fe",
     gradientTo: "#e0f2fe"
   }
@@ -70,26 +71,19 @@ export const RoboticsJourney = () => {
           <div className="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-slate-200 dark:bg-slate-700 -translate-y-1/2 z-0"></div>
           
           {journeySteps.map((step, index) => {
-            // 根据步骤设置图标背景色
-            let iconBgClass = ''
-            let iconTextClass = ''
-            if (index === 0) {
-              iconBgClass = 'bg-[#0f172a] dark:bg-slate-800'
-              iconTextClass = 'text-[#38bdf8]'
-            } else if (index === 1) {
-              iconBgClass = 'bg-[#2563eb]'
-              iconTextClass = 'text-white'
-            } else {
-              iconBgClass = 'bg-[#e0f2fe] dark:bg-blue-900/30'
-              iconTextClass = 'text-[#0f172a] dark:text-blue-300'
-            }
-            
+            const iconTextClass =
+              index === 0
+                ? 'text-[#38bdf8] dark:text-sky-400'
+                : index === 1
+                  ? 'text-[#2563eb] dark:text-blue-400'
+                  : 'text-[#0f172a] dark:text-blue-300'
+
             return (
               <div 
                 key={step.id}
                 className="bg-slate-50 dark:bg-slate-800 p-10 rounded-3xl relative z-10 border border-slate-200 dark:border-slate-700 hover:shadow-xl transition-all group"
               >
-                <div className={`w-16 h-16 ${iconBgClass} rounded-2xl flex items-center justify-center ${iconTextClass} mb-6 group-hover:scale-110 transition-transform shadow-md`}>
+                <div className={`w-16 h-16 bg-transparent rounded-2xl flex items-center justify-center ${iconTextClass} mb-6 group-hover:scale-110 transition-transform`}>
                   {step.icon}
                 </div>
                 <h3 className="text-2xl font-bold text-[#0f172a] dark:text-white mb-3">{step.stepNumber}: {step.title}</h3>

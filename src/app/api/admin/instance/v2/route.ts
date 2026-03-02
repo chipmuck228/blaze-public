@@ -142,26 +142,26 @@ export async function POST(request: Request) {
       is_active = true,
     } = body
 
-    // 必需字段验证
-    if (!program_id || !offering_id || !start_date || !end_date) {
+    // 仅 program_id、offering_id 为必填；start_date/end_date 由 instance_schema 决定
+    if (!program_id || !offering_id) {
       return NextResponse.json(
-        { error: "Missing required fields: program_id, offering_id, start_date, end_date" },
+        { error: "Missing required fields: program_id, offering_id" },
         { status: 400 }
       )
     }
 
-    // 验证日期范围
-    if (new Date(start_date) > new Date(end_date)) {
-      return NextResponse.json(
-        { error: "start_date must be less than or equal to end_date" },
-        { status: 400 }
-      )
-    }
-
-    // 1. 验证 Program 存在
+    // 1. 验证 Program 存在并获取 category 信息
     const { data: program, error: programError } = await supabaseAdmin
       .from("v2_program")
-      .select("id, category_id, franchise_id")
+      .select(`
+        id,
+        category_id,
+        franchise_id,
+        category:v2_category(
+          id,
+          config_base
+        )
+      `)
       .eq("id", program_id)
       .single()
 
@@ -170,6 +170,16 @@ export async function POST(request: Request) {
         { error: "Program not found" },
         { status: 400 }
       )
+    }
+
+    // 获取 category 的 config_base 作为默认配置
+    let categoryConfigBase: Record<string, any> = {}
+    const programData = program as any
+    if (programData.category && typeof programData.category === 'object' && !Array.isArray(programData.category)) {
+      const category = programData.category as { config_base?: Record<string, any> }
+      if (category.config_base && typeof category.config_base === 'object') {
+        categoryConfigBase = category.config_base
+      }
     }
 
     // 2. 验证 Offering 存在且状态为 published
@@ -212,23 +222,63 @@ export async function POST(request: Request) {
       )
     }
 
-    // 4. 验证 instance_data_ext 是否符合 instance_schema（如果提供了 schema）
-    const offeringType = Array.isArray(offering.offering_type) ? offering.offering_type[0] : offering.offering_type
-    if (offeringType?.instance_schema && typeof offeringType.instance_schema === "object") {
-      const schema = offeringType.instance_schema as { fields?: Record<string, any> }
+    // 3.1 按 instance_schema 校验 start_date / end_date 必填，以及日期范围
+    const schemaSource = Array.isArray(offering.offering_type) ? offering.offering_type[0] : offering.offering_type
+    const instanceSchemaFields = (schemaSource as any)?.instance_schema?.fields
+    if (instanceSchemaFields) {
+      if (instanceSchemaFields.start_date?.required && (start_date === undefined || start_date === null || start_date === "")) {
+        return NextResponse.json(
+          { error: (instanceSchemaFields.start_date.label || "Start date") + " is required" },
+          { status: 400 }
+        )
+      }
+      if (instanceSchemaFields.end_date?.required && (end_date === undefined || end_date === null || end_date === "")) {
+        return NextResponse.json(
+          { error: (instanceSchemaFields.end_date.label || "End date") + " is required" },
+          { status: 400 }
+        )
+      }
+    }
+    if (start_date && end_date && new Date(start_date) > new Date(end_date)) {
+      return NextResponse.json(
+        { error: "start_date must be less than or equal to end_date" },
+        { status: 400 }
+      )
+    }
+
+    // 4. 合并到 instance_data_ext（Phase A 双写：平铺字段也写入 instance_data_ext，便于后续只读 JSONB）
+    // 顺序：category config_base → 请求中的平铺业务字段 → 请求中的 instance_data_ext（后者覆盖）
+    const flatFieldsForExt: Record<string, unknown> = {}
+    if (start_date !== undefined) flatFieldsForExt.start_date = start_date
+    if (end_date !== undefined) flatFieldsForExt.end_date = end_date
+    if (start_time !== undefined) flatFieldsForExt.start_time = start_time
+    if (end_time !== undefined) flatFieldsForExt.end_time = end_time
+    if (session_count !== undefined) flatFieldsForExt.session_count = session_count
+    if (days_of_week !== undefined) flatFieldsForExt.days_of_week = days_of_week
+    if (max_students !== undefined) flatFieldsForExt.max_students = max_students
+    if (notes !== undefined) flatFieldsForExt.notes = notes
+    const mergedInstanceDataExt = {
+      ...categoryConfigBase,
+      ...flatFieldsForExt,
+      ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
+    }
+
+    // 5. 验证 instance_data_ext 是否符合 instance_schema（如果提供了 schema）
+    if (schemaSource?.instance_schema && typeof schemaSource.instance_schema === "object") {
+      const schema = schemaSource.instance_schema as { fields?: Record<string, any> }
       if (schema.fields) {
         const errors: string[] = []
         
-        // 验证必填字段
+        // 验证必填字段（使用合并后的数据）
         for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
-          if (fieldConfig.required && (instance_data_ext[fieldName] === undefined || instance_data_ext[fieldName] === null || instance_data_ext[fieldName] === "")) {
+          if (fieldConfig.required && (mergedInstanceDataExt[fieldName] === undefined || mergedInstanceDataExt[fieldName] === null || mergedInstanceDataExt[fieldName] === "")) {
             errors.push(`${fieldConfig.label || fieldName} is required`)
           }
           
-          // 验证字段类型和范围
-          if (instance_data_ext[fieldName] !== undefined && instance_data_ext[fieldName] !== null) {
+          // 验证字段类型和范围（使用合并后的数据）
+          if (mergedInstanceDataExt[fieldName] !== undefined && mergedInstanceDataExt[fieldName] !== null) {
             if (fieldConfig.type === "number") {
-              const value = Number(instance_data_ext[fieldName])
+              const value = Number(mergedInstanceDataExt[fieldName])
               if (isNaN(value)) {
                 errors.push(`${fieldConfig.label || fieldName} must be a number`)
               } else {
@@ -241,13 +291,14 @@ export async function POST(request: Request) {
               }
             }
             
-            if (fieldConfig.type === "select" && fieldConfig.options && !fieldConfig.options.includes(instance_data_ext[fieldName])) {
+            if (fieldConfig.type === "select" && fieldConfig.options && !fieldConfig.options.includes(mergedInstanceDataExt[fieldName])) {
               errors.push(`${fieldConfig.label || fieldName} must be one of: ${fieldConfig.options.join(", ")}`)
             }
             
             if (fieldConfig.type === "multiselect" && fieldConfig.options) {
-              const values = Array.isArray(instance_data_ext[fieldName]) ? instance_data_ext[fieldName] : [instance_data_ext[fieldName]]
-              const invalidValues = values.filter((v: any) => !fieldConfig.options.includes(v))
+              const values = Array.isArray(mergedInstanceDataExt[fieldName]) ? mergedInstanceDataExt[fieldName] : [mergedInstanceDataExt[fieldName]]
+              const optSet = new Set(fieldConfig.options.map((o: any) => String(o)))
+              const invalidValues = values.filter((v: any) => !optSet.has(String(v)))
               if (invalidValues.length > 0) {
                 errors.push(`${fieldConfig.label || fieldName} contains invalid values: ${invalidValues.join(", ")}`)
               }
@@ -264,7 +315,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. 验证 Campus（如果提供）
+    // 6. 验证 Campus（如果提供）
     if (campus_id) {
       const { data: campus, error: campusError } = await supabaseAdmin
         .from("v2_campus")
@@ -288,7 +339,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. 验证容量
+    // 7. 验证容量
     if (max_students !== null && max_students !== undefined) {
       if (max_students < 1) {
         return NextResponse.json(
@@ -304,7 +355,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. 创建 Instance
+    // 8. 创建 Instance（使用合并后的 instance_data_ext）
     const { data: instance, error: instanceError } = await supabaseAdmin
       .from("v2_instance")
       .insert({
@@ -312,15 +363,15 @@ export async function POST(request: Request) {
         offering_id,
         campus_id: campus_id || null,
         price_override: price_override || null,
-        start_date,
-        end_date,
+        start_date: start_date ?? null,
+        end_date: end_date ?? null,
         start_time: start_time || null,
         end_time: end_time || null,
         session_count: session_count || null,
         days_of_week: days_of_week || null,
         max_students: max_students || null,
         current_students,
-        instance_data_ext,
+        instance_data_ext: mergedInstanceDataExt,
         icalendar_rrule: icalendar_rrule || null,
         icalendar_exdates: icalendar_exdates || null,
         icalendar_rdates: icalendar_rdates || null,

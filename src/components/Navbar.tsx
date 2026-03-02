@@ -3,8 +3,6 @@ import { useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
-import { ModeToggle } from "./mode-toggle";
-
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -25,36 +23,25 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles } from "lucide-react";
-import { BlazeLogoIcon } from "./Icons";
+import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle } from "lucide-react";
 import Link from "next/link";
+
+  // Navbar 统一深蓝色（与白底搭配）
+  const NAV_TEXT = "text-[#1e3a5f]";
+  const NAV_HOVER = "hover:text-[#2563eb]";
+  const NAV_ACTIVE = "text-[#2563eb]";
+  const DROPDOWN_BG = "bg-white border border-slate-200 shadow-xl";
+  const DROPDOWN_ITEM = "text-[#1e3a5f] hover:bg-slate-100 hover:text-[#1e3a5f]";
+  const DROPDOWN_ITEM_ACTIVE = "bg-slate-100 text-[#2563eb]";
 
 interface RouteProps {
     href: string;
     label: string;
   }
   
-  const routeList: RouteProps[] = [
-    {
-      href: "/about",
-      label: "About Us",
-    },
-  ];
+  const routeList: RouteProps[] = [];
 
-  interface Location {
-    id: string;
-    name: string;
-    address?: string | null;
-    city?: string | null;
-    state?: string | null;
-    zip_code?: string | null;
-    franchise?: {
-      id: string;
-      code: string;
-      name: string | null;
-    } | null;
-  }
-
+  /** v2 franchise 列表项（仅 active，来自 /api/public/franchises-v2） */
   interface FranchiseGroup {
     id: string;
     code: string;
@@ -65,6 +52,7 @@ interface RouteProps {
     zip_code?: string;
   }
 
+  /** v2 category 列表项（仅 active，来自 /api/public/categories 或 franchises/[code]/categories） */
   interface Category {
     id: string;
     name: string;
@@ -110,15 +98,15 @@ interface RouteProps {
     const [isLocationsOpen, setIsLocationsOpen] = useState<boolean>(false);
     const [isProgramsOpen, setIsProgramsOpen] = useState<boolean>(false);
     const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
+    const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
     const [cartCount, setCartCount] = useState<number>(0);
     const [waitlistCount, setWaitlistCount] = useState<number>(0);
     const [availableCredits, setAvailableCredits] = useState<number>(0);
     const [isStudentAccount, setIsStudentAccount] = useState<boolean>(false);
-    const [locations, setLocations] = useState<Location[]>([]);
     const [franchiseGroups, setFranchiseGroups] = useState<FranchiseGroup[]>([]);
     const [filteredFranchiseGroups, setFilteredFranchiseGroups] = useState<FranchiseGroup[]>([]);
     const [searchQuery, setSearchQuery] = useState<string>("");
-    const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(false);
+    const [isLoadingFranchises, setIsLoadingFranchises] = useState<boolean>(false);
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false);
     const [franchiseFromUrl, setFranchiseFromUrl] = useState<string | null>(null);
@@ -126,44 +114,47 @@ interface RouteProps {
     const router = useRouter();
     const { data: session, status } = useSession();
 
-    // 从 URL 中获取 franchise 参数（用于 course-catalog 和 programs 页面）
+    // 从 URL 中获取 franchise 参数；保持用户选择的 location（除首页外）
     useEffect(() => {
-      if (typeof window !== 'undefined') {
-        if (pathname === '/course-catalog' || pathname === '/programs') {
-        const params = new URLSearchParams(window.location.search);
-          const franchise = params.get('franchise') || params.get('location');
-        setFranchiseFromUrl(franchise);
-      } else {
+      if (typeof window === 'undefined') return;
+      // 首页不保留 location，其他页从 pathname 或 URL 参数读取
+      if (pathname === '/') {
         setFranchiseFromUrl(null);
-        }
+        return;
       }
+      // 1. /locations/[code] -> location 为 code
+      const locationMatch = pathname?.match(/^\/locations\/([^/]+)/);
+      if (locationMatch) {
+        setFranchiseFromUrl(decodeURIComponent(locationMatch[1]).toLowerCase());
+        return;
+      }
+      // 2. /course-catalog、/programs、/category/... 从 query 读取 franchise 或 location
+      if (pathname === '/course-catalog' || pathname === '/programs' || pathname?.startsWith('/category/')) {
+        const params = new URLSearchParams(window.location.search);
+        const franchise = params.get('franchise') || params.get('location');
+        setFranchiseFromUrl(franchise ? franchise.toLowerCase() : null);
+        return;
+      }
+      setFranchiseFromUrl(null);
     }, [pathname]);
 
-    // 动态检测当前 location label（从 pathname 或 URL 参数中提取 code，然后查找对应的 franchise name）
-    // 使用 useMemo 确保在 franchiseGroups 更新时重新计算
-    const currentLocationLabel = useMemo(() => {
-      if (!pathname) return null;
-      
-      // 1. 检查是否是 /locations/[code] 页面
-      const locationMatch = pathname.match(/^\/locations\/([^\/]+)/);
-      if (locationMatch) {
-      const locationCode = decodeURIComponent(locationMatch[1]).toLowerCase();
-      const matchedFranchise = franchiseGroups.find(
-        (f) => f.code.toLowerCase() === locationCode
-      );
-        return matchedFranchise?.name || null;
-      }
-      
-      // 2. 检查是否是 /course-catalog 或 /programs 页面且 URL 中有 franchise/location 参数
-      if ((pathname === '/course-catalog' || pathname === '/programs') && franchiseFromUrl) {
-        const matchedFranchise = franchiseGroups.find(
-          (f) => f.code.toLowerCase() === franchiseFromUrl.toLowerCase()
-        );
-      return matchedFranchise?.name || null;
-      }
-      
+    // 当前选中的 location 的 code（用于保持 Navbar 状态并传给 category 等链接）；首页为 null
+    const currentLocationCode = useMemo(() => {
+      if (!pathname || pathname === '/') return null;
+      const locationMatch = pathname.match(/^\/locations\/([^/]+)/);
+      if (locationMatch) return decodeURIComponent(locationMatch[1]).toLowerCase();
+      if (franchiseFromUrl) return franchiseFromUrl.toLowerCase();
       return null;
-    }, [pathname, franchiseFromUrl, franchiseGroups]);
+    }, [pathname, franchiseFromUrl]);
+
+    // 动态检测当前 location label（从 pathname 或 URL 参数中提取 code，然后查找对应的 franchise name）
+    const currentLocationLabel = useMemo(() => {
+      if (!currentLocationCode) return null;
+      const matchedFranchise = franchiseGroups.find(
+        (f) => f.code.toLowerCase() === currentLocationCode
+      );
+      return matchedFranchise?.name || null;
+    }, [currentLocationCode, franchiseGroups]);
 
     // Helper function to get the correct href
     const getHref = (href: string) => {
@@ -246,161 +237,77 @@ interface RouteProps {
       }
     }, [status, session]);
 
-    // Fetch locations and group by franchise
+    // Fetch active v2 franchises only (from v2_franchise table)
     useEffect(() => {
-      const fetchLocations = async () => {
+      const fetchFranchises = async () => {
         try {
-          setIsLoadingLocations(true);
-          const response = await fetch('/api/public/locations');
+          setIsLoadingFranchises(true);
+          const response = await fetch('/api/public/franchises-v2');
           if (response.ok) {
             const data = await response.json();
-            setLocations(data || []);
-            
-            // Group locations by franchise
-            const franchiseMap = new Map<string, FranchiseGroup>();
-            
-            (data || []).forEach((location: Location) => {
-              if (!location.franchise) return;
-              
-              const franchiseId = location.franchise.id;
-              
-              // If franchise not in map, add it
-              if (!franchiseMap.has(franchiseId)) {
-                franchiseMap.set(franchiseId, {
-                  id: location.franchise.id,
-                  code: location.franchise.code,
-                  name: location.franchise.name || '',
-                  // Use first location's address as franchise address
-                  address: location.address || undefined,
-                  city: location.city || undefined,
-                  state: location.state || undefined,
-                  zip_code: location.zip_code || undefined,
-                });
-              }
-            });
-            
-            const groups = Array.from(franchiseMap.values());
-            setFranchiseGroups(groups);
-            setFilteredFranchiseGroups(groups);
+            const list = Array.isArray(data) ? data : [];
+            setFranchiseGroups(list);
+            setFilteredFranchiseGroups(list);
           }
         } catch (error) {
-          console.error('Error fetching locations:', error);
+          console.error('Error fetching franchises v2:', error);
         } finally {
-          setIsLoadingLocations(false);
+          setIsLoadingFranchises(false);
         }
       };
 
-      fetchLocations();
+      fetchFranchises();
     }, []);
 
-    // Fetch categories - filter by franchise if on location page
+    // Fetch categories: 有 location 时用该 franchise 的 categories（筛选后），否则用 global，以保持「location + 筛选后的 category」一致
     useEffect(() => {
+      const code = currentLocationCode ?? null;
+
       const fetchCategories = async () => {
         try {
           setIsLoadingCategories(true);
-          
-          // Check if we're on a location page (/locations/[code])
-          const locationMatch = pathname?.match(/^\/locations\/([^/]+)/);
-          const franchiseCode = locationMatch ? locationMatch[1] : null;
-          
-          // 调试日志：显示路径匹配结果
-          console.log('[Navbar] Fetching categories:', {
-            pathname: pathname,
-            locationMatch: locationMatch,
-            franchiseCode: franchiseCode,
-            willUseFranchiseAPI: !!franchiseCode,
-          });
-          
-          let response;
-          let apiUrl = '';
-          try {
-            if (franchiseCode) {
-              // Fetch categories for this specific franchise
-              const decodedCode = decodeURIComponent(franchiseCode).toLowerCase();
-              apiUrl = `/api/public/franchises/${encodeURIComponent(decodedCode)}/categories`;
-              console.log('[Navbar] Calling franchise categories API:', apiUrl);
-              response = await fetch(apiUrl);
-            } else {
-              // Fetch all categories (for homepage and other pages)
-              apiUrl = '/api/public/categories';
-              console.log('[Navbar] Calling all categories API:', apiUrl);
-              response = await fetch(apiUrl);
-            }
-            
-            console.log('[Navbar] API Response received:', {
-              status: response.status,
-              statusText: response.statusText,
-              ok: response.ok,
-              apiUrl: apiUrl,
-            });
-            
-            if (response.ok) {
-              const data = await response.json();
-              const categoriesData = data.categories || [];
-              
-              // 添加调试日志（始终显示，不依赖 NODE_ENV）
-              console.log('[Navbar] Categories fetched:', {
-                pathname: pathname,
-                franchiseCode: franchiseCode || 'all',
-                apiUrl: apiUrl,
-                categoriesCount: categoriesData.length,
-                categories: categoriesData.map((c: any) => ({ id: c.id, name: c.name, display_name: c.display_name })),
-                rawData: data,
-              });
-              
-              setCategories(categoriesData);
-            } else {
-              // 添加错误日志
-              const errorData = await response.json().catch(() => ({}));
-              console.error('[Navbar] Failed to fetch categories:', {
-                pathname: pathname,
-                status: response.status,
-                statusText: response.statusText,
-                error: errorData,
-                franchiseCode: franchiseCode || 'all',
-                apiUrl: apiUrl,
-              });
-              // 如果 franchise categories API 失败，回退到所有 categories
-              if (franchiseCode) {
-                console.warn('[Navbar] Falling back to all categories due to franchise API failure');
-                const fallbackResponse = await fetch('/api/public/categories');
-                if (fallbackResponse.ok) {
-                  const fallbackData = await fallbackResponse.json();
-                  setCategories(fallbackData.categories || []);
-                }
-              }
-            }
-          } catch (fetchError: any) {
-            console.error('[Navbar] Fetch error:', {
-              pathname: pathname,
-              franchiseCode: franchiseCode || 'all',
-              apiUrl: apiUrl,
-              error: fetchError.message,
-              stack: fetchError.stack,
-            });
-            // 如果 fetch 失败，回退到所有 categories
-            if (franchiseCode) {
-              console.warn('[Navbar] Falling back to all categories due to fetch error');
-              try {
-                const fallbackResponse = await fetch('/api/public/categories');
-                if (fallbackResponse.ok) {
-                  const fallbackData = await fallbackResponse.json();
-                  setCategories(fallbackData.categories || []);
-                }
-              } catch (fallbackError) {
-                console.error('[Navbar] Fallback also failed:', fallbackError);
-              }
+
+          let apiUrl: string;
+          if (code) {
+            apiUrl = `/api/public/franchises/${encodeURIComponent(code)}/categories`;
+          } else {
+            apiUrl = '/api/public/categories';
+          }
+
+          const response = await fetch(apiUrl);
+          if (response.ok) {
+            const data = await response.json();
+            setCategories(data.categories || []);
+          } else if (code) {
+            const fallbackResponse = await fetch('/api/public/categories');
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json();
+              setCategories(fallbackData.categories || []);
             }
           }
-        } catch (error) {
-          console.error('Error fetching categories:', error);
+        } catch {
+          if (code) {
+            try {
+              const fallbackResponse = await fetch('/api/public/categories');
+              if (fallbackResponse.ok) {
+                const fallbackData = await fallbackResponse.json();
+                setCategories(fallbackData.categories || []);
+              } else {
+                setCategories([]);
+              }
+            } catch {
+              setCategories([]);
+            }
+          } else {
+            setCategories([]);
+          }
         } finally {
           setIsLoadingCategories(false);
         }
       };
 
       fetchCategories();
-    }, [pathname]);
+    }, [currentLocationCode]);
 
     // Filter franchise groups based on search query
     useEffect(() => {
@@ -431,17 +338,18 @@ interface RouteProps {
     const isLocationActive = pathname?.startsWith('/locations/');
 
     return (
-      <nav className="bg-[#0f172a] text-white fixed top-0 z-50 w-full shadow-lg dark:bg-[#0f172a]">
+      <nav className={`bg-white ${NAV_TEXT} fixed top-0 z-50 w-full shadow-md`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             {/* Left: Logo */}
             <div className="flex items-center">
-              <Link href="/" className="flex items-center space-x-2">
-                <Rocket className="w-10 h-10 text-[#38bdf8]" />
-                <div className="flex flex-col">
-                  <span className="text-xl font-bold tracking-tighter leading-none">BLAZE ROBOTICS</span>
-                  <span className="text-xs uppercase tracking-widest text-[#94a3b8]">Academy</span>
-                </div>
+              <Link href="/" className="flex items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Blaze+New+logos+1 copy.webp"
+                  alt="BLAZE ROBOTICS Academy"
+                  className="h-12 w-auto object-contain"
+                />
               </Link>
             </div>
 
@@ -450,7 +358,7 @@ interface RouteProps {
               {/* Locations Dropdown */}
               <div className="relative group h-full flex items-center">
                 <button 
-                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${isLocationActive ? 'text-[#38bdf8]' : 'text-gray-300'}`}
+                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${isLocationActive ? NAV_ACTIVE : NAV_TEXT}`}
                 >
                   {currentLocationLabel ? (
                     <>
@@ -466,28 +374,26 @@ interface RouteProps {
                 </button>
                 
                 <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-96 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
-                  <div className="bg-[#1e293b] rounded-xl shadow-xl border border-slate-700 overflow-hidden ring-1 ring-black/5">
-                    {/* Search Input */}
-                    <div className="p-4 border-b border-slate-800">
+                  <div className={`${DROPDOWN_BG} rounded-xl overflow-hidden`}>
+                    <div className="p-4 border-b border-slate-200">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                           placeholder="Search locations..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-9 bg-slate-800 border-slate-700 text-white placeholder:text-gray-500"
+                          className="pl-9 bg-slate-50 border-slate-200 text-[#1e3a5f] placeholder:text-slate-400"
                         />
                       </div>
                     </div>
 
-                    {/* Locations List */}
                     <div className="max-h-[400px] overflow-y-auto">
-                      {isLoadingLocations ? (
+                      {isLoadingFranchises ? (
                         <div className="flex items-center justify-center py-8">
-                          <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                          <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                         </div>
                       ) : filteredFranchiseGroups.length === 0 ? (
-                        <div className="text-center py-8 text-sm text-gray-400">
+                        <div className="text-center py-8 text-sm text-slate-500">
                           {searchQuery ? 'No locations found' : 'No locations available'}
                         </div>
                       ) : (
@@ -507,14 +413,14 @@ interface RouteProps {
                               <Link
                                 key={franchise.id}
                                 href={href}
-                                className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors border-b border-slate-800 last:border-0 ${isFranchiseActive ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                                className={`block px-4 py-3 text-sm transition-colors border-b border-slate-100 last:border-0 ${isFranchiseActive ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                               >
                                 <div className="flex items-start gap-3">
-                                  <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
                                   <div className="flex-1 min-w-0">
                                     <div className="font-medium">{franchise.name}</div>
                                     {fullAddress && (
-                                      <div className="text-xs text-gray-400 mt-1 line-clamp-2">
+                                      <div className="text-xs text-slate-500 mt-1 line-clamp-2">
                                         {fullAddress}
                                       </div>
                                     )}
@@ -533,46 +439,59 @@ interface RouteProps {
               {/* Programs Dropdown */}
               <div className="relative group h-full flex items-center">
                 <button 
-                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${pathname === '/programs' ? 'text-[#38bdf8]' : 'text-gray-300'}`}
+                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${pathname === '/programs' ? NAV_ACTIVE : NAV_TEXT}`}
                 >
                   <span>Categories</span>
                   <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
                 </button>
                 
-                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-80 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
-                  <div className="bg-[#1e293b] rounded-xl shadow-xl border border-slate-700 overflow-hidden ring-1 ring-black/5">
-                    {/* Categories List */}
-                    <div className="max-h-[400px] overflow-y-auto">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-[min(380px,calc(100vw-2rem))] sm:w-[400px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
+                  <div className={`${DROPDOWN_BG} rounded-xl overflow-hidden`}>
+                    <div className="max-h-[min(400px,60vh)] overflow-y-auto">
                       {isLoadingCategories ? (
                         <div className="flex items-center justify-center py-8">
-                          <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                          <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                         </div>
                       ) : categories.length === 0 ? (
-                        <div className="text-center py-8 text-sm text-gray-400">
+                        <div className="text-center py-8 text-sm text-slate-500">
                           No categories available
                         </div>
                       ) : (
                         <div className="py-2">
                           {categories.map((category) => {
-                            const href = `/programs?category=${encodeURIComponent(category.id)}`;
-                            const isCategoryActive = pathname === '/programs' && new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('category') === category.id;
+                            const categorySlug = (category.name || '').replace(/_/g, '-');
+                            const base = `/category/${encodeURIComponent(categorySlug)}`;
+                            const href = currentLocationCode ? `${base}?location=${encodeURIComponent(currentLocationCode)}` : base;
+                            const currentSlug = pathname.startsWith('/category/') ? pathname.replace(/^\/category\//, '').split('/')[0] : null;
+                            const isCategoryActive = currentSlug !== null && currentSlug === categorySlug;
 
                             return (
                               <Link
                                 key={category.id}
                                 href={href}
-                                className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors border-b border-slate-800 last:border-0 ${isCategoryActive ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                                className={`flex gap-3 px-3 py-2.5 text-sm transition-colors border-b border-slate-100 last:border-0 ${isCategoryActive ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                               >
-                                <div className="flex items-start gap-3">
-                                  {getCategoryIcon(category.name)}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="font-medium">{category.display_name || category.name}</div>
-                                    {category.description && (
-                                      <div className="text-xs text-gray-400 mt-1 line-clamp-2">
-                                        {category.description}
-                                      </div>
-                                    )}
-                                  </div>
+                                <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-slate-100">
+                                  {category.poster_url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={category.poster_url}
+                                      alt=""
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-slate-500">
+                                      {getCategoryIcon(category.name)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium">{category.display_name || category.name}</div>
+                                  {category.description && (
+                                    <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                                      {category.description}
+                                    </div>
+                                  )}
                                 </div>
                               </Link>
                             );
@@ -587,24 +506,24 @@ interface RouteProps {
               {/* Resources Dropdown */}
               <div className="relative group h-full flex items-center">
                 <button 
-                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors hover:text-[#38bdf8] ${pathname === '/resources' || pathname?.startsWith('/teacher-portal') ? 'text-[#38bdf8]' : 'text-gray-300'}`}
+                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${pathname === '/resources' || pathname?.startsWith('/teacher-portal') ? NAV_ACTIVE : NAV_TEXT}`}
                 >
                   <span>Resources</span>
                   <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
                 </button>
                 
                 <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
-                  <div className="bg-[#1e293b] rounded-xl shadow-xl border border-slate-700 overflow-hidden ring-1 ring-black/5">
+                  <div className={`${DROPDOWN_BG} rounded-xl overflow-hidden`}>
                     <div className="py-2">
                       <Link
                         href="/resources"
-                        className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors border-b border-slate-800 ${pathname === '/resources' ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                        className={`block px-4 py-3 text-sm transition-colors border-b border-slate-100 ${pathname === '/resources' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                       >
                         <div className="flex items-start gap-3">
-                          <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
                           <div className="flex-1 min-w-0">
                             <div className="font-medium">Resource Library</div>
-                            <div className="text-xs text-gray-400 mt-1">
+                            <div className="text-xs text-slate-500 mt-1">
                               Software, manuals, and guides
                             </div>
                           </div>
@@ -612,17 +531,54 @@ interface RouteProps {
                       </Link>
                       <Link
                         href="/teacher-portal/login"
-                        className={`block px-4 py-3 text-sm hover:bg-[#2563eb] hover:text-white transition-colors ${pathname?.startsWith('/teacher-portal') ? 'bg-slate-800 text-[#38bdf8]' : 'text-gray-300'}`}
+                        className={`block px-4 py-3 text-sm transition-colors ${pathname?.startsWith('/teacher-portal') ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                       >
                         <div className="flex items-start gap-3">
-                          <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
                           <div className="flex-1 min-w-0">
                             <div className="font-medium">Teacher Portal</div>
-                            <div className="text-xs text-gray-400 mt-1">
+                            <div className="text-xs text-slate-500 mt-1">
                               Instructor workspace and tools
                             </div>
                           </div>
                         </div>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* About Dropdown */}
+              <div className="relative group h-full flex items-center">
+                <button
+                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${pathname?.startsWith('/about') ? NAV_ACTIVE : NAV_TEXT}`}
+                >
+                  <span>About</span>
+                  <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
+                </button>
+                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
+                  <div className={`${DROPDOWN_BG} rounded-xl overflow-hidden`}>
+                    <div className="py-2">
+                      <Link
+                        href="/about/teams"
+                        className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors border-b border-slate-100 ${pathname === '/about/teams' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
+                      >
+                        <Users className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                        <span className="font-medium">Teams</span>
+                      </Link>
+                      <Link
+                        href="/about/careers"
+                        className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors border-b border-slate-100 ${pathname === '/about/careers' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
+                      >
+                        <Briefcase className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                        <span className="font-medium">Careers</span>
+                      </Link>
+                      <Link
+                        href="/faq"
+                        className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${pathname === '/faq' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
+                      >
+                        <HelpCircle className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                        <span className="font-medium">FAQ</span>
                       </Link>
                     </div>
                   </div>
@@ -637,7 +593,7 @@ interface RouteProps {
                   <Link
                     key={route.label}
                     href={href}
-                    className={`text-sm font-semibold transition-colors hover:text-[#38bdf8] ${active ? 'text-[#38bdf8]' : 'text-gray-300'}`}
+                    className={`text-sm font-semibold transition-colors ${NAV_HOVER} ${active ? NAV_ACTIVE : NAV_TEXT}`}
                   >
                     {route.label}
                   </Link>
@@ -646,101 +602,80 @@ interface RouteProps {
 
               {/* Book Free Trial Button */}
               <button 
-                className="bg-[#2563eb] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 active:scale-95 transition-transform hover:bg-blue-600 hidden md:block"
+                className="bg-[#1e3a5f] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-transform hover:bg-[#2d4a6f] hidden md:block"
                 onClick={() => {
                   // TODO: Add action for Book Free Trial
-                  // Could open a dialog, navigate to a page, or trigger an event
                 }}
               >
                 Book Free Trial
               </button>
 
-              {/* CTA Button or User Menu */}
+              {/* User Menu (cart and mode toggle hidden) */}
               {status === "loading" ? (
                 <div className="h-9 w-9 flex items-center justify-center">
-                  <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                  <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : session ? (
                 <>
-                  {/* Shopping Cart */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative h-9 w-9 text-gray-300 hover:text-[#38bdf8]"
-                    asChild
-                  >
-                    <Link href="/enrollments/cart">
-                      <ShoppingCart className="h-5 w-5" />
-                      {cartCount > 0 && (
-                        <Badge
-                          variant="destructive"
-                          className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-[#2563eb]"
-                        >
-                          {cartCount > 9 ? "9+" : cartCount}
-                        </Badge>
-                      )}
-                    </Link>
-                  </Button>
-                  <ModeToggle />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        className="relative h-9 w-9 rounded-full"
+                        className="relative h-9 w-9 rounded-full text-[#1e3a5f] hover:bg-slate-100"
                       >
                         <Avatar className="h-9 w-9">
                           <AvatarImage
                             src={session.user?.image || undefined}
                           />
-                          <AvatarFallback className="bg-[#2563eb] text-white">
+                          <AvatarFallback className="bg-[#1e3a5f] text-white">
                             {getUserInitials(session.user?.name)}
                           </AvatarFallback>
                         </Avatar>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                      className="w-56 bg-[#1e293b] border-slate-700"
+                      className="w-56 bg-white border border-slate-200 shadow-xl text-[#1e3a5f]"
                       align="end"
                       forceMount
                     >
-                      <DropdownMenuLabel className="font-normal text-white">
+                      <DropdownMenuLabel className="font-normal">
                         <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none">
+                          <p className="text-sm font-medium leading-none text-[#1e3a5f]">
                             {session.user?.name}
                           </p>
-                          <p className="text-xs leading-none text-gray-400">
+                          <p className="text-xs leading-none text-slate-500">
                             {session.user?.email}
                           </p>
                         </div>
                       </DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-slate-700" />
-                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                      <DropdownMenuSeparator className="bg-slate-200" />
+                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
                         <Link href="/portal" className="cursor-pointer">
                           <LayoutDashboard className="mr-2 h-4 w-4" />
                           <span>Portal</span>
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
                         <Link href="/profile" className="cursor-pointer">
                           <User className="mr-2 h-4 w-4" />
                           <span>Profile</span>
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
                         <Link href="/enrollments" className="cursor-pointer">
                           <FileText className="mr-2 h-4 w-4" />
                           <span>Enrollments</span>
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="text-gray-300 hover:text-white hover:bg-slate-800 rounded-md">
+                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
                         <Link href="/billing" className="cursor-pointer">
                           <CreditCard className="mr-2 h-4 w-4" />
                           <span>Billing</span>
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-slate-700" />
+                      <DropdownMenuSeparator className="bg-slate-200" />
                       <DropdownMenuItem
-                        className="cursor-pointer text-red-400 hover:text-red-300 hover:bg-slate-800"
+                        className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-slate-100"
                         onClick={handleSignOut}
                       >
                         <LogOut className="mr-2 h-4 w-4" />
@@ -750,48 +685,25 @@ interface RouteProps {
                   </DropdownMenu>
                 </>
               ) : (
-                <>
-                  <Button 
-                    className="bg-[#2563eb] text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-blue-600 transition-all transform hover:scale-105 shadow-md hover:shadow-blue-500/20"
-                    asChild
-                  >
-                    <Link href="/login">Sign In / Sign Up</Link>
-                  </Button>
-                  <ModeToggle />
-                </>
+                <Button 
+                  className="bg-[#1e3a5f] text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-[#2d4a6f] transition-all"
+                  asChild
+                >
+                  <Link href="/login">Sign In / Sign Up</Link>
+                </Button>
               )}
             </div>
 
-            {/* Mobile Menu Button */}
+            {/* Mobile Menu Button (cart and mode toggle hidden) */}
             <div className="md:hidden flex items-center gap-2">
               {status === "loading" ? (
                 <div className="h-9 w-9 flex items-center justify-center">
-                  <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                  <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                 </div>
-              ) : session ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative h-9 w-9 text-gray-300 hover:text-white"
-                  asChild
-                >
-                  <Link href="/enrollments/cart">
-                    <ShoppingCart className="h-5 w-5" />
-                    {cartCount > 0 && (
-                      <Badge
-                        variant="destructive"
-                        className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-[#2563eb]"
-                      >
-                        {cartCount > 9 ? "9+" : cartCount}
-                      </Badge>
-                    )}
-                  </Link>
-                </Button>
               ) : null}
-              <ModeToggle />
               <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="text-gray-400 hover:text-white focus:outline-none"
+                className="text-[#1e3a5f] hover:text-[#2563eb] focus:outline-none"
               >
                 {isOpen ? <X className="w-8 h-8" /> : <Menu className="w-8 h-8" />}
               </button>
@@ -800,12 +712,12 @@ interface RouteProps {
 
           {/* Mobile Menu */}
           {isOpen && (
-            <div className="md:hidden bg-[#1e293b] border-t border-slate-800 px-4 pt-2 pb-6 space-y-1 overflow-y-auto max-h-[calc(100vh-80px)]">
+            <div className="md:hidden bg-white border-t border-slate-200 px-4 pt-2 pb-6 space-y-1 overflow-y-auto max-h-[calc(100vh-80px)]">
               {/* Mobile Locations Accordion */}
               <div>
                 <button
                   onClick={() => setIsLocationsOpen(!isLocationsOpen)}
-                  className={`flex items-center justify-between w-full px-3 py-4 text-base font-medium rounded-md ${isLocationActive ? 'text-[#38bdf8] hover:text-[#60a5fa]' : 'text-gray-300 hover:text-white'} hover:bg-slate-800`}
+                  className={`flex items-center justify-between w-full px-3 py-4 text-base font-medium rounded-md ${isLocationActive ? NAV_ACTIVE : NAV_TEXT} ${NAV_HOVER} hover:bg-slate-100`}
                 >
                   <div className="flex items-center gap-2">
                     {currentLocationLabel && <MapPin className="w-5 h-5" />}
@@ -814,24 +726,23 @@ interface RouteProps {
                   <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isLocationsOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <div className={`overflow-hidden transition-all duration-200 ${isLocationsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="pl-4 space-y-1 bg-slate-900/50 rounded-lg mt-1 mb-2 py-2">
-                    {/* Search Input for Mobile */}
+                  <div className="pl-4 space-y-1 bg-slate-50 rounded-lg mt-1 mb-2 py-2">
                     <div className="relative px-3 mb-2">
-                      <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
                         placeholder="Search locations..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 bg-slate-800 border-slate-700 text-white placeholder:text-gray-500"
+                        className="pl-9 bg-white border-slate-200 text-[#1e3a5f] placeholder:text-slate-400"
                       />
                     </div>
 
-                    {isLoadingLocations ? (
+                    {isLoadingFranchises ? (
                       <div className="flex items-center justify-center py-4">
-                        <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                        <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                       </div>
                     ) : filteredFranchiseGroups.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-gray-400">
+                      <div className="px-3 py-2 text-sm text-slate-500">
                         {searchQuery ? 'No locations found' : 'No locations available'}
                       </div>
                     ) : (
@@ -854,14 +765,14 @@ interface RouteProps {
                               setIsOpen(false);
                               setIsLocationsOpen(false);
                             }}
-                            className={`block px-3 py-3 text-sm font-medium rounded-md ${isFranchiseActive ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
+                            className={`block px-3 py-3 text-sm font-medium rounded-md ${isFranchiseActive ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
                           >
                             <div className="flex items-start gap-2">
                               <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <div>{franchise.name}</div>
                                 {fullAddress && (
-                                  <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                  <div className="text-xs text-slate-500 mt-1 line-clamp-2">
                                     {fullAddress}
                                   </div>
                                 )}
@@ -879,25 +790,28 @@ interface RouteProps {
               <div>
                 <button
                   onClick={() => setIsProgramsOpen(!isProgramsOpen)}
-                  className="flex items-center justify-between w-full px-3 py-4 text-base font-medium text-gray-300 hover:text-white hover:bg-slate-800 rounded-md"
+                  className={`flex items-center justify-between w-full px-3 py-4 text-base font-medium rounded-md ${NAV_TEXT} ${NAV_HOVER} hover:bg-slate-100`}
                 >
                   <span>Programs</span>
                   <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isProgramsOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <div className={`overflow-hidden transition-all duration-200 ${isProgramsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="pl-4 space-y-1 bg-slate-900/50 rounded-lg mt-1 mb-2 py-2">
+                  <div className="pl-4 space-y-1 bg-slate-50 rounded-lg mt-1 mb-2 py-2">
                     {isLoadingCategories ? (
                       <div className="flex items-center justify-center py-4">
-                        <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                        <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                       </div>
                     ) : categories.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-gray-400">
+                      <div className="px-3 py-2 text-sm text-slate-500">
                         No categories available
                       </div>
                     ) : (
                       categories.map((category) => {
-                        const href = `/programs?category=${encodeURIComponent(category.id)}`;
-                        const isCategoryActive = pathname === '/programs' && new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('category') === category.id;
+                        const categorySlug = (category.name || '').replace(/_/g, '-');
+                        const base = `/category/${encodeURIComponent(categorySlug)}`;
+                        const href = currentLocationCode ? `${base}?location=${encodeURIComponent(currentLocationCode)}` : base;
+                        const currentSlug = pathname.startsWith('/category/') ? pathname.replace(/^\/category\//, '').split('/')[0] : null;
+                        const isCategoryActive = currentSlug !== null && currentSlug === categorySlug;
 
                         return (
                           <Link
@@ -907,18 +821,29 @@ interface RouteProps {
                               setIsOpen(false);
                               setIsProgramsOpen(false);
                             }}
-                            className={`block px-3 py-3 text-sm font-medium rounded-md ${isCategoryActive ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
+                            className={`flex gap-3 px-3 py-2.5 text-sm font-medium rounded-md ${isCategoryActive ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
                           >
-                            <div className="flex items-start gap-2">
-                              {getCategoryIcon(category.name)}
-                              <div className="flex-1 min-w-0">
-                                <div>{category.display_name || category.name}</div>
-                                {category.description && (
-                                  <div className="text-xs text-gray-500 mt-1 line-clamp-2">
-                                    {category.description}
-                                  </div>
-                                )}
-                              </div>
+                            <div className="flex-shrink-0 w-11 h-11 rounded-lg overflow-hidden bg-slate-700">
+                              {category.poster_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={category.poster_url}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-500">
+                                  {getCategoryIcon(category.name)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div>{category.display_name || category.name}</div>
+                              {category.description && (
+                                <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                                  {category.description}
+                                </div>
+                              )}
                             </div>
                           </Link>
                         );
@@ -963,16 +888,49 @@ interface RouteProps {
                         setIsOpen(false);
                         setIsResourcesOpen(false);
                       }}
-                      className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname?.startsWith('/teacher-portal') ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
+                      className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname?.startsWith('/teacher-portal') ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
                     >
                       <div className="flex items-start gap-2">
-                        <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
                         <div className="flex-1 min-w-0">
                           <div>Teacher Portal</div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-slate-500 mt-1">
                             Instructor workspace and tools
                           </div>
                         </div>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile About Accordion */}
+              <div>
+                <button
+                  onClick={() => setIsAboutOpen(!isAboutOpen)}
+                  className={`flex items-center justify-between w-full px-3 py-4 text-base font-medium rounded-md ${pathname?.startsWith('/about') ? NAV_ACTIVE : NAV_TEXT} ${NAV_HOVER} hover:bg-slate-100`}
+                >
+                  <span>About</span>
+                  <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isAboutOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`overflow-hidden transition-all duration-200 ${isAboutOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="pl-4 space-y-1 bg-slate-50 rounded-lg mt-1 mb-2 py-2">
+                    <Link href="/about/teams" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/about/teams' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 flex-shrink-0" />
+                        <span>Teams</span>
+                      </div>
+                    </Link>
+                    <Link href="/about/careers" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/about/careers' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="w-4 h-4 flex-shrink-0" />
+                        <span>Careers</span>
+                      </div>
+                    </Link>
+                    <Link href="/faq" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/faq' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="w-4 h-4 flex-shrink-0" />
+                        <span>FAQ</span>
                       </div>
                     </Link>
                   </div>
@@ -988,7 +946,7 @@ interface RouteProps {
                     key={label}
                     href={linkHref}
                     onClick={() => setIsOpen(false)}
-                    className={`block px-3 py-4 text-base font-medium rounded-md ${active ? 'text-[#38bdf8]' : 'text-gray-300 hover:text-white hover:bg-slate-800'}`}
+                    className={`block px-3 py-4 text-base font-medium rounded-md ${active ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER} hover:bg-slate-100`}`}
                   >
                     {label}
                   </Link>
@@ -998,7 +956,7 @@ interface RouteProps {
               {/* Book Free Trial Button - Mobile */}
               <div className="pt-4 px-3 pb-2">
                 <button 
-                  className="w-full bg-[#2563eb] text-white px-6 py-4 rounded-xl font-bold text-base shadow-lg shadow-blue-500/20 active:scale-95 transition-transform"
+                  className="w-full bg-[#1e3a5f] text-white px-6 py-4 rounded-xl font-bold text-base active:scale-95 transition-transform hover:bg-[#2d4a6f]"
                   onClick={() => {
                     setIsOpen(false);
                     // TODO: Add action for Book Free Trial
@@ -1010,34 +968,34 @@ interface RouteProps {
               </div>
 
               {/* User Section */}
-              <div className="pt-4 border-t border-slate-800">
+              <div className="pt-4 border-t border-slate-200">
                 {status === "loading" ? (
                   <div className="w-full h-9 flex items-center justify-center">
-                    <div className="h-4 w-4 border-2 border-[#38bdf8] border-t-transparent rounded-full animate-spin" />
+                    <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                   </div>
                 ) : session ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 p-3 rounded-md bg-slate-900/50 mb-2">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-slate-50 mb-2">
                       <Avatar className="h-10 w-10">
                         <AvatarImage
                           src={session.user?.image || undefined}
                         />
-                        <AvatarFallback className="bg-[#2563eb] text-white">
+                        <AvatarFallback className="bg-[#1e3a5f] text-white">
                           {getUserInitials(session.user?.name)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate text-white">
+                        <p className="text-sm font-medium truncate text-[#1e3a5f]">
                           {session.user?.name}
                         </p>
-                        <p className="text-xs text-gray-400 truncate">
+                        <p className="text-xs text-slate-500 truncate">
                           {session.user?.email}
                         </p>
                       </div>
                     </div>
                     <Button
                       variant="outline"
-                      className="w-full justify-start bg-transparent border-slate-700 text-gray-300 hover:text-white hover:bg-slate-800"
+                      className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100"
                       asChild
                     >
                       <Link
@@ -1050,7 +1008,7 @@ interface RouteProps {
                     </Button>
                     <Button
                       variant="outline"
-                      className="w-full justify-start bg-transparent border-slate-700 text-gray-300 hover:text-white hover:bg-slate-800"
+                      className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100"
                       asChild
                     >
                       <Link
@@ -1063,7 +1021,7 @@ interface RouteProps {
                     </Button>
                     <Button
                       variant="outline"
-                      className="w-full justify-start bg-transparent border-slate-700 text-gray-300 hover:text-white hover:bg-slate-800"
+                      className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100"
                       asChild
                     >
                       <Link
@@ -1073,7 +1031,7 @@ interface RouteProps {
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Shopping Cart
                         {cartCount > 0 && (
-                          <Badge variant="destructive" className="ml-2 bg-[#2563eb]">
+                          <Badge variant="secondary" className="ml-2 bg-[#1e3a5f] text-white">
                             {cartCount > 9 ? "9+" : cartCount}
                           </Badge>
                         )}
@@ -1081,7 +1039,7 @@ interface RouteProps {
                     </Button>
                     <Button
                       variant="outline"
-                      className="w-full justify-start bg-transparent border-slate-700 text-red-400 hover:text-red-300 hover:bg-slate-800"
+                      className="w-full justify-start bg-white border-slate-200 text-red-600 hover:text-red-700 hover:bg-slate-100"
                       onClick={() => {
                         handleSignOut();
                         setIsOpen(false);
@@ -1093,7 +1051,7 @@ interface RouteProps {
                   </div>
                 ) : (
                   <Button 
-                    className="w-full bg-[#2563eb] text-white px-6 py-3 rounded-md font-bold text-base hover:bg-blue-600"
+                    className="w-full bg-[#1e3a5f] text-white px-6 py-3 rounded-md font-bold text-base hover:bg-[#2d4a6f]"
                     asChild
                   >
                     <Link

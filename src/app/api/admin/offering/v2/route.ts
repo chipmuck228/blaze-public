@@ -28,7 +28,13 @@ export async function GET(request: Request) {
           icon,
           color,
           is_active,
-          offering_schema
+          offering_schema,
+          instance_schema
+        ),
+        category:v2_category(
+          id,
+          name,
+          display_name
         )
       `)
       .order("created_at", { ascending: false })
@@ -102,6 +108,7 @@ export async function POST(request: Request) {
       currency,
       poster_url,
       offering_type_id,
+      category_id,
       type_config,
       type_config_data,
       status,
@@ -117,6 +124,34 @@ export async function POST(request: Request) {
     if (!offering_type_id) {
       return NextResponse.json(
         { error: "Missing required field: offering_type_id" },
+        { status: 400 }
+      )
+    }
+
+    if (!category_id) {
+      return NextResponse.json(
+        { error: "Missing required field: category_id" },
+        { status: 400 }
+      )
+    }
+
+    // 验证 category 存在并获取 config_base
+    const { data: category, error: categoryError } = await supabaseAdmin
+      .from("v2_category")
+      .select("id, config_base, is_active")
+      .eq("id", category_id)
+      .single()
+
+    if (categoryError || !category) {
+      return NextResponse.json(
+        { error: "Invalid category_id. Category must exist in v2_category table." },
+        { status: 400 }
+      )
+    }
+
+    if (!category.is_active) {
+      return NextResponse.json(
+        { error: "Cannot create offering with inactive category" },
         { status: 400 }
       )
     }
@@ -144,7 +179,17 @@ export async function POST(request: Request) {
     }
 
     // 处理 type_config_data（优先使用 type_config_data，兼容 type_config）
-    const configData = type_config_data || type_config || {}
+    // 合并 category 的 config_base：category 的 config_base 作为基础，用户提供的配置优先覆盖
+    const categoryConfigBase = (category.config_base && typeof category.config_base === 'object') 
+      ? category.config_base 
+      : {}
+    const userConfigData = type_config_data || type_config || {}
+    
+    // 合并配置：category 的 config_base 作为基础，用户配置覆盖
+    const configData = {
+      ...categoryConfigBase,
+      ...userConfigData,
+    }
     
     // 基础验证：如果 offering_schema 存在且有 fields，验证必需字段
     if (offeringType.offering_schema && typeof offeringType.offering_schema === 'object') {
@@ -214,6 +259,7 @@ export async function POST(request: Request) {
         base_price: base_price || null,
         currency: currency || 'USD',
         poster_url: poster_url || null,
+        category_id,
         offering_type_id,
         type_config_data: configData,
         status: status || 'draft',

@@ -688,254 +688,152 @@ export interface AdminStats {
   }
 }
 
-export async function getAdminStats(): Promise<AdminStats> {
-  // ==================== 用户统计 ====================
-  const { count: totalUsers } = await supabaseAdmin
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-
-  const { count: verifiedUsers } = await supabaseAdmin
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-    .eq('email_verified', true)
-
-  const { count: admins } = await supabaseAdmin
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'admin')
-
-  const { count: coaches } = await supabaseAdmin
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'coach')
-
+/** Lazy-loadable: 仅用户统计 */
+export async function getAdminStatsUsers(): Promise<AdminStats["users"]> {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const todayISO = today.toISOString()
+  const [r1, r2, r3, r4, r5] = await Promise.all([
+    supabaseAdmin.from("users").select("id", { count: "exact", head: true }),
+    supabaseAdmin.from("users").select("id", { count: "exact", head: true }).eq("email_verified", true),
+    supabaseAdmin.from("users").select("id", { count: "exact", head: true }).eq("role", "admin"),
+    supabaseAdmin.from("users").select("id", { count: "exact", head: true }).eq("role", "coach"),
+    supabaseAdmin.from("users").select("id", { count: "exact", head: true }).gte("created_at", today.toISOString()),
+  ])
+  return {
+    total: r1.count || 0,
+    verified: r2.count || 0,
+    admins: r3.count || 0,
+    coaches: r4.count || 0,
+    newToday: r5.count || 0,
+  }
+}
 
-  const { count: newToday } = await supabaseAdmin
-    .from('users')
-    .select('id', { count: 'exact', head: true })
-    .gte('created_at', todayISO)
-
-  // ==================== 课程统计 ====================
-  const { count: totalCourses } = await supabaseAdmin
-    .from('courses')
-    .select('id', { count: 'exact', head: true })
-
-  const { count: publishedCourses } = await supabaseAdmin
-    .from('courses')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'published')
-
-  const { count: draftCourses } = await supabaseAdmin
-    .from('courses')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'draft')
-
-  const { count: suspendedCourses } = await supabaseAdmin
-    .from('courses')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'suspended')
-
-  const { count: archivedCourses } = await supabaseAdmin
-    .from('courses')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'archived')
-
-  // 课程实例统计
-  const { count: totalInstances } = await supabaseAdmin
-    .from('course_instances')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_active', true)
-
-  const { count: scheduledInstances } = await supabaseAdmin
-    .from('course_instances')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_active', true)
-    .eq('status', 'scheduled')
-
-  const { count: ongoingInstances } = await supabaseAdmin
-    .from('course_instances')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_active', true)
-    .eq('status', 'ongoing')
-
-  const { count: completedInstances } = await supabaseAdmin
-    .from('course_instances')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_active', true)
-    .eq('status', 'completed')
-
+/** Lazy-loadable: 仅课程/实例统计 */
+export async function getAdminStatsCourses(): Promise<AdminStats["courses"]> {
+  const [
+    { count: totalCourses },
+    { count: publishedCourses },
+    { count: draftCourses },
+    { count: totalInstances },
+    { count: scheduledInstances },
+    { count: ongoingInstances },
+    { count: completedInstances },
+  ] = await Promise.all([
+    supabaseAdmin.from("v2_program").select("id", { count: "exact", head: true }),
+    supabaseAdmin.from("v2_program").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabaseAdmin.from("v2_program").select("id", { count: "exact", head: true }).eq("is_active", false),
+    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "scheduled"),
+    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "ongoing"),
+    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "completed"),
+  ])
   const activeInstances = (scheduledInstances || 0) + (ongoingInstances || 0)
+  return {
+    total: totalCourses || 0,
+    published: publishedCourses || 0,
+    draft: draftCourses || 0,
+    suspended: 0,
+    archived: 0,
+    totalInstances: totalInstances || 0,
+    activeInstances: activeInstances || 0,
+    scheduledInstances: scheduledInstances || 0,
+    ongoingInstances: ongoingInstances || 0,
+    completedInstances: completedInstances || 0,
+  }
+}
 
-  // ==================== 报名统计 ====================
-  const { count: totalEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-
-  const { count: enrolledCount } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'enrolled')
-
-  const { count: reservedCount } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'reserved')
-
-  const { count: cartCount } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'cart')
-
-  const { count: waitlistedCount } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'waitlisted')
-
-  const { count: completedEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'completed')
-
-  const { count: cancelledEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'cancelled')
-
-  const { count: expiredEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'expired')
-
+/** Lazy-loadable: 仅报名统计 */
+export async function getAdminStatsEnrollments(): Promise<AdminStats["enrollments"]> {
+  const [
+    { count: totalEnrollments },
+    { count: enrolledCount },
+    { count: reservedCount },
+    { count: cartCount },
+    { count: waitlistedCount },
+    { count: completedEnrollments },
+    { count: cancelledEnrollments },
+    { count: expiredEnrollments },
+  ] = await Promise.all([
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "enrolled"),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "reserved"),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "cart"),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "waitlisted"),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "completed"),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "cancelled"),
+    supabaseAdmin.from("instance_enrollments").select("id", { count: "exact", head: true }).eq("status", "expired"),
+  ])
   const activeEnrollments = (enrolledCount || 0) + (reservedCount || 0)
+  return {
+    total: totalEnrollments || 0,
+    active: activeEnrollments,
+    enrolled: enrolledCount || 0,
+    reserved: reservedCount || 0,
+    cart: cartCount || 0,
+    waitlisted: waitlistedCount || 0,
+    completed: completedEnrollments || 0,
+    cancelled: cancelledEnrollments || 0,
+    expired: expiredEnrollments || 0,
+  }
+}
 
-  // ==================== 收入统计 ====================
-  // 计算总收入（已支付的注册）
-  const { data: paidEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('amount_paid')
-    .eq('payment_status', 'paid')
-    .not('amount_paid', 'is', null)
-
-  const totalRevenue = paidEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || '0') || 0), 0) || 0
-
-  // 计算本月收入
+/** Lazy-loadable: 仅收入统计 */
+export async function getAdminStatsRevenue(): Promise<AdminStats["revenue"]> {
   const thisMonth = new Date()
   thisMonth.setDate(1)
   thisMonth.setHours(0, 0, 0, 0)
+  const [{ data: paidEnrollments }, { data: thisMonthEnrollments }, { data: pendingEnrollments }] = await Promise.all([
+    supabaseAdmin.from("instance_enrollments").select("amount_paid").eq("payment_status", "paid").not("amount_paid", "is", null),
+    supabaseAdmin.from("instance_enrollments").select("amount_paid").eq("payment_status", "paid").not("amount_paid", "is", null).gte("enrolled_at", thisMonth.toISOString()),
+    supabaseAdmin.from("instance_enrollments").select("amount_paid").eq("payment_status", "pending").not("amount_paid", "is", null),
+  ])
+  const totalRevenue = paidEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || "0") || 0), 0) || 0
+  const monthlyRevenue = thisMonthEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || "0") || 0), 0) || 0
+  const pendingPayments = pendingEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || "0") || 0), 0) || 0
+  return { total: totalRevenue, monthly: monthlyRevenue, pending: pendingPayments }
+}
 
-  const { data: thisMonthEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('amount_paid')
-    .eq('payment_status', 'paid')
-    .not('amount_paid', 'is', null)
-    .gte('enrolled_at', thisMonth.toISOString())
-
-  const monthlyRevenue = thisMonthEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || '0') || 0), 0) || 0
-
-  // 计算待支付金额
-  const { data: pendingEnrollments } = await supabaseAdmin
-    .from('course_enrollments')
-    .select('amount_paid')
-    .eq('payment_status', 'pending')
-    .not('amount_paid', 'is', null)
-
-  const pendingPayments = pendingEnrollments?.reduce((sum, e) => sum + (parseFloat(e.amount_paid?.toString() || '0') || 0), 0) || 0
-
-  // ==================== 最近活动 ====================
-  // 最近注册的用户（最近 5 个）
-  const { data: recentUsers } = await supabaseAdmin
-    .from('users')
-    .select('id, name, email, created_at')
-    .order('created_at', { ascending: false })
-    .limit(5)
-
-  // 最近创建的课程（最近 5 个）
-  const { data: recentCourses } = await supabaseAdmin
-    .from('courses')
-    .select('id, name, status, created_at')
-    .order('created_at', { ascending: false })
-    .limit(5)
-
-  // 最近的报名记录（最近 10 个）
-  const { data: recentEnrollmentsData } = await supabaseAdmin
-    .from('course_enrollments')
-    .select(`
-      id,
-      status,
-      created_at,
-      user:users!inner(name),
-      instance:course_instances!inner(
-        assignment:course_assignments!inner(
-          course:courses!inner(name)
-        )
+/** Lazy-loadable: 仅最近活动 */
+export async function getAdminStatsRecentActivity(): Promise<AdminStats["recentActivity"]> {
+  const [{ data: recentUsers }, { data: recentCourses }, { data: recentEnrollmentsData }] = await Promise.all([
+    supabaseAdmin.from("users").select("id, name, email, created_at").order("created_at", { ascending: false }).limit(5),
+    supabaseAdmin.from("v2_program").select("id, name, display_name, is_active, created_at").order("created_at", { ascending: false }).limit(5),
+    supabaseAdmin
+      .from("instance_enrollments")
+      .select(
+        `id, status, created_at, user:users!inner(name), instance:v2_instance(program:v2_program(name, display_name))`
       )
-    `)
-    .order('created_at', { ascending: false })
-    .limit(10)
-
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ])
   const recentEnrollments = (recentEnrollmentsData || []).map((e: any) => ({
     id: e.id,
-    user_name: e.user?.name || 'Unknown',
-    course_name: e.instance?.assignment?.course?.name || 'Unknown Course',
+    user_name: e.user?.name || "Unknown",
+    course_name: e.instance?.program?.display_name || e.instance?.program?.name || "Unknown",
     status: e.status,
     created_at: e.created_at,
   }))
-
   return {
-    users: {
-      total: totalUsers || 0,
-      verified: verifiedUsers || 0,
-      admins: admins || 0,
-      coaches: coaches || 0,
-      newToday: newToday || 0,
-    },
-    courses: {
-      total: totalCourses || 0,
-      published: publishedCourses || 0,
-      draft: draftCourses || 0,
-      suspended: suspendedCourses || 0,
-      archived: archivedCourses || 0,
-      totalInstances: totalInstances || 0,
-      activeInstances: activeInstances || 0,
-      scheduledInstances: scheduledInstances || 0,
-      ongoingInstances: ongoingInstances || 0,
-      completedInstances: completedInstances || 0,
-    },
-    enrollments: {
-      total: totalEnrollments || 0,
-      active: activeEnrollments,
-      enrolled: enrolledCount || 0,
-      reserved: reservedCount || 0,
-      cart: cartCount || 0,
-      waitlisted: waitlistedCount || 0,
-      completed: completedEnrollments || 0,
-      cancelled: cancelledEnrollments || 0,
-      expired: expiredEnrollments || 0,
-    },
-    revenue: {
-      total: totalRevenue,
-      monthly: monthlyRevenue,
-      pending: pendingPayments,
-    },
-    recentActivity: {
-      newUsers: (recentUsers || []).map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        created_at: u.created_at,
-      })),
-      newCourses: (recentCourses || []).map(c => ({
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        created_at: c.created_at,
-      })),
-      recentEnrollments: recentEnrollments,
-    },
+    newUsers: (recentUsers || []).map((u) => ({ id: u.id, name: u.name, email: u.email, created_at: u.created_at })),
+    newCourses: (recentCourses || []).map((c: { id: string; name: string; display_name?: string; is_active?: boolean; created_at: string }) => ({
+      id: c.id,
+      name: c.display_name || c.name,
+      status: c.is_active ? "published" : "draft",
+      created_at: c.created_at,
+    })),
+    recentEnrollments,
   }
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const [users, courses, enrollments, revenue, recentActivity] = await Promise.all([
+    getAdminStatsUsers(),
+    getAdminStatsCourses(),
+    getAdminStatsEnrollments(),
+    getAdminStatsRevenue(),
+    getAdminStatsRecentActivity(),
+  ])
+  return { users, courses, enrollments, revenue, recentActivity }
 }
 
 // 团队成员相关接口和函数
@@ -3600,15 +3498,15 @@ export async function addToInstanceWaitlist(
     throw new Error(`Student ${studentName} already has an active enrollment with status: ${existingEnrollment.status}`)
   }
 
-  // 6. 计算等待列表位置（调用数据库函数）
-  const { data: waitlistCount } = await supabaseAdmin
+  // 6. 计算等待列表位置（count 查询，head: true 时结果在 count 字段）
+  const { count: waitlistCount } = await supabaseAdmin
     .from('instance_enrollments')
-    .select('id', { count: 'exact', head: true })
+    .select('*', { count: 'exact', head: true })
     .eq('instance_id', instanceId)
     .eq('status', 'waitlisted')
     .eq('is_synced', false)
 
-  const waitlistPosition = (waitlistCount?.count || 0) + 1
+  const waitlistPosition = (waitlistCount ?? 0) + 1
 
   // 7. 确定付款人
   let payerUserId = userId

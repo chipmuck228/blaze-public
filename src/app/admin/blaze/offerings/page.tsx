@@ -35,8 +35,32 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { MarkdownEditField } from "@/components/ui/markdown-edit-field"
+import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { toast } from "sonner"
+
+type SchemaFieldConfig = {
+  type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date' | 'time'
+  label?: string
+  required?: boolean
+  default?: any
+  min?: number
+  max?: number
+  step?: number
+  placeholder?: string
+  description?: string
+  multiline?: boolean
+  options?: string[]
+  items?: { type: string }
+  display_scope?: 'admin' | 'web' | 'both'
+  condition?: {
+    field: string
+    equals?: any
+    in?: any[]
+  }
+}
 
 interface V2Offering {
   id: string
@@ -55,6 +79,12 @@ interface V2Offering {
   status: 'draft' | 'published' | 'suspended' | 'archived'
   created_at: string
   updated_at: string
+  category_id?: string | null
+  category?: {
+    id: string
+    name: string
+    display_name: string
+  } | null
   offering_type?: {
     id: string
     code: string
@@ -63,26 +93,7 @@ interface V2Offering {
     icon?: string | null
     color?: string | null
     is_active: boolean
-    offering_schema?: {
-      fields?: Record<string, {
-        type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date'
-        label?: string
-        required?: boolean
-        default?: any
-        min?: number
-        max?: number
-        step?: number
-        placeholder?: string
-        description?: string
-        multiline?: boolean
-        options?: string[]
-        items?: { type: string }
-        condition?: {
-          field: string
-          equals: any
-        }
-      }>
-    }
+    offering_schema?: { fields?: Record<string, SchemaFieldConfig> }
   }
 }
 
@@ -94,26 +105,7 @@ interface V2OfferingType {
   icon?: string | null
   color?: string | null
   is_active: boolean
-  offering_schema?: {
-    fields?: Record<string, {
-      type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date'
-      label?: string
-      required?: boolean
-      default?: any
-      min?: number
-      max?: number
-      step?: number
-      placeholder?: string
-      description?: string
-      multiline?: boolean
-      options?: string[]
-      items?: { type: string }
-      condition?: {
-        field: string
-        equals: any
-      }
-    }>
-  }
+  offering_schema?: { fields?: Record<string, SchemaFieldConfig> }
 }
 
 export default function BlazeOfferingsManagementPage() {
@@ -135,25 +127,48 @@ export default function BlazeOfferingsManagementPage() {
   const [posterFile, setPosterFile] = useState<File | null>(null)
   const [uploadedPosterUrl, setUploadedPosterUrl] = useState<string | null>(null)
 
-  const [formData, setFormData] = useState<Omit<V2Offering, 'id' | 'created_at' | 'updated_at' | 'offering_type'>>({
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; display_name: string; is_active?: boolean }>>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
+
+  const [formData, setFormData] = useState<{
+    name: string
+    slug: string
+    description: string
+    poster_url: string
+    category_id: string
+    offering_type_id: string
+    status: V2Offering['status']
+  }>({
     name: "",
     slug: "",
     description: "",
-    target_audience: "",
-    learning_outcomes: "",
-    prerequisites: "",
-    base_price: undefined,
-    currency: "USD",
     poster_url: "",
+    category_id: "",
     offering_type_id: "",
-    type_config: {},
     status: "draft",
   })
 
   useEffect(() => {
     fetchOfferings()
     fetchOfferingTypes()
+    fetchCategories()
   }, [])
+
+  const fetchCategories = async () => {
+    try {
+      setIsLoadingCategories(true)
+      const response = await fetch("/api/admin/categories/v2?includeInactive=true")
+      if (!response.ok) {
+        throw new Error("Failed to fetch categories")
+      }
+      const data = await response.json()
+      setCategories(data || [])
+    } catch (err) {
+      console.error("Error fetching categories:", err)
+    } finally {
+      setIsLoadingCategories(false)
+    }
+  }
 
   useEffect(() => {
     let filtered = offerings
@@ -264,7 +279,9 @@ export default function BlazeOfferingsManagementPage() {
     if (!offering) return
 
     if (offering.status !== 'draft') {
-      alert(`Cannot delete offering with status '${offering.status}'. Only draft offerings can be deleted.`)
+      toast.error("Cannot delete offering", {
+        description: `Only draft offerings can be deleted. Current status: ${offering.status}.`,
+      })
       return
     }
 
@@ -272,41 +289,52 @@ export default function BlazeOfferingsManagementPage() {
       return
     }
 
-    try {
-      const response = await fetch(`/api/admin/offering/v2/${offeringId}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        fetchOfferings()
-      } else {
+    const deletePromise = fetch(`/api/admin/offering/v2/${offeringId}`, {
+      method: "DELETE",
+    }).then(async (response) => {
+      if (!response.ok) {
         const data = await response.json()
-        alert(data.error || "Failed to delete offering")
+        throw new Error(data.error || "Failed to delete offering")
       }
-    } catch (error) {
-      console.error("Error deleting offering:", error)
-      alert("Failed to delete offering")
-    }
+      return response
+    })
+
+    toast.promise(deletePromise, {
+      loading: "Deleting offering...",
+      success: () => {
+        fetchOfferings()
+        return "Offering deleted successfully"
+      },
+      error: (err: Error) => err.message || "Failed to delete offering",
+    })
   }
 
   const handleEdit = async (offering: V2Offering) => {
     if (offering.status === 'archived') {
-      alert('Cannot edit archived offerings.')
+      toast.error("Cannot edit archived offerings.")
       return
     }
     setEditingOffering(offering)
+    
+    // 获取完整的 offering 数据（包含 category_id）
+    let categoryId = ""
+    try {
+      const response = await fetch(`/api/admin/offering/v2/${offering.id}`)
+      if (response.ok) {
+        const fullOffering = await response.json()
+        categoryId = fullOffering.category_id || ""
+      }
+    } catch (err) {
+      console.error("Error fetching full offering:", err)
+    }
+    
     setFormData({
       name: offering.name,
       slug: offering.slug || "",
       description: offering.description || "",
-      target_audience: offering.target_audience || "",
-      learning_outcomes: offering.learning_outcomes || "",
-      prerequisites: offering.prerequisites || "",
-      base_price: offering.base_price,
-      currency: offering.currency || "USD",
       poster_url: offering.poster_url || "",
+      category_id: categoryId,
       offering_type_id: offering.offering_type_id,
-      type_config: offering.type_config || {},
       status: offering.status,
     })
     setPosterPreviewUrl(offering.poster_url || null)
@@ -318,13 +346,15 @@ export default function BlazeOfferingsManagementPage() {
       const response = await fetch(`/api/admin/offering/v2/${offering.id}`)
       if (response.ok) {
         const fullOffering = await response.json()
-        if (fullOffering.type_config_data) {
-          setTypeConfigData(fullOffering.type_config_data)
-        } else if (fullOffering.type_config) {
-          setTypeConfigData(fullOffering.type_config)
-        } else {
-          setTypeConfigData({})
+        const fromConfig = fullOffering.type_config_data ?? fullOffering.type_config ?? {}
+        const legacy = {
+          ...(fullOffering.base_price != null && fromConfig.base_price === undefined ? { base_price: fullOffering.base_price } : {}),
+          ...(fullOffering.currency && fromConfig.currency === undefined ? { currency: fullOffering.currency } : {}),
+          ...(fullOffering.target_audience != null && fromConfig.target_audience === undefined ? { target_audience: fullOffering.target_audience } : {}),
+          ...(fullOffering.learning_outcomes != null && fromConfig.learning_outcomes === undefined ? { learning_outcomes: fullOffering.learning_outcomes } : {}),
+          ...(fullOffering.prerequisites != null && fromConfig.prerequisites === undefined ? { prerequisites: fullOffering.prerequisites } : {}),
         }
+        setTypeConfigData({ ...legacy, ...fromConfig })
         // 设置 selectedOfferingType（包含 offering_schema）
         if (fullOffering.offering_type) {
           const type = offeringTypes.find(t => t.id === fullOffering.offering_type.id)
@@ -350,14 +380,9 @@ export default function BlazeOfferingsManagementPage() {
       name: "",
       slug: "",
       description: "",
-      target_audience: "",
-      learning_outcomes: "",
-      prerequisites: "",
-      base_price: undefined,
-      currency: "USD",
       poster_url: "",
+      category_id: "",
       offering_type_id: "",
-      type_config: {},
       status: "draft",
     })
     setTypeConfigData({})
@@ -398,16 +423,14 @@ export default function BlazeOfferingsManagementPage() {
       }
 
       const submitData = {
-        ...formData,
-        type_config_data: typeConfigData,
+        name: formData.name,
         slug: formData.slug || undefined,
         description: formData.description || undefined,
-        target_audience: formData.target_audience || undefined,
-        learning_outcomes: formData.learning_outcomes || undefined,
-        prerequisites: formData.prerequisites || undefined,
-        base_price: formData.base_price || undefined,
-        // 如果有新上传的 poster，使用新 URL；否则使用已有的 poster_url
         poster_url: uploadedPosterUrlToCleanup || formData.poster_url || undefined,
+        category_id: formData.category_id || undefined,
+        offering_type_id: formData.offering_type_id,
+        status: formData.status,
+        type_config_data: typeConfigData,
       }
 
       const url = editingOffering
@@ -447,7 +470,7 @@ export default function BlazeOfferingsManagementPage() {
           setUploadedPosterUrl(null)
         }
         const error = await response.json()
-        alert(error.error || "Failed to save offering")
+        toast.error(error.error || "Failed to save offering")
       }
     } catch (error) {
       // 如果发生错误，删除已上传的 poster
@@ -462,7 +485,7 @@ export default function BlazeOfferingsManagementPage() {
         setUploadedPosterUrl(null)
       }
       console.error("Error saving offering:", error)
-      alert("Failed to save offering")
+      toast.error("Failed to save offering")
     } finally {
       setIsSubmitting(false)
       setIsUploadingPoster(false)
@@ -538,6 +561,23 @@ export default function BlazeOfferingsManagementPage() {
       default:
         return 'bg-gray-50 dark:bg-gray-900'
     }
+  }
+
+  // 不同 category 使用不同颜色的 Badge（按 category id 稳定映射）
+  const categoryBadgeColors = [
+    'border-violet-500/60 bg-violet-500/10 text-violet-700 dark:text-violet-300 dark:bg-violet-500/20 dark:border-violet-400/60',
+    'border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-300 dark:bg-blue-500/20 dark:border-blue-400/60',
+    'border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/20 dark:border-emerald-400/60',
+    'border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-300 dark:bg-amber-500/20 dark:border-amber-400/60',
+    'border-rose-500/60 bg-rose-500/10 text-rose-700 dark:text-rose-300 dark:bg-rose-500/20 dark:border-rose-400/60',
+    'border-cyan-500/60 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 dark:bg-cyan-500/20 dark:border-cyan-400/60',
+    'border-fuchsia-500/60 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 dark:bg-fuchsia-500/20 dark:border-fuchsia-400/60',
+    'border-teal-500/60 bg-teal-500/10 text-teal-700 dark:text-teal-300 dark:bg-teal-500/20 dark:border-teal-400/60',
+  ]
+  const getCategoryBadgeClassName = (categoryId: string) => {
+    let n = 0
+    for (let i = 0; i < categoryId.length; i++) n = (n * 31 + categoryId.charCodeAt(i)) >>> 0
+    return categoryBadgeColors[n % categoryBadgeColors.length]
   }
 
   return (
@@ -629,8 +669,16 @@ export default function BlazeOfferingsManagementPage() {
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2">
+                                  <div className="flex items-center gap-3 mb-2 flex-wrap">
                                     <span className="font-medium">{offering.name}</span>
+                                    {offering.category && (
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-xs ${getCategoryBadgeClassName(offering.category.id)}`}
+                                      >
+                                        {offering.category.display_name || offering.category.name}
+                                      </Badge>
+                                    )}
                                     <Badge
                                       variant={
                                         offering.status === 'published' ? 'default' :
@@ -655,8 +703,8 @@ export default function BlazeOfferingsManagementPage() {
                                     </div>
                                   )}
                                   <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                    {offering.base_price && (
-                                      <span>{offering.currency} ${offering.base_price.toFixed(2)}</span>
+                                    {(offering.type_config_data?.base_price ?? offering.base_price) != null && (
+                                      <span>{(offering.type_config_data?.currency ?? offering.currency) || 'USD'} ${Number(offering.type_config_data?.base_price ?? offering.base_price).toFixed(2)}</span>
                                     )}
                                     <span>Created: {formatDate(offering.created_at)}</span>
                                   </div>
@@ -739,401 +787,220 @@ export default function BlazeOfferingsManagementPage() {
                   <TabsTrigger value="config">Configuration</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="basic" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="offering_type_id">Offering Type *</Label>
-                    <Select
-                      value={formData.offering_type_id}
-                      onValueChange={(value) => {
-                        setFormData({
-                          ...formData,
-                          offering_type_id: value,
-                        })
-                      }}
-                      required
-                      disabled={!!editingOffering}
-                    >
-                      <SelectTrigger id="offering_type_id">
-                        <SelectValue placeholder={isLoadingTypes ? "Loading..." : "Select an offering type"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {offeringTypes
-                          .filter(type => type.is_active)
-                          .map((type) => (
-                            <SelectItem key={type.id} value={type.id}>
-                              {type.name} ({type.code})
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    {editingOffering && (
-                      <p className="text-xs text-muted-foreground">
-                        Offering type cannot be changed after creation.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., Introduction to Robotics"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="slug">Slug</Label>
-                    <Input
-                      id="slug"
-                      value={formData.slug || ""}
-                      onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
-                      placeholder="e.g., introduction-to-robotics"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      URL-friendly identifier (lowercase letters, numbers, and hyphens only). Auto-generated from name if not provided.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description || ""}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Offering description"
-                      rows={4}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="poster_url">Poster</Label>
-                    <div className="space-y-2">
-                      {(posterPreviewUrl || formData.poster_url) && (
-                        <div className="relative w-full h-48 rounded-lg overflow-hidden border">
-                          <Image
-                            src={posterPreviewUrl || formData.poster_url || ""}
-                            alt="Poster preview"
-                            fill
-                            className="object-cover"
-                            sizes="(max-width: 768px) 100vw, 400px"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-2 right-2"
-                            onClick={handleRemovePoster}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                <TabsContent value="basic" className="mt-4">
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">Category &amp; type</CardTitle>
+                        <CardDescription className="text-xs">Category and offering type cannot be changed after creation.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="category_id" className="text-xs">Category *</Label>
+                            <Select value={formData.category_id || ""} onValueChange={(value) => setFormData({ ...formData, category_id: value })} required disabled={isLoadingCategories || !!editingOffering}>
+                              <SelectTrigger id="category_id" className="h-9">
+                                <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Select category"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categories.filter((cat: { id: string; name: string; display_name: string; is_active?: boolean }) => cat.is_active !== false).map((category) => (
+                                  <SelectItem key={category.id} value={category.id}>{category.display_name} ({category.name})</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="offering_type_id" className="text-xs">Offering Type *</Label>
+                            <Select value={formData.offering_type_id} onValueChange={(value) => setFormData({ ...formData, offering_type_id: value })} required disabled={!!editingOffering}>
+                              <SelectTrigger id="offering_type_id" className="h-9">
+                                <SelectValue placeholder={isLoadingTypes ? "Loading..." : "Select type"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {offeringTypes.filter(type => type.is_active).map((type) => (
+                                  <SelectItem key={type.id} value={type.id}>{type.name} ({type.code})</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id="poster_file"
-                          type="file"
-                          accept="image/jpeg,image/jpg,image/png,image/webp"
-                          onChange={handleFileSelect}
-                          disabled={isUploadingPoster || isSubmitting}
-                          className="flex-1"
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="name" className="text-xs">Name *</Label>
+                            <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Introduction to Robotics" required className="h-9 text-sm" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="slug" className="text-xs">Slug</Label>
+                            <Input id="slug" value={formData.slug || ""} onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} placeholder="introduction-to-robotics" className="h-9 text-sm font-mono" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">Description &amp; poster</CardTitle>
+                        <CardDescription className="text-xs">Admin-only note for this offering. Not shown on C-end; C-end content (e.g. description, price, audience) is configured in the Configuration tab from offering_schema.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <MarkdownEditField
+                          id="description"
+                          label="Description (admin only)"
+                          value={formData.description || ""}
+                          onChange={(v) => setFormData({ ...formData, description: v })}
+                          placeholder="Internal note or reminder for admins about this offering."
+                          rows={3}
+                          disabled={isSubmitting}
+                          hint="For admin use only; not displayed on the public site."
                         />
-                        {(isUploadingPoster || isSubmitting) && (
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Upload an image file (JPG, PNG, WebP). Maximum file size: 5MB. Image will be stored in Vercel Blob.
-                      </p>
-                    </div>
-                  </div>
+                        <div className="space-y-1.5">
+                          <PosterUploadField
+                            id="poster_file"
+                            label="Poster"
+                            hint="JPG, PNG, WebP, max 5MB."
+                            previewSrc={posterPreviewUrl || formData.poster_url || null}
+                            onFileChange={handleFileSelect}
+                            onClear={handleRemovePoster}
+                            disabled={isUploadingPoster || isSubmitting}
+                            isLoading={isUploadingPoster}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="base_price">Base Price</Label>
-                      <Input
-                        id="base_price"
-                        type="number"
-                        step="0.01"
-                        value={formData.base_price ?? ""}
-                        onChange={(e) => setFormData({ ...formData, base_price: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="0.00"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="currency">Currency</Label>
-                      <Input
-                        id="currency"
-                        value={formData.currency}
-                        onChange={(e) => setFormData({ ...formData, currency: e.target.value.toUpperCase() })}
-                        placeholder="USD"
-                        maxLength={3}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="target_audience">Target Audience</Label>
-                    <Textarea
-                      id="target_audience"
-                      value={formData.target_audience || ""}
-                      onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
-                      placeholder="Who is this offering for?"
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="learning_outcomes">Learning Outcomes</Label>
-                    <Textarea
-                      id="learning_outcomes"
-                      value={formData.learning_outcomes || ""}
-                      onChange={(e) => setFormData({ ...formData, learning_outcomes: e.target.value })}
-                      placeholder="What will students learn?"
-                      rows={4}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="prerequisites">Prerequisites</Label>
-                    <Textarea
-                      id="prerequisites"
-                      value={formData.prerequisites || ""}
-                      onChange={(e) => setFormData({ ...formData, prerequisites: e.target.value })}
-                      placeholder="What are the prerequisites?"
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value: V2Offering['status']) =>
-                        setFormData({ ...formData, status: value })
-                      }
-                    >
-                      <SelectTrigger id="status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Only 'published' offerings can be used to create instances and displayed to users.
-                    </p>
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">Status</CardTitle>
+                        <CardDescription className="text-xs">Only published offerings are visible to users and can have instances.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="status" className="text-xs">Status</Label>
+                          <Select value={formData.status} onValueChange={(value: V2Offering['status']) => setFormData({ ...formData, status: value })}>
+                            <SelectTrigger id="status" className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="draft">Draft</SelectItem>
+                              <SelectItem value="published">Published</SelectItem>
+                              <SelectItem value="suspended">Suspended</SelectItem>
+                              <SelectItem value="archived">Archived</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="config" className="space-y-4 mt-4">
+                <TabsContent value="config" className="mt-4">
                   {!formData.offering_type_id ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Please select an offering type first to configure type-specific fields.
+                    <div className="rounded-lg border border-dashed bg-muted/30 py-10 text-center text-sm text-muted-foreground">
+                      Select an offering type in Basic Info to configure type-specific fields.
                     </div>
                   ) : !selectedOfferingType?.offering_schema?.fields || Object.keys(selectedOfferingType.offering_schema.fields).length === 0 ? (
-                    <div className="space-y-2">
-                      <Label>Type Config (JSON)</Label>
-                      <Textarea
-                        value={JSON.stringify(typeConfigData, null, 2)}
-                        onChange={(e) => {
-                          try {
-                            setTypeConfigData(JSON.parse(e.target.value))
-                          } catch {
-                            // Invalid JSON, ignore
-                          }
-                        }}
-                        placeholder='{"customField": "value"}'
-                        rows={12}
-                        className="font-mono text-sm"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        No schema defined for this offering type. Enter JSON configuration manually.
-                      </p>
+                    <div className="rounded-lg border border-dashed bg-muted/30 py-10 px-4 text-center text-sm text-muted-foreground space-y-2">
+                      <p>This offering type has no <code className="text-xs bg-muted px-1 rounded">offering_schema</code> configured.</p>
+                      <p>Please configure it in <a href="/admin/blaze/offering-types" className="text-primary underline">Offering Type management</a> first, then edit this type of offering.</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Configure type-specific fields for <strong>{selectedOfferingType.name}</strong>
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Type-specific fields for <strong>{selectedOfferingType.name}</strong> (from offering_schema)
                       </p>
-                      {Object.entries(selectedOfferingType.offering_schema.fields).map(([fieldName, fieldConfig]) => {
-                        // 检查条件显示
-                        if (fieldConfig.condition) {
-                          const conditionValue = typeConfigData[fieldConfig.condition.field]
-                          if (conditionValue !== fieldConfig.condition.equals) {
-                            return null
+                      <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+                        {Object.entries(selectedOfferingType.offering_schema.fields)
+                          .filter(([, fieldConfig]) => {
+                            const scope = fieldConfig.display_scope ?? 'admin'
+                            return scope === 'admin' || scope === 'both'
+                          })
+                          .map(([fieldName, fieldConfig]) => {
+                          const cond = fieldConfig.condition
+                          if (cond) {
+                            const conditionValue = typeConfigData[cond.field]
+                            if (cond.equals !== undefined && conditionValue !== cond.equals) return null
+                            if (cond.in && Array.isArray(cond.in) && !cond.in.includes(conditionValue)) return null
                           }
-                        }
+                          const fieldValue = typeConfigData[fieldName] ?? fieldConfig.default ?? ''
 
-                        const fieldValue = typeConfigData[fieldName] ?? fieldConfig.default ?? ''
-
-                        return (
-                          <div key={fieldName} className="space-y-2">
-                            <Label htmlFor={`config_${fieldName}`}>
-                              {fieldConfig.label || fieldName}
-                              {fieldConfig.required && <span className="text-red-500 ml-1">*</span>}
-                            </Label>
-                            
-                            {fieldConfig.type === 'text' && (
-                              fieldConfig.multiline ? (
-                                <Textarea
-                                  id={`config_${fieldName}`}
-                                  value={fieldValue}
-                                  onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })}
-                                  placeholder={fieldConfig.placeholder}
-                                  rows={4}
-                                  required={fieldConfig.required}
-                                />
-                              ) : (
-                                <Input
-                                  id={`config_${fieldName}`}
-                                  value={fieldValue}
-                                  onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })}
-                                  placeholder={fieldConfig.placeholder}
-                                  required={fieldConfig.required}
-                                />
-                              )
-                            )}
-
-                            {fieldConfig.type === 'number' && (
-                              <Input
-                                id={`config_${fieldName}`}
-                                type="number"
-                                value={fieldValue}
-                                onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value ? parseFloat(e.target.value) : undefined })}
-                                placeholder={fieldConfig.placeholder}
-                                min={fieldConfig.min}
-                                max={fieldConfig.max}
-                                step={fieldConfig.step}
-                                required={fieldConfig.required}
-                              />
-                            )}
-
-                            {fieldConfig.type === 'boolean' && (
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  id={`config_${fieldName}`}
-                                  type="checkbox"
-                                  checked={fieldValue || false}
-                                  onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.checked })}
-                                  className="h-4 w-4"
-                                />
-                                <Label htmlFor={`config_${fieldName}`} className="cursor-pointer">
-                                  {fieldConfig.description || 'Enable'}
-                                </Label>
-                              </div>
-                            )}
-
-                            {fieldConfig.type === 'select' && fieldConfig.options && (
-                              <Select
-                                value={fieldValue || ''}
-                                onValueChange={(value) => setTypeConfigData({ ...typeConfigData, [fieldName]: value })}
-                                required={fieldConfig.required}
-                              >
-                                <SelectTrigger id={`config_${fieldName}`}>
-                                  <SelectValue placeholder={fieldConfig.placeholder || 'Select...'} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {fieldConfig.options.map((option) => (
-                                    <SelectItem key={option} value={option}>
-                                      {option}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-
-                            {fieldConfig.type === 'multiselect' && fieldConfig.options && (
-                              <div className="space-y-2">
-                                {fieldConfig.options.map((option) => {
-                                  const selectedValues = Array.isArray(fieldValue) ? fieldValue : []
-                                  const isSelected = selectedValues.includes(option)
-                                  return (
-                                    <div key={option} className="flex items-center space-x-2">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={(e) => {
-                                          const currentValues = Array.isArray(fieldValue) ? fieldValue : []
-                                          if (e.target.checked) {
-                                            setTypeConfigData({ ...typeConfigData, [fieldName]: [...currentValues, option] })
-                                          } else {
-                                            setTypeConfigData({ ...typeConfigData, [fieldName]: currentValues.filter(v => v !== option) })
-                                          }
-                                        }}
-                                        className="h-4 w-4"
-                                      />
-                                      <Label className="cursor-pointer">{option}</Label>
+                          return (
+                            <div key={fieldName} className="space-y-1.5">
+                              <Label htmlFor={`config_${fieldName}`} className="text-xs">
+                                {fieldConfig.label || fieldName}
+                                {fieldConfig.required && <span className="text-red-500 ml-0.5">*</span>}
+                              </Label>
+                              {fieldConfig.type === 'text' && (
+                                fieldConfig.multiline ? (
+                                  <Textarea id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} rows={2} className="text-sm resize-none min-h-[52px]" required={fieldConfig.required} />
+                                ) : (
+                                  <Input id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} required={fieldConfig.required} className="h-9 text-sm" />
+                                )
+                              )}
+                              {fieldConfig.type === 'number' && (
+                                <Input id={`config_${fieldName}`} type="number" value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder={fieldConfig.placeholder} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step} required={fieldConfig.required} className="h-9 text-sm" />
+                              )}
+                              {fieldConfig.type === 'boolean' && (
+                                <div className="flex items-center gap-2">
+                                  <input id={`config_${fieldName}`} type="checkbox" checked={!!fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.checked })} className="h-4 w-4 rounded border-input" />
+                                  <Label htmlFor={`config_${fieldName}`} className="text-sm cursor-pointer">{fieldConfig.description || 'Enable'}</Label>
+                                </div>
+                              )}
+                              {fieldConfig.type === 'select' && fieldConfig.options && (
+                                <Select value={fieldValue || ''} onValueChange={(value) => setTypeConfigData({ ...typeConfigData, [fieldName]: value })} required={fieldConfig.required}>
+                                  <SelectTrigger id={`config_${fieldName}`} className="h-9">
+                                    <SelectValue placeholder={fieldConfig.placeholder || 'Select...'} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {fieldConfig.options.map((option) => (
+                                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              {fieldConfig.type === 'multiselect' && fieldConfig.options && (
+                                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                                  {fieldConfig.options.map((option) => {
+                                    const selectedValues = Array.isArray(fieldValue) ? fieldValue : []
+                                    const isSelected = selectedValues.includes(option)
+                                    return (
+                                      <div key={option} className="flex items-center gap-2">
+                                        <input type="checkbox" checked={isSelected} onChange={(e) => {
+                                          const current = Array.isArray(fieldValue) ? fieldValue : []
+                                          if (e.target.checked) setTypeConfigData({ ...typeConfigData, [fieldName]: [...current, option] })
+                                          else setTypeConfigData({ ...typeConfigData, [fieldName]: current.filter(v => v !== option) })
+                                        }} className="h-3.5 w-3.5 rounded border-input" />
+                                        <Label className="text-sm cursor-pointer">{option}</Label>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              {fieldConfig.type === 'array' && fieldConfig.items?.type === 'string' && (
+                                <div className="space-y-1.5">
+                                  {(Array.isArray(fieldValue) ? fieldValue : []).map((item, index) => (
+                                    <div key={index} className="flex items-center gap-2">
+                                      <Input value={item} onChange={(e) => { const arr = [...(Array.isArray(fieldValue) ? fieldValue : [])]; arr[index] = e.target.value; setTypeConfigData({ ...typeConfigData, [fieldName]: arr }) }} placeholder={`Item ${index + 1}`} className="h-9 text-sm flex-1" />
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { const arr = [...(Array.isArray(fieldValue) ? fieldValue : [])]; arr.splice(index, 1); setTypeConfigData({ ...typeConfigData, [fieldName]: arr }) }}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
                                     </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-
-                            {fieldConfig.type === 'array' && fieldConfig.items?.type === 'string' && (
-                              <div className="space-y-2">
-                                {(Array.isArray(fieldValue) ? fieldValue : []).map((item, index) => (
-                                  <div key={index} className="flex items-center gap-2">
-                                    <Input
-                                      value={item}
-                                      onChange={(e) => {
-                                        const newArray = [...(Array.isArray(fieldValue) ? fieldValue : [])]
-                                        newArray[index] = e.target.value
-                                        setTypeConfigData({ ...typeConfigData, [fieldName]: newArray })
-                                      }}
-                                      placeholder={`Item ${index + 1}`}
-                                    />
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => {
-                                        const newArray = [...(Array.isArray(fieldValue) ? fieldValue : [])]
-                                        newArray.splice(index, 1)
-                                        setTypeConfigData({ ...typeConfigData, [fieldName]: newArray })
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                ))}
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newArray = [...(Array.isArray(fieldValue) ? fieldValue : []), '']
-                                    setTypeConfigData({ ...typeConfigData, [fieldName]: newArray })
-                                  }}
-                                >
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Add Item
-                                </Button>
-                              </div>
-                            )}
-
-                            {fieldConfig.type === 'date' && (
-                              <Input
-                                id={`config_${fieldName}`}
-                                type="date"
-                                value={fieldValue || ''}
-                                onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })}
-                                required={fieldConfig.required}
-                              />
-                            )}
-
-                            {fieldConfig.description && (
-                              <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>
-                            )}
-                          </div>
-                        )
-                      })}
+                                  ))}
+                                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setTypeConfigData({ ...typeConfigData, [fieldName]: [...(Array.isArray(fieldValue) ? fieldValue : []), ''] })}>
+                                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                                    Add
+                                  </Button>
+                                </div>
+                              )}
+                              {fieldConfig.type === 'date' && (
+                                <Input id={`config_${fieldName}`} type="date" value={fieldValue || ''} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
+                              )}
+                              {fieldConfig.type === 'time' && (
+                                <Input id={`config_${fieldName}`} type="time" value={fieldValue || ''} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
+                              )}
+                              {fieldConfig.description && <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                 </TabsContent>
@@ -1147,10 +1014,11 @@ export default function BlazeOfferingsManagementPage() {
               <Button 
                 type="submit" 
                 disabled={
-                  isSubmitting || 
-                  !formData.name || 
+                  isSubmitting ||
+                  !formData.name ||
+                  !formData.category_id ||
                   !formData.offering_type_id
-                } 
+                }
                 className="w-full sm:w-auto"
               >
                 {isSubmitting ? (

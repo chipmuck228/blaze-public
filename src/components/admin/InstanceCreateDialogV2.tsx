@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, type ReactElement } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,6 +14,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,7 +28,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, AlertCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface InstanceCreateDialogProps {
@@ -54,6 +62,8 @@ interface Program {
   display_name: string
   category_id: string
   franchise_id: string
+  category?: { id: string; name: string; display_name?: string }
+  franchise?: { id: string; code: string; name: string }
 }
 
 interface Campus {
@@ -72,6 +82,25 @@ const DAYS_OF_WEEK = [
   { value: 5, label: 'Friday' },
   { value: 6, label: 'Saturday' },
 ]
+
+// 公共字段映射：数据库字段名 -> schema 中可能的字段名
+// 如果 instance_schema 中定义了这些字段，使用 schema 配置；否则使用默认硬编码显示
+const COMMON_FIELD_MAPPING: Record<string, string> = {
+  start_time: 'start_time',
+  end_time: 'end_time',
+  max_students: 'max_students',
+  session_count: 'session_count',
+  price_override: 'price_override',
+  days_of_week: 'days_of_week',
+  notes: 'notes',
+  status: 'status',
+  // campus_id 特殊处理，不在 schema 中（需要从 campuses 列表选择）
+}
+
+// 扩展字段显示顺序（如 camp：年龄 → 营服/餐食/课后托管 → 特殊需求）
+const EXTENDED_FIELD_ORDER = ['age_min', 'age_max', 'camp_shirt_provided', 'meal_provided', 'after_care_available', 'special_needs']
+// 这三个布尔字段在 Create Instance 中单行水平排列，且排在「特殊需求」前
+const HORIZONTAL_BOOLEAN_ROW_FIELDS = new Set<string>(['camp_shirt_provided', 'meal_provided', 'after_care_available'])
 
 export function InstanceCreateDialog({
   open,
@@ -144,13 +173,13 @@ export function InstanceCreateDialog({
     }
   }, [open])
 
-  // Fetch offerings when program changes
+  // Fetch offerings when program changes (include programs so we re-run after programs load when dialog opened with programId)
   useEffect(() => {
     if (open && formData.program_id) {
       fetchOfferings()
       fetchCampuses()
     }
-  }, [open, formData.program_id])
+  }, [open, formData.program_id, programs])
 
   // Fetch offering details when offering_id changes
   useEffect(() => {
@@ -158,6 +187,56 @@ export function InstanceCreateDialog({
       fetchOfferingDetails()
     }
   }, [open, formData.offering_id, isEditMode])
+
+  // Initialize default values from instance_schema when offering changes
+  useEffect(() => {
+    if (selectedOffering?.offering_type?.instance_schema?.fields && !isEditMode) {
+      const schema = selectedOffering.offering_type.instance_schema.fields
+      const commonDefaults: Partial<typeof formData> = {}
+      const extendedDefaults: Record<string, any> = {}
+      
+      // 获取所有公共字段名
+      const commonFieldNames = new Set(Object.values(COMMON_FIELD_MAPPING))
+      commonFieldNames.add('start_date')
+      commonFieldNames.add('end_date')
+      
+      Object.entries(schema).forEach(([fieldName, fieldConfig]) => {
+        if (fieldConfig.default === undefined) return
+        
+        // 检查是否是公共字段
+        if (commonFieldNames.has(fieldName)) {
+          // 公共字段：更新 formData 的对应字段
+          const dbFieldName = Object.keys(COMMON_FIELD_MAPPING).find(
+            key => COMMON_FIELD_MAPPING[key] === fieldName
+          ) || fieldName
+          
+          // 只在字段没有值且存在默认值时设置默认值
+          const currentValue = formData[dbFieldName as keyof typeof formData]
+          if ((currentValue === undefined || currentValue === null || currentValue === '') && fieldConfig.default !== undefined) {
+            if (dbFieldName === 'days_of_week') {
+              commonDefaults[dbFieldName] = Array.isArray(fieldConfig.default) ? fieldConfig.default : []
+            } else {
+              commonDefaults[dbFieldName as keyof typeof formData] = fieldConfig.default
+            }
+          }
+        } else {
+          // 扩展字段：更新 instance_data_ext
+          if (formData.instance_data_ext[fieldName] === undefined && fieldConfig.default !== undefined) {
+            extendedDefaults[fieldName] = fieldConfig.default
+          }
+        }
+      })
+      
+      // 更新 formData
+      if (Object.keys(commonDefaults).length > 0 || Object.keys(extendedDefaults).length > 0) {
+        setFormData({
+          ...formData,
+          ...commonDefaults,
+          instance_data_ext: { ...formData.instance_data_ext, ...extendedDefaults }
+        })
+      }
+    }
+  }, [selectedOffering, isEditMode])
 
   const fetchPrograms = async () => {
     try {
@@ -177,22 +256,21 @@ export function InstanceCreateDialog({
 
   const fetchOfferings = async () => {
     if (!formData.program_id) return
-    
+
+    // Resolve program: from list or selected (needed when dialog opens with programId before programs have loaded)
+    const program = programs.find(p => p.id === formData.program_id) || selectedProgram
+    if (!program) return
+
     setIsLoading(true)
     try {
-      // Get program to get category_id
-      const program = programs.find(p => p.id === formData.program_id) || selectedProgram
-      if (!program) return
-
-      // Fetch offerings for this category (v2_offering table uses category_id directly)
-      const response = await fetch(`/api/admin/offering/v2?status=published`)
+      // Fetch all offerings (no status filter so draft and published both show), then filter by category
+      const response = await fetch(`/api/admin/offering/v2`)
       if (response.ok) {
         const allOfferings = await response.json()
-        // Filter offerings by category_id
-        const filteredOfferings = allOfferings.filter((offering: Offering) => 
+        const filteredOfferings = (allOfferings || []).filter((offering: Offering) =>
           offering.category_id === program.category_id
         )
-        setOfferings(filteredOfferings || [])
+        setOfferings(filteredOfferings)
       }
     } catch (error) {
       console.error("Error fetching offerings:", error)
@@ -233,13 +311,14 @@ export function InstanceCreateDialog({
   const handleSubmit = async () => {
     setErrors([])
     
-    // Validation
+    // Validation: schema-driven; only program_id and offering_id are always required
+    const schema = selectedOffering?.offering_type?.instance_schema?.fields
     const validationErrors: string[] = []
     if (!formData.program_id) validationErrors.push("Program is required")
     if (!formData.offering_id) validationErrors.push("Offering is required")
-    if (!formData.start_date) validationErrors.push("Start date is required")
-    if (!formData.end_date) validationErrors.push("End date is required")
-    if (new Date(formData.start_date) > new Date(formData.end_date)) {
+    if (schema?.start_date?.required && !formData.start_date) validationErrors.push((schema.start_date.label || "Start date") + " is required")
+    if (schema?.end_date?.required && !formData.end_date) validationErrors.push((schema.end_date.label || "End date") + " is required")
+    if (formData.start_date && formData.end_date && new Date(formData.start_date) > new Date(formData.end_date)) {
       validationErrors.push("Start date must be before end date")
     }
 
@@ -251,13 +330,15 @@ export function InstanceCreateDialog({
     setIsSubmitting(true)
 
     try {
+      const payloadSchema = selectedOffering?.offering_type?.instance_schema?.fields
+      // Schema-driven: send start_date/end_date only when defined in schema
       const payload: any = {
         program_id: formData.program_id,
         offering_id: formData.offering_id,
         campus_id: formData.campus_id || null,
         price_override: formData.price_override ? parseFloat(formData.price_override) : null,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
+        start_date: payloadSchema?.start_date ? (formData.start_date || null) : null,
+        end_date: payloadSchema?.end_date ? (formData.end_date || null) : null,
         start_time: formData.start_time || null,
         end_time: formData.end_time || null,
         session_count: formData.session_count ? parseInt(formData.session_count) : null,
@@ -316,166 +397,260 @@ export function InstanceCreateDialog({
     }
   }
 
-  const renderSchemaFields = () => {
-    if (!selectedOffering?.offering_type?.instance_schema?.fields) return null
-
-    const schema = selectedOffering.offering_type.instance_schema.fields
-    const fields: JSX.Element[] = []
-
-    for (const [fieldName, fieldConfig] of Object.entries(schema)) {
-      const value = formData.instance_data_ext[fieldName]
-      const isRequired = fieldConfig.required
-
-      switch (fieldConfig.type) {
-        case 'text':
-          fields.push(
-            <div key={fieldName} className="space-y-2">
-              <Label>
-                {fieldConfig.label || fieldName}
-                {isRequired && <span className="text-red-500">*</span>}
-              </Label>
-              {fieldConfig.multiline ? (
-                <Textarea
-                  value={value || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    instance_data_ext: { ...formData.instance_data_ext, [fieldName]: e.target.value }
-                  })}
-                  placeholder={fieldConfig.placeholder}
-                />
-              ) : (
-                <Input
-                  value={value || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    instance_data_ext: { ...formData.instance_data_ext, [fieldName]: e.target.value }
-                  })}
-                  placeholder={fieldConfig.placeholder}
-                />
-              )}
-              {fieldConfig.description && (
-                <p className="text-sm text-muted-foreground">{fieldConfig.description}</p>
-              )}
-            </div>
-          )
-          break
-
-        case 'number':
-          fields.push(
-            <div key={fieldName} className="space-y-2">
-              <Label>
-                {fieldConfig.label || fieldName}
-                {isRequired && <span className="text-red-500">*</span>}
-              </Label>
-              <Input
-                type="number"
-                value={value || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  instance_data_ext: { ...formData.instance_data_ext, [fieldName]: parseFloat(e.target.value) || 0 }
-                })}
-                min={fieldConfig.min}
-                max={fieldConfig.max}
-                step={fieldConfig.step || 1}
-                placeholder={fieldConfig.placeholder}
-              />
-              {fieldConfig.description && (
-                <p className="text-sm text-muted-foreground">{fieldConfig.description}</p>
-              )}
-            </div>
-          )
-          break
-
-        case 'boolean':
-          fields.push(
-            <div key={fieldName} className="flex items-center space-x-2">
-              <Checkbox
-                checked={value || false}
-                onCheckedChange={(checked) => setFormData({
-                  ...formData,
-                  instance_data_ext: { ...formData.instance_data_ext, [fieldName]: checked }
-                })}
-              />
-              <Label>
-                {fieldConfig.label || fieldName}
-                {isRequired && <span className="text-red-500">*</span>}
-              </Label>
-            </div>
-          )
-          break
-
-        case 'select':
-          fields.push(
-            <div key={fieldName} className="space-y-2">
-              <Label>
-                {fieldConfig.label || fieldName}
-                {isRequired && <span className="text-red-500">*</span>}
-              </Label>
-              <Select
-                value={value || undefined}
-                onValueChange={(val) => setFormData({
-                  ...formData,
-                  instance_data_ext: { ...formData.instance_data_ext, [fieldName]: val }
-                })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={fieldConfig.placeholder || "Select..."} />
-                </SelectTrigger>
-                <SelectContent>
-                  {fieldConfig.options?.map((option: string) => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )
-          break
-
-        case 'multiselect':
-          fields.push(
-            <div key={fieldName} className="space-y-2">
-              <Label>
-                {fieldConfig.label || fieldName}
-                {isRequired && <span className="text-red-500">*</span>}
-              </Label>
-              <div className="space-y-2">
-                {fieldConfig.options?.map((option: string) => (
-                  <div key={option} className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={(value || []).includes(option)}
-                      onCheckedChange={(checked) => {
-                        const currentValues = value || []
-                        const newValues = checked
-                          ? [...currentValues, option]
-                          : currentValues.filter((v: string) => v !== option)
-                        setFormData({
-                          ...formData,
-                          instance_data_ext: { ...formData.instance_data_ext, [fieldName]: newValues }
-                        })
-                      }}
-                    />
-                    <Label>{option}</Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-          break
+  // 渲染单个字段（可复用函数）
+  const renderField = (
+    fieldName: string,
+    fieldConfig: any,
+    value: any,
+    onChange: (value: any) => void,
+    isCommonField: boolean = false
+  ): ReactElement | null => {
+    // 检查条件显示
+    if (fieldConfig.condition) {
+      const conditionField = fieldConfig.condition.field
+      // 条件字段可能在 formData 中（公共字段，包括 start_date/end_date）或 instance_data_ext 中（扩展字段）
+      let conditionValue: any
+      if (isCommonField) {
+        // 公共字段：检查是否在 COMMON_FIELD_MAPPING 中，或者是否是 start_date/end_date
+        if (COMMON_FIELD_MAPPING[conditionField] || conditionField === 'start_date' || conditionField === 'end_date') {
+          conditionValue = formData[conditionField as keyof typeof formData]
+        } else {
+          conditionValue = formData.instance_data_ext[conditionField]
+        }
+      } else {
+        conditionValue = formData.instance_data_ext[conditionField]
+      }
+      
+      // 支持多种条件类型
+      if (fieldConfig.condition.equals !== undefined) {
+        if (conditionValue !== fieldConfig.condition.equals) {
+          return null // 跳过不满足条件的字段
+        }
+      } else if (fieldConfig.condition.exists !== undefined) {
+        const exists = conditionValue !== undefined && conditionValue !== null && conditionValue !== ''
+        if (fieldConfig.condition.exists !== exists) {
+          return null // 跳过不满足条件的字段
+        }
       }
     }
 
-    return fields.length > 0 ? (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Additional Configuration</h3>
-        {fields}
-      </div>
+    const isRequired = fieldConfig.required
+
+    const labelEl = (
+      <Label className="text-xs">
+        {fieldConfig.label || fieldName}
+        {isRequired && <span className="text-red-500 ml-0.5">*</span>}
+      </Label>
+    )
+    const descEl = fieldConfig.description ? (
+      <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>
+    ) : null
+
+    switch (fieldConfig.type) {
+      case 'text':
+        return (
+          <div key={fieldName} className="space-y-1.5">
+            {labelEl}
+            {fieldConfig.multiline ? (
+              <Textarea
+                value={value || ''}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={fieldConfig.placeholder}
+                className="text-sm resize-none min-h-[52px]"
+                rows={2}
+              />
+            ) : (
+              <Input
+                value={value || ''}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={fieldConfig.placeholder}
+                className="h-9 text-sm"
+              />
+            )}
+            {descEl}
+          </div>
+        )
+
+      case 'time':
+        return (
+          <div key={fieldName} className="space-y-1.5">
+            {labelEl}
+            <Input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} required={isRequired} className="h-9 text-sm" />
+            {descEl}
+          </div>
+        )
+
+      case 'number':
+        return (
+          <div key={fieldName} className="space-y-1.5">
+            {labelEl}
+            <Input type="number" value={value || ''} onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : undefined)} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step || 1} placeholder={fieldConfig.placeholder} className="h-9 text-sm" />
+            {descEl}
+          </div>
+        )
+
+      case 'boolean':
+        return (
+          <div key={fieldName} className="flex items-center gap-2">
+            <Checkbox checked={!!value} onCheckedChange={(checked) => onChange(checked)} />
+            {labelEl}
+          </div>
+        )
+
+      case 'select':
+        return (
+          <div key={fieldName} className="space-y-1.5">
+            {labelEl}
+            <Select value={value || undefined} onValueChange={(val) => onChange(val)}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder={fieldConfig.placeholder || "Select..."} />
+              </SelectTrigger>
+              <SelectContent>
+                {fieldConfig.options?.map((option: string) => (
+                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {descEl}
+          </div>
+        )
+
+      case 'multiselect':
+        return (
+          <div key={fieldName} className="space-y-1.5">
+            {labelEl}
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {fieldConfig.options?.map((option: string) => (
+                <div key={option} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={(Array.isArray(value) ? value : []).includes(option)}
+                    onCheckedChange={(checked) => {
+                      const currentValues = Array.isArray(value) ? value : []
+                      const newValues = checked ? [...currentValues, option] : currentValues.filter((v: string) => v !== option)
+                      onChange(newValues)
+                    }}
+                  />
+                  <Label className="text-sm cursor-pointer">{option}</Label>
+                </div>
+              ))}
+            </div>
+            {descEl}
+          </div>
+        )
+
+      case 'array':
+        if (fieldConfig.items?.type === 'string') {
+          return (
+            <div key={fieldName} className="space-y-1.5">
+              {labelEl}
+              <div className="space-y-1.5">
+                {(Array.isArray(value) ? value : []).map((item: string, index: number) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Input value={item} onChange={(e) => { const arr = [...(Array.isArray(value) ? value : [])]; arr[index] = e.target.value; onChange(arr) }} placeholder={`Item ${index + 1}`} className="h-9 text-sm flex-1" />
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { const arr = [...(Array.isArray(value) ? value : [])]; arr.splice(index, 1); onChange(arr) }}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onChange([...(Array.isArray(value) ? value : []), ''])}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add
+                </Button>
+              </div>
+              {descEl}
+            </div>
+          )
+        }
+        return null
+
+      case 'date':
+        return (
+          <div key={fieldName} className="space-y-1.5">
+            {labelEl}
+            <Input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} required={isRequired} className="h-9 text-sm" />
+            {descEl}
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  // 渲染扩展字段（完全由 schema 驱动）；营服/餐食/课后托管排在特殊需求前且水平排列
+  const renderExtendedFields = () => {
+    if (!selectedOffering?.offering_type?.instance_schema?.fields) return null
+
+    const schema = selectedOffering.offering_type.instance_schema.fields
+    const commonFieldNames = new Set(Object.values(COMMON_FIELD_MAPPING))
+    commonFieldNames.add('start_date')
+    commonFieldNames.add('end_date')
+
+    const extendedNames = (Object.keys(schema) as string[]).filter((name) => !commonFieldNames.has(name))
+    const orderIndex = (name: string) => {
+      const i = EXTENDED_FIELD_ORDER.indexOf(name)
+      return i >= 0 ? i : EXTENDED_FIELD_ORDER.length
+    }
+    extendedNames.sort((a, b) => orderIndex(a) - orderIndex(b))
+
+    const nodes: ReactElement[] = []
+    let i = 0
+    while (i < extendedNames.length) {
+      const name = extendedNames[i]
+      const fieldConfig = schema[name]
+      const value = formData.instance_data_ext[name] ?? fieldConfig?.default ?? ''
+      const onChange = (newValue: unknown) => {
+        setFormData({
+          ...formData,
+          instance_data_ext: { ...formData.instance_data_ext, [name]: newValue }
+        })
+      }
+      const singleField = renderField(name, fieldConfig, value, onChange, false)
+
+      if (HORIZONTAL_BOOLEAN_ROW_FIELDS.has(name)) {
+        const rowFields: ReactElement[] = []
+        while (i < extendedNames.length && HORIZONTAL_BOOLEAN_ROW_FIELDS.has(extendedNames[i])) {
+          const n = extendedNames[i]
+          const cfg = schema[n]
+          const val = formData.instance_data_ext[n] ?? cfg?.default ?? ''
+          const f = renderField(n, cfg, val, (v) => {
+            setFormData({
+              ...formData,
+              instance_data_ext: { ...formData.instance_data_ext, [n]: v }
+            })
+          }, false)
+          if (f) rowFields.push(f)
+          i++
+        }
+        if (rowFields.length > 0) {
+          nodes.push(
+            <div key={`row-${name}`} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {rowFields}
+            </div>
+          )
+        }
+        continue
+      }
+      if (singleField) nodes.push(singleField)
+      i += 1
+    }
+
+    return nodes.length > 0 ? (
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm font-medium">Additional configuration</CardTitle>
+          <CardDescription className="text-xs">Type-specific fields from schema</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          {nodes}
+        </CardContent>
+      </Card>
     ) : null
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{isEditMode ? "Edit Instance" : "Create Instance"}</DialogTitle>
           <DialogDescription>
             {isEditMode ? "Update instance details" : "Create a new instance for a program"}
@@ -483,10 +658,10 @@ export function InstanceCreateDialog({
         </DialogHeader>
 
         {errors.length > 0 && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="flex-shrink-0">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <ul className="list-disc list-inside">
+              <ul className="list-disc list-inside text-sm">
                 {errors.map((error, index) => (
                   <li key={index}>{error}</li>
                 ))}
@@ -495,189 +670,216 @@ export function InstanceCreateDialog({
           </Alert>
         )}
 
-        <div className="space-y-4">
-          {/* Program Selection */}
-          <div className="space-y-2">
-            <Label>
-              Program <span className="text-red-500">*</span>
-            </Label>
-            <Select
-              value={formData.program_id}
-              onValueChange={(value) => {
-                setFormData({ ...formData, program_id: value })
-                const program = programs.find(p => p.id === value)
-                setSelectedProgram(program || null)
-              }}
-              disabled={!!programId || isEditMode}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a program" />
-              </SelectTrigger>
-              <SelectContent>
-                {programs.map((program) => (
-                  <SelectItem key={program.id} value={program.id}>
-                    {program.display_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Offering Selection */}
-          <div className="space-y-2">
-            <Label>
-              Offering <span className="text-red-500">*</span>
-            </Label>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </div>
-            ) : (
-              <Select
-                value={formData.offering_id}
-                onValueChange={(value) => setFormData({ ...formData, offering_id: value })}
-                disabled={isEditMode}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an offering" />
-                </SelectTrigger>
-                <SelectContent>
-                  {offerings.map((offering) => (
-                    <SelectItem key={offering.id} value={offering.id}>
-                      {offering.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          {/* Basic Fields */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>
-                Start Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>
-                End Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Start Time</Label>
-              <Input
-                type="time"
-                value={formData.start_time}
-                onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>End Time</Label>
-              <Input
-                type="time"
-                value={formData.end_time}
-                onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Max Students</Label>
-              <Input
-                type="number"
-                min="1"
-                value={formData.max_students}
-                onChange={(e) => setFormData({ ...formData, max_students: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Price Override</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.price_override}
-                onChange={(e) => setFormData({ ...formData, price_override: e.target.value })}
-                placeholder="Leave empty to use offering base price"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Campus</Label>
-            <Select
-              value={formData.campus_id || "__none__"}
-              onValueChange={(value) => setFormData({ ...formData, campus_id: value === "__none__" ? "" : value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a campus (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">No Campus</SelectItem>
-                {campuses.map((campus) => (
-                  <SelectItem key={campus.id} value={campus.id}>
-                    {campus.display_name || campus.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Days of Week */}
-          <div className="space-y-2">
-            <Label>Days of Week</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {DAYS_OF_WEEK.map((day) => (
-                <div key={day.value} className="flex items-center space-x-2">
-                  <Checkbox
-                    checked={formData.days_of_week.includes(day.value)}
-                    onCheckedChange={(checked) => {
-                      const newDays = checked
-                        ? [...formData.days_of_week, day.value]
-                        : formData.days_of_week.filter(d => d !== day.value)
-                      setFormData({ ...formData, days_of_week: newDays })
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm font-medium">Program &amp; offering</CardTitle>
+              <CardDescription className="text-xs">Select the program and offering for this instance.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Program <span className="text-red-500">*</span></Label>
+                  <Select
+                    value={formData.program_id}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, program_id: value })
+                      setSelectedProgram(programs.find(p => p.id === value) || null)
                     }}
-                  />
-                  <Label className="text-sm">{day.label}</Label>
+                    disabled={!!programId || isEditMode}
+                  >
+                    <SelectTrigger className="h-9 min-w-0">
+                      {formData.program_id ? (
+                        <span className="truncate">
+                          {programs.find(p => p.id === formData.program_id)?.display_name || selectedProgram?.display_name || programs.find(p => p.id === formData.program_id)?.name || ""}
+                        </span>
+                      ) : (
+                        <SelectValue placeholder="Select program" />
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programs.map((program) => {
+                        const franchiseName = program.franchise?.name || program.franchise?.code || "—"
+                        const categoryName = program.category?.display_name || program.category?.name || "—"
+                        const programLabel = program.display_name || program.name
+                        return (
+                          <SelectItem key={program.id} value={program.id}>
+                            <div className="flex flex-col items-start gap-1 py-0.5">
+                              <span className="font-medium">{programLabel}</span>
+                              <div className="flex flex-wrap gap-1">
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">{franchiseName}</Badge>
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">{categoryName}</Badge>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Offering <span className="text-red-500">*</span></Label>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center h-9">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <Select value={formData.offering_id} onValueChange={(value) => setFormData({ ...formData, offering_id: value })} disabled={isEditMode}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select offering" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {offerings.map((offering) => (
+                          <SelectItem key={offering.id} value={offering.id}>{offering.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Dynamic Schema Fields */}
-          {renderSchemaFields()}
+          {/* 日期块：仅当 instance_schema 中定义了 start_date 或 end_date 时显示 */}
+          {(() => {
+            const schema = selectedOffering?.offering_type?.instance_schema?.fields
+            const hasStartDate = !!schema?.start_date
+            const hasEndDate = !!schema?.end_date
+            if (!hasStartDate && !hasEndDate) return null
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label>Notes</Label>
-            <Textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Additional notes..."
-            />
-          </div>
+            const dateFields: ReactElement[] = []
+            if (hasStartDate) {
+              const fieldConfig = schema!.start_date!
+              const value = formData.start_date || (fieldConfig as any).default || ''
+              const field = renderField('start_date', fieldConfig, value, (newValue) => setFormData({ ...formData, start_date: newValue }), true)
+              if (field) dateFields.push(field)
+            }
+            if (hasEndDate) {
+              const fieldConfig = schema!.end_date!
+              const value = formData.end_date || (fieldConfig as any).default || ''
+              const field = renderField('end_date', fieldConfig, value, (newValue) => setFormData({ ...formData, end_date: newValue }), true)
+              if (field) dateFields.push(field)
+            }
+            if (dateFields.length === 0) return null
+            return (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">Date</CardTitle>
+                  <CardDescription className="text-xs">Start and end date for this instance.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className={dateFields.length >= 2 ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "space-y-3"}>
+                    {dateFields}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
+
+          {/* Common Fields + Campus: time, capacity, price, status, notes, campus */}
+          {(() => {
+            const schema = selectedOffering?.offering_type?.instance_schema?.fields
+            const commonFields: ReactElement[] = []
+            if (schema?.start_time) {
+              const c = schema.start_time
+              const v = formData.start_time || c.default || ''
+              const f = renderField('start_time', c, v, (x) => setFormData({ ...formData, start_time: x }), true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.end_time) {
+              const c = schema.end_time
+              const v = formData.end_time || c.default || ''
+              const f = renderField('end_time', c, v, (x) => setFormData({ ...formData, end_time: x }), true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.max_students) {
+              const c = schema.max_students
+              const v = formData.max_students || c.default || ''
+              const f = renderField('max_students', c, v, (x) => setFormData({ ...formData, max_students: x?.toString() || '' }), true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.price_override) {
+              const c = schema.price_override
+              const v = formData.price_override || c.default || ''
+              const f = renderField('price_override', c, v, (x) => setFormData({ ...formData, price_override: x?.toString() || '' }), true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.session_count) {
+              const c = schema.session_count
+              const v = formData.session_count || c.default || ''
+              const f = renderField('session_count', c, v, (x) => setFormData({ ...formData, session_count: x?.toString() || '' }), true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.days_of_week) {
+              const c = schema.days_of_week
+              const cur = Array.isArray(formData.days_of_week) ? formData.days_of_week : []
+              const disp = c.type === 'multiselect' ? cur.map(v => v.toString()) : cur
+              const f = renderField('days_of_week', c, disp, (newVal) => {
+                const num = Array.isArray(newVal) ? newVal.map(v => typeof v === 'string' ? parseInt(v, 10) : v).filter(v => !isNaN(v)) : []
+                setFormData({ ...formData, days_of_week: num })
+              }, true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.notes) {
+              const c = schema.notes
+              const v = formData.notes || c.default || ''
+              const f = renderField('notes', c, v, (x) => setFormData({ ...formData, notes: x }), true)
+              if (f) commonFields.push(f)
+            }
+            if (schema?.status) {
+              const c = schema.status
+              const v = formData.status || c.default || 'scheduled'
+              const f = renderField('status', c, v, (x) => setFormData({ ...formData, status: x }), true)
+              if (f) commonFields.push(f)
+            }
+
+            const hasCommon = commonFields.length > 0
+            const campusEl = (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Campus</Label>
+                <Select value={formData.campus_id || "__none__"} onValueChange={(val) => setFormData({ ...formData, campus_id: val === "__none__" ? "" : val })}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Optional campus" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No Campus</SelectItem>
+                    {campuses.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.display_name || c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
+
+            if (!hasCommon && !selectedOffering) return null
+            return (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">Schedule, capacity &amp; campus</CardTitle>
+                  <CardDescription className="text-xs">Time, max students, price override, status, and optional campus.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  {hasCommon && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {commonFields.map((field, index) => (
+                        <div key={index} className={commonFields.length === 1 ? "sm:col-span-2" : ""}>{field}</div>
+                      ))}
+                    </div>
+                  )}
+                  {selectedOffering && campusEl}
+                </CardContent>
+              </Card>
+            )
+          })()}
+
+          {renderExtendedFields()}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
+          <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full sm:w-auto">
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isEditMode ? "Update" : "Create"}
           </Button>

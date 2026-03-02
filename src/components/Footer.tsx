@@ -1,4 +1,5 @@
 'use client'
+import { ExternalLink } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
 import { FacebookIcon, InstagramIcon, YoutubeIcon, XiaohongshuIcon } from "./Icons";
 
@@ -23,9 +24,10 @@ export const Footer = () => {
                 rel="noreferrer noopener"
                 target="_blank"
                 href="https://www.blazeroboticsacademy.org/"
-                className="text-primary transition-all border-primary hover:border-b-2"
+                className="text-primary transition-all border-primary hover:border-b-2 inline-flex items-center gap-1"
               >
                 Blaze Robotics Academy
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" aria-hidden />
               </a>
             </div>
           </div>
@@ -38,44 +40,52 @@ export const Footer = () => {
             <div>
               <a
                 rel="noreferrer noopener"
-                href="#"
+                target="_blank"
+                href="https://www.facebook.com/BlazeEdu/"
                 className="opacity-60 hover:opacity-100 flex items-center gap-2"
               >
                 <FacebookIcon />
                 Facebook
+                <ExternalLink className="w-3.5 h-3.5 opacity-70 shrink-0" aria-hidden />
               </a>
             </div>
 
             <div>
               <a
                 rel="noreferrer noopener"
-                href="#"
+                target="_blank"
+                href="https://www.instagram.com/blaze_robotics/"
                 className="opacity-60 hover:opacity-100 flex items-center gap-2"
               >
                 <InstagramIcon />
                 Instagram
+                <ExternalLink className="w-3.5 h-3.5 opacity-70 shrink-0" aria-hidden />
               </a>
             </div>
 
             <div>
               <a
                 rel="noreferrer noopener"
-                href="#"
+                target="_blank"
+                href="https://www.youtube.com/@BlazeRoboticsAcademy"
                 className="opacity-60 hover:opacity-100 flex items-center gap-2"
               >
                 <YoutubeIcon />
                 Youtube
+                <ExternalLink className="w-3.5 h-3.5 opacity-70 shrink-0" aria-hidden />
               </a>
             </div>
 
             <div>
               <a
                 rel="noreferrer noopener"
-                href="#"
+                target="_blank"
+                href="https://www.xiaohongshu.com/user/profile/5dd69d76000000000100af94?xsec_token=ABGyBANRXA9VJZXgMt0kwTUCrTxvBRs7nCQQsKIEUcPJ4%3D&xsec_source=pc_search"
                 className="opacity-60 hover:opacity-100 flex items-center gap-2"
               >
                 <XiaohongshuIcon />
                 Xiaohongshu
+                <ExternalLink className="w-3.5 h-3.5 opacity-70 shrink-0" aria-hidden />
               </a>
             </div>
           </div>
@@ -96,7 +106,7 @@ export const Footer = () => {
             <div>
               <a
                 rel="noreferrer noopener"
-                href="/about#careers"
+                href="/about/careers"
                 className="opacity-60 hover:opacity-100"
               >
                 Careers
@@ -106,7 +116,7 @@ export const Footer = () => {
             <div>
               <a
                 rel="noreferrer noopener"
-                href="#"
+                href="/calendar"
                 className="opacity-60 hover:opacity-100"
               >
                 Calendar

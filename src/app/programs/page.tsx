@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Loader2, MapPin, Calendar, Search, Filter, ArrowRight, Sparkles, BookOpen } from "lucide-react"
+import { Loader2, MapPin, Calendar, Search, ArrowRight, Sparkles, BookOpen, ExternalLink, ChevronDown, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import Image from "next/image"
@@ -81,7 +81,7 @@ function ProgramsPageContent() {
   const [selectedFranchise, setSelectedFranchise] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedGrade, setSelectedGrade] = useState<string>("all")
+  const [selectedAgeRange, setSelectedAgeRange] = useState<string>("all")
   const [activeFilter, setActiveFilter] = useState<string>('all') // 改为动态的 category id
   const [locationSlug, setLocationSlug] = useState<string | null>(null)
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false)
@@ -90,53 +90,50 @@ function ProgramsPageContent() {
   const categoryFromUrl = searchParams.get("category")
   const locationFromUrl = searchParams.get("location") || searchParams.get("franchise")
 
+  // Sync URL params to filter state once data is loaded (no refetch)
   useEffect(() => {
     if (categoryFromUrl) {
       setSelectedCategory(categoryFromUrl)
     }
     if (locationFromUrl) {
       setLocationSlug(locationFromUrl)
-      // 找到对应的 franchise
       const franchise = franchises.find(f => f.code === locationFromUrl)
       if (franchise) {
         setSelectedFranchise(franchise.id)
       }
     } else {
-      // 如果没有 location 参数，重置筛选
       setLocationSlug(null)
       setSelectedFranchise("all")
     }
   }, [categoryFromUrl, locationFromUrl, franchises])
 
+  // Fetch all data once; Location and Program filters are client-side only (no refresh)
   useEffect(() => {
     fetchInstances()
-  }, [selectedCategory])
+  }, [])
 
   const fetchInstances = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      let url = "/api/public/instances"
-      if (selectedCategory && selectedCategory !== "all") {
-        url += `?category=${selectedCategory}`
-      }
-
+      // No category/location params: load everything, filter client-side like Search
+      const url = "/api/public/instances-v2"
       const response = await fetch(url)
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || "Failed to fetch instances")
       }
 
       const data = await response.json()
-      
+
       if (data.error) {
         console.warn("API returned error but continuing:", data.error)
         setFranchises([])
       } else {
-        const franchises = data.franchises || []
-        setFranchises(franchises)
+        const list = data.franchises || []
+        setFranchises(list)
       }
     } catch (err) {
       console.error("Error fetching instances:", err)
@@ -152,86 +149,68 @@ function ProgramsPageContent() {
     return franchises.map((f) => ({ id: f.id, code: f.code, name: f.name }))
   }, [franchises])
 
-  // 获取所有唯一的 grade 列表
-  const allGrades = useMemo(() => {
-    const gradeSet = new Set<string>()
-    franchises.forEach((franchise) => {
+  // 年龄区间选项（固定）：All Ages, 9岁以下, 9-15岁, 15岁以上
+  const ageRangeOptions = [
+    { value: 'all', label: 'All Ages' },
+    { value: 'under_9', label: '9岁以下' },
+    { value: '9_15', label: '9-15 岁' },
+    { value: 'over_15', label: '15岁以上' },
+  ]
+
+  // 当前 franchise(s) 下的所有 programs（学期/期，用于 “All programs” 下拉）
+  const availablePrograms = useMemo(() => {
+    const programSet = new Map<string, { id: string; name: string; display_name: string }>()
+    const sourceFranchises =
+      selectedFranchise === "all"
+        ? franchises
+        : franchises.filter((f) => f.id === selectedFranchise)
+    sourceFranchises.forEach((franchise) => {
       franchise.programs.forEach((program) => {
-        program.instances.forEach((instance) => {
-          if (instance.course.grade_level && typeof instance.course.grade_level === 'string') {
-            const grade = instance.course.grade_level.trim()
-            if (grade !== '') {
-              gradeSet.add(grade)
-            }
-          } else if (instance.course.target_grades && Array.isArray(instance.course.target_grades)) {
-            instance.course.target_grades.forEach((grade: any) => {
-              if (typeof grade === 'string' && grade.trim() !== '') {
-                gradeSet.add(grade.trim())
-              }
-            })
-          }
-        })
+        if (program.id && (program.instances?.length ?? 0) > 0) {
+          programSet.set(program.id, {
+            id: program.id,
+            name: program.name,
+            display_name: program.display_name || program.name,
+          })
+        }
       })
     })
-    return Array.from(gradeSet).sort()
-  }, [franchises])
+    return Array.from(programSet.values())
+  }, [franchises, selectedFranchise])
 
-  // 获取当前 franchise 的所有 categories（用于 Type Filter）
-  // 当有 location 参数时，只显示该 location 下 Instance 不为零的 categories
-  const availableCategories = useMemo(() => {
-    // 如果有 location 参数，只显示该 location 下 Instance 不为零的 categories
-    if (locationSlug) {
-      const franchise = franchises.find(f => f.code === locationSlug)
-      if (!franchise) return []
-      
-      const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
+  // 按 category 聚合 program，用于下拉分组显示（All locations 时选项很多）
+  const programsGroupedByCategory = useMemo(() => {
+    const sourceFranchises =
+      selectedFranchise === "all"
+        ? franchises
+        : franchises.filter((f) => f.id === selectedFranchise)
+    const byCategory = new Map<
+      string,
+      { categoryId: string; categoryDisplayName: string; programs: { id: string; name: string; display_name: string }[] }
+    >()
+    sourceFranchises.forEach((franchise) => {
       franchise.programs.forEach((program) => {
-        // 只包含有至少一个 instance 的 program 的 category
-        if (program.category && program.instances && program.instances.length > 0) {
-          categorySet.set(program.category.id, {
-            id: program.category.id,
-            name: program.category.name,
-            display_name: program.category.display_name,
+        if (!program.id || (program.instances?.length ?? 0) === 0 || !program.category) return
+        const cid = program.category.id
+        const cname = program.category.display_name || program.category.name || 'Uncategorized'
+        if (!byCategory.has(cid)) {
+          byCategory.set(cid, { categoryId: cid, categoryDisplayName: cname, programs: [] })
+        }
+        const group = byCategory.get(cid)!
+        const exists = group.programs.some((p) => p.id === program.id)
+        if (!exists) {
+          group.programs.push({
+            id: program.id,
+            name: program.name,
+            display_name: program.display_name || program.name,
           })
         }
       })
-      return Array.from(categorySet.values())
-    }
-    
-    if (selectedFranchise === "all") {
-      // 如果选择了所有 franchise，获取所有 categories
-      const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
-      franchises.forEach((franchise) => {
-        franchise.programs.forEach((program) => {
-          if (program.category) {
-            categorySet.set(program.category.id, {
-              id: program.category.id,
-              name: program.category.name,
-              display_name: program.category.display_name,
-            })
-          }
-        })
-      })
-      return Array.from(categorySet.values())
-    } else {
-      // 如果选择了特定 franchise，只获取该 franchise 的 categories
-      const franchise = franchises.find(f => f.id === selectedFranchise)
-      if (!franchise) return []
-      
-      const categorySet = new Map<string, { id: string; name: string; display_name: string }>()
-      franchise.programs.forEach((program) => {
-        if (program.category) {
-          categorySet.set(program.category.id, {
-            id: program.category.id,
-            name: program.category.name,
-            display_name: program.category.display_name,
-          })
-        }
-      })
-      return Array.from(categorySet.values())
-    }
-  }, [franchises, selectedFranchise, locationSlug])
-
+    })
+    return Array.from(byCategory.values()).sort((a, b) =>
+      a.categoryDisplayName.localeCompare(b.categoryDisplayName)
+    )
+  }, [franchises, selectedFranchise])
 
   // 按层级结构组织数据：franchise -> category -> programs -> instances
   const hierarchicalData = useMemo(() => {
@@ -248,14 +227,14 @@ function ProgramsPageContent() {
         const categoryMap = new Map<string, Program[]>()
         
         franchise.programs.forEach((program) => {
-          // Category 筛选
+          // Category 筛选（来自 URL）
           if (selectedCategory !== "all" && program.category?.id !== selectedCategory) {
             return
           }
 
-          // Type 筛选 (按 category)
-          if (activeFilter !== 'all' && program.category?.id !== activeFilter) {
-              return
+          // Program 筛选（学期/期下拉）
+          if (activeFilter !== 'all' && program.id !== activeFilter) {
+            return
           }
 
           // 过滤 instances
@@ -272,15 +251,19 @@ function ProgramsPageContent() {
               }
             }
 
-            // Grade 过滤
-            if (selectedGrade !== "all") {
-              const instanceGrade = instance.course?.grade_level || 
-                (instance.course?.target_grades && Array.isArray(instance.course.target_grades) 
-                  ? instance.course.target_grades[0] 
-                  : null)
-              if (instanceGrade !== selectedGrade) {
-                return false
-              }
+            // 年龄区间过滤（基于 course.age_min / age_max）
+            if (selectedAgeRange !== "all") {
+              const ageMin = instance.course?.age_min ?? null
+              const ageMax = instance.course?.age_max ?? null
+              const matchesUnder9 = ageMax != null && ageMax <= 9
+              const matches9_15 = (ageMin ?? 0) <= 15 && (ageMax ?? 99) >= 9
+              const matchesOver15 = ageMin != null && ageMin >= 15
+              const matches =
+                selectedAgeRange === 'under_9' ? matchesUnder9
+                : selectedAgeRange === '9_15' ? matches9_15
+                : selectedAgeRange === 'over_15' ? matchesOver15
+                : true
+              if (!matches) return false
             }
 
             return true
@@ -319,19 +302,18 @@ function ProgramsPageContent() {
         }
       })
       .filter((franchise) => franchise.categories.length > 0)
-  }, [franchises, selectedFranchise, selectedCategory, searchQuery, selectedGrade, activeFilter])
+  }, [franchises, selectedFranchise, selectedCategory, searchQuery, selectedAgeRange, activeFilter])
 
+  // Location is a filter only: update state and refetch; no URL navigation
   const handleLocationChange = (value: string) => {
     if (value === 'all') {
       setSelectedFranchise('all')
       setLocationSlug(null)
-      router.push('/programs')
     } else {
       const franchise = allFranchises.find(f => f.code === value)
       if (franchise) {
         setSelectedFranchise(franchise.id)
         setLocationSlug(value)
-        router.push(`/programs?location=${value}`)
       }
     }
   }
@@ -387,79 +369,184 @@ function ProgramsPageContent() {
           </div>
           
           <div className="max-w-7xl mx-auto px-4 relative z-10 text-center">
-            <span className="inline-flex items-center space-x-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-blue-500/20">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Academic Catalog 2026</span>
-            </span>
+            
             <h1 className="text-4xl md:text-6xl font-black text-white mb-6">
               Programs {activeLocName ? `in ${activeLocName}` : 'Across Blaze'}
             </h1>
-            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto mb-4">
               Discover our full range of engineering pathways, from foundational logic to world-class competitive robotics.
+            </p>
+            <p className="text-slate-500 text-sm max-w-xl mx-auto">
+              We organize by <strong className="text-slate-400">location</strong> and <strong className="text-slate-400">learning category</strong>. Each program is a session or term (e.g. Spring 2026); the cards below are <strong className="text-slate-400">bookable classes</strong>—click for schedule, price, and enrollment.
             </p>
           </div>
         </section>
 
-        {/* Filter & Search Bar */}
+        {/* Filter & Search Bar - equal-width sections; Location filter only when no location in URL */}
         <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-20">
-          <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 p-6 flex flex-col xl:flex-row gap-4 items-center">
-            
+          <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch">
             {/* Search */}
-            <div className="relative w-full xl:w-1/4">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <div className="relative w-full sm:flex-1 sm:min-w-0">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
               <input 
                 type="text"
-                placeholder="Search programs..."
+                placeholder="Search programs or classes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
               />
             </div>
 
-            <div className="flex flex-col md:flex-row gap-4 w-full xl:w-3/4">
-              {/* Type Filters - 动态显示当前 franchise 的 categories */}
-              <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto grow">
+            {/* Location filter - only when no location specified in URL */}
+            {!locationFromUrl && (
+              <div className="relative group w-full sm:flex-1 sm:min-w-0">
                 <button
-                  onClick={() => setActiveFilter('all')}
-                  className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex-shrink-0 ${
-                    activeFilter === 'all' 
-                      ? 'bg-white text-blue-600 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
                 >
-                  <Filter className="w-4 h-4" />
-                  <span>All Types</span>
+                  <span className="flex-1 min-w-0 truncate text-left">
+                    {selectedFranchise === 'all'
+                      ? 'All locations'
+                      : (allFranchises.find((f) => f.id === selectedFranchise)?.name ?? 'All locations')}
+                  </span>
+                  <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
                 </button>
-                {availableCategories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setActiveFilter(category.id)}
-                    className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex-shrink-0 ${
-                      activeFilter === category.id 
-                        ? 'bg-white text-blue-600 shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    <span>{category.display_name || category.name}</span>
-                  </button>
-                ))}
+                <div className="absolute top-full left-0 pt-2 w-[min(320px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
+                    <div className="max-h-[min(320px,50vh)] overflow-y-auto py-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLocationChange('all')}
+                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
+                          selectedFranchise === 'all'
+                            ? 'bg-slate-100 text-[#2563eb]'
+                            : 'text-[#1e3a5f] hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                          <MapPin className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0 font-medium">All locations</div>
+                      </button>
+                      {allFranchises.map((franchise) => (
+                        <button
+                          key={franchise.id}
+                          type="button"
+                          onClick={() => handleLocationChange(franchise.code)}
+                          className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
+                            selectedFranchise === franchise.id
+                              ? 'bg-slate-100 text-[#2563eb]'
+                              : 'text-[#1e3a5f] hover:bg-slate-100'
+                          }`}
+                        >
+                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                            <MapPin className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1 min-w-0 font-medium">{franchise.name}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Programs (category) filter - Navbar Categories style dropdown */}
+            <div className="relative group w-full sm:flex-1 sm:min-w-0">
+              <button
+                type="button"
+                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
+              >
+                  <span className="flex-1 min-w-0 truncate text-left">
+                    {activeFilter === 'all'
+                      ? 'All programs'
+                      : (availablePrograms.find((p) => p.id === activeFilter)?.display_name ||
+                         availablePrograms.find((p) => p.id === activeFilter)?.name ||
+                         'All programs')}
+                  </span>
+                  <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
+                </button>
+                <div className="absolute top-full left-0 pt-2 w-[min(320px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
+                    <div className="max-h-[min(400px,60vh)] overflow-y-auto py-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveFilter('all')}
+                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
+                          activeFilter === 'all'
+                            ? 'bg-slate-100 text-[#2563eb]'
+                            : 'text-[#1e3a5f] hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                          <BookOpen className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0 font-medium">All programs</div>
+                      </button>
+                      {programsGroupedByCategory.map((group) => (
+                        <div key={group.categoryId} className="border-b border-slate-100 last:border-b-0">
+                          <div className="px-3 py-2 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 sticky top-0">
+                            {group.categoryDisplayName}
+                          </div>
+                          {group.programs.map((program) => (
+                            <button
+                              key={program.id}
+                              type="button"
+                              onClick={() => setActiveFilter(program.id)}
+                              className={`flex gap-3 px-3 py-2 pl-5 text-sm transition-colors w-full text-left border-b border-slate-50 last:border-b-0 ${
+                                activeFilter === program.id
+                                  ? 'bg-slate-100 text-[#2563eb]'
+                                  : 'text-[#1e3a5f] hover:bg-slate-100'
+                              }`}
+                            >
+                              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                <BookOpen className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="flex-1 min-w-0 font-medium">
+                                {program.display_name || program.name}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Grade Level Selector */}
-              <div className="md:w-48 shrink-0">
-                <select 
-                  value={selectedGrade}
-                  onChange={(e) => setSelectedGrade(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all cursor-pointer appearance-none shadow-sm"
-                >
-                  <option value="all">All Grades</option>
-                  {allGrades
-                    .filter((g) => g && typeof g === 'string' && g.trim() !== '')
-                    .map((grade) => (
-                    <option key={grade} value={grade}>{grade}</option>
-                  ))}
-                </select>
+            {/* Age Range Selector - same style as All Programs dropdown */}
+            <div className="relative group w-full sm:flex-1 sm:min-w-0">
+              <button
+                type="button"
+                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
+              >
+                <span className="flex-1 min-w-0 truncate text-left">
+                  {ageRangeOptions.find((o) => o.value === selectedAgeRange)?.label ?? 'All Ages'}
+                </span>
+                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
+              </button>
+              <div className="absolute top-full left-0 pt-2 w-[min(280px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
+                  <div className="py-2">
+                    {ageRangeOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setSelectedAgeRange(opt.value)}
+                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-b-0 ${
+                          selectedAgeRange === opt.value
+                            ? 'bg-slate-100 text-[#2563eb]'
+                            : 'text-[#1e3a5f] hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0 font-medium">{opt.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -468,6 +555,11 @@ function ProgramsPageContent() {
         {/* Results - Hierarchical Display */}
         <section className="py-16 px-4">
           <div className="max-w-7xl mx-auto">
+            {hierarchicalData.length > 0 && (
+              <p className="text-slate-500 text-sm text-center mb-10 max-w-2xl mx-auto">
+                Classes are grouped by location and learning category. Each card is a specific class (date, time, campus). Tap a card for full details and to enroll.
+              </p>
+            )}
             {hierarchicalData.length > 0 ? (
               <div className="space-y-12">
                 {hierarchicalData
@@ -485,12 +577,15 @@ function ProgramsPageContent() {
                     {franchise.categories.map((category) => (
                       <div key={category.id} className="space-y-6">
                         {/* Category Header */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <span className="bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider">
                             {category.display_name}
                           </span>
                           <span className="text-slate-500 text-sm font-medium">
-                            {category.programs.length} Program{category.programs.length !== 1 ? 's' : ''}
+                            {category.programs.length} session{category.programs.length !== 1 ? 's' : ''}
+                          </span>
+                          <span className="text-slate-400 text-xs hidden sm:inline">
+                            — classes you can enroll in below
                           </span>
                         </div>
 
@@ -526,89 +621,96 @@ function ProgramsPageContent() {
 
                                 // 获取位置
                                 const locationName = instance.location?.name || franchise.name || 'Multiple Locations'
+                                const categorySlug = (program.category?.name || '').replace(/_/g, '-')
+                                const instanceDetailHref = categorySlug
+                                  ? `/category/${categorySlug}/instance/${instance.id}`
+                                  : `/category/explore/instance/${instance.id}`
+                                const amiliaEnrollUrl = 'https://app.amilia.com/store/en/blazeroboticsacademy/shop/programs'
 
                                 return (
-                                  <div 
-                                    key={instance.id} 
-                                    onClick={() => {
-                                      if (instance.course.slug) {
-                                        const params = new URLSearchParams()
-                                        params.set('instance', instance.id)
-                                        params.set('franchise', franchise.code)
-                                        navigate(`/course-catalog/${encodeURIComponent(instance.course.slug)}?${params.toString()}`)
-                                      } else {
-                                        const params = new URLSearchParams()
-                                        params.set('instance', instance.id)
-                                        params.set('franchise', franchise.code)
-                                        navigate(`/course-catalog?${params.toString()}`)
-                                      }
-                                    }}
-                                    className="group bg-white rounded-[32px] overflow-hidden border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 cursor-pointer flex flex-col h-full"
+                                  <div
+                                    key={instance.id}
+                                    className="group bg-white rounded-[32px] overflow-hidden border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col h-full"
                                   >
-                                    <div className="h-64 relative overflow-hidden">
-                                      <Image
-                                        src={image}
-                                        alt={instance.course.name || program.display_name || program.name}
-                                        fill
-                                        className="object-cover group-hover:scale-110 transition-transform duration-700"
-                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                      />
-                                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-80"></div>
-                                      
-                                      <div className="absolute top-4 left-4 flex flex-col gap-2">
-                                        <span className="bg-white/90 backdrop-blur-md text-slate-900 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
-                                          {ageGroup}
-                                        </span>
-                                      </div>
+                                    <Link href={instanceDetailHref} className="flex flex-col flex-grow">
+                                      <div className="h-64 relative overflow-hidden">
+                                        <Image
+                                          src={image}
+                                          alt={instance.course.name || program.display_name || program.name}
+                                          fill
+                                          className="object-cover group-hover:scale-110 transition-transform duration-700"
+                                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                        />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-80"></div>
 
-                                      <div className="absolute bottom-4 left-4 right-4">
-                                        <p className="text-white text-sm font-bold flex items-center">
-                                          <MapPin className="w-3.5 h-3.5 mr-1 text-blue-400" />
-                                          {locationName}
-                                        </p>
-                                        {instance.available_spots !== undefined && (
-                                          <p className="text-white/90 text-xs mt-1">
-                                            {instance.is_full ? 'Full' : `${instance.available_spots} spots available`}
+                                        <div className="absolute top-4 left-4 flex flex-col gap-2">
+                                          <span className="bg-white/90 backdrop-blur-md text-slate-900 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                            {ageGroup}
+                                          </span>
+                                        </div>
+
+                                        <div className="absolute bottom-4 left-4 right-4">
+                                          <p className="text-white text-sm font-bold flex items-center">
+                                            <MapPin className="w-3.5 h-3.5 mr-1 text-blue-400" />
+                                            {locationName}
                                           </p>
-                                        )}
+                                          {instance.available_spots !== undefined && (
+                                            <p className="text-white/90 text-xs mt-1">
+                                              {instance.is_full ? 'Full' : `${instance.available_spots} spots available`}
+                                            </p>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
 
-                                    <div className="p-8 flex flex-col flex-grow">
-                                      <div className="flex justify-between items-start mb-3">
-                                        <div className="flex-1">
-                                          <div className="flex items-center gap-2 flex-wrap mb-2">
-                                            <h3 className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">
-                                              {instance.course.name || program.name}
-                                            </h3>
-                                            {program.display_name && instance.course.name !== program.display_name && (
-                                              <Badge variant="secondary" className="text-xs font-semibold">
-                                                {program.display_name}
-                                              </Badge>
-                                            )}
+                                      <div className="p-8 flex flex-col flex-grow">
+                                        <div className="flex justify-between items-start mb-3">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                                              <h3 className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">
+                                                {instance.course.name || program.name}
+                                              </h3>
+                                              {program.display_name && instance.course.name !== program.display_name && (
+                                                <Badge variant="secondary" className="text-xs font-semibold">
+                                                  {program.display_name}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <p className="text-slate-500 text-sm mb-6 line-clamp-3 leading-relaxed">
+                                          {instance.course.description || ''}
+                                        </p>
+
+                                        <div className="mt-auto">
+                                          <div className="flex items-center text-slate-600 text-sm mb-6 bg-slate-50 p-3 rounded-xl">
+                                            <Calendar className="w-4 h-4 mr-2 text-blue-500" />
+                                            <span className="font-medium">{dates}</span>
                                           </div>
                                         </div>
                                       </div>
-                                      <p className="text-slate-500 text-sm mb-6 line-clamp-3 leading-relaxed">
-                                        {instance.course.description || ''}
-                                      </p>
-                                      
-                                      <div className="mt-auto">
-                                        <div className="flex items-center text-slate-600 text-sm mb-6 bg-slate-50 p-3 rounded-xl">
-                                          <Calendar className="w-4 h-4 mr-2 text-blue-500" />
-                                          <span className="font-medium">{dates}</span>
-                                        </div>
-
-                                        <div className="flex items-center justify-between pt-6 border-t border-slate-100">
-                                          <div>
-                                            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Enrollment</p>
-                                            <p className="text-2xl font-black text-slate-900">${basePrice.toFixed(2)}</p>
-                                          </div>
-                                          <button className="bg-[#0f172a] group-hover:bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center">
-                                            Details
-                                            <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                                          </button>
-                                        </div>
+                                    </Link>
+                                    <div className="px-8 pb-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-6">
+                                      <div>
+                                        <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Enrollment</p>
+                                        <p className="text-2xl font-black text-slate-900">${basePrice.toFixed(2)}</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Link
+                                          href={instanceDetailHref}
+                                          className="bg-[#0f172a] hover:bg-slate-800 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all inline-flex items-center justify-center"
+                                        >
+                                          <ArrowRight className="w-4 h-4 md:mr-2 transition-transform group-hover:translate-x-1" />
+                                          <span className="hidden md:inline">Details</span>
+                                        </Link>
+                                        <a
+                                          href={amiliaEnrollUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="bg-[#2563eb] hover:bg-blue-600 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all inline-flex items-center justify-center"
+                                        >
+                                          <ExternalLink className="w-4 h-4 md:mr-2" />
+                                          <span className="hidden md:inline">Enroll</span>
+                                        </a>
                                       </div>
                                     </div>
                                   </div>
@@ -626,14 +728,17 @@ function ProgramsPageContent() {
                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <Search className="w-10 h-10 text-slate-300" />
                 </div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Programs</h2>
-                <p className="text-slate-500 max-w-md mx-auto mb-8">
-                  We couldn't find any programs matching your filters {activeLocName ? `at the ${activeLocName} campus` : ''}.
+                <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Classes</h2>
+                <p className="text-slate-500 max-w-md mx-auto mb-4">
+                  We couldn&apos;t find any classes matching your filters {activeLocName ? `at ${activeLocName}` : ''}. Try another location, category, or age—or clear filters to see everything we offer.
+                </p>
+                <p className="text-slate-400 text-sm max-w-sm mx-auto mb-8">
+                  Programs are sessions (e.g. Spring 2026) under each learning category; the classes listed here are the bookable options. If you have a campus in mind, select it in the navbar and browse again.
                 </p>
                 <button 
                   onClick={() => { 
                     setActiveFilter('all'); 
-                    setSelectedGrade('all'); 
+                    setSelectedAgeRange('all'); 
                     setSearchQuery(''); 
                     setSelectedCategory('all');
                     if (locationSlug) {

@@ -24,8 +24,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, UserPlus, Plus, Link as LinkIcon } from "lucide-react"
+import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, UserPlus, Plus, Link as LinkIcon, ChevronLeft, ChevronRight } from "lucide-react"
 import { UserEditDialog } from "@/components/admin/UserEditDialog"
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog"
 import Link from "next/link"
@@ -47,9 +54,13 @@ interface User {
   must_change_password?: boolean
 }
 
+const PAGE_SIZE_OPTIONS = [10, 50, 100] as const
+
 export default function UsersManagementPage() {
   const [users, setUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [pageSize, setPageSize] = useState<number>(10)
+  const [currentPage, setCurrentPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -60,15 +71,27 @@ export default function UsersManagementPage() {
   }, [])
 
   const filteredUsers = useMemo(() => {
-    if (searchQuery) {
-      return users.filter(
-        (user) =>
-          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-    return users
-  }, [searchQuery, users])
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return users
+    return users.filter(
+      (user) =>
+        user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
+    )
+  }, [users, searchQuery])
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredUsers.slice(start, start + pageSize)
+  }, [filteredUsers, currentPage, pageSize])
+
+  useEffect(() => {
+    setCurrentPage((p) => (p > totalPages ? totalPages : p))
+  }, [totalPages])
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
 
   const fetchUsers = async () => {
     try {
@@ -189,22 +212,49 @@ export default function UsersManagementPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Users</CardTitle>
-              <CardDescription>
-                A list of all users in the system
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Users</CardTitle>
+                <CardDescription>
+                  A list of all users in the system
+                </CardDescription>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search users..."
+                  placeholder="Search by Name or Email..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setCurrentPage(1)
+                  }}
                   className="pl-10 w-64"
                 />
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Show</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => {
+                    setPageSize(Number(v))
+                    setCurrentPage(1)
+                  }}
+                >
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">per page</span>
               </div>
             </div>
           </div>
@@ -219,6 +269,7 @@ export default function UsersManagementPage() {
               {searchQuery ? "No users found matching your search." : "No users found."}
             </div>
           ) : (
+            <>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
@@ -233,7 +284,7 @@ export default function UsersManagementPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {paginatedUsers.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">{user.name}</TableCell>
                       <TableCell>
@@ -366,6 +417,35 @@ export default function UsersManagementPage() {
                 </TableBody>
               </Table>
             </div>
+            <div className="flex items-center justify-between gap-4 mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredUsers.length)} of {filteredUsers.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground px-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

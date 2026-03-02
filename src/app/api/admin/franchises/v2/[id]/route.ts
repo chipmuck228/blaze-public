@@ -56,6 +56,7 @@ export async function PUT(
       name,
       domain,
       logo_url,
+      poster_url,
       branding_config,
       marketing_config,
       contact_email,
@@ -130,6 +131,7 @@ export async function PUT(
     if (name !== undefined) updateData.name = name
     if (domain !== undefined) updateData.domain = domain || null
     if (logo_url !== undefined) updateData.logo_url = logo_url || null
+    if (poster_url !== undefined) updateData.poster_url = poster_url || null
     if (branding_config !== undefined) updateData.branding_config = branding_config || {}
     if (marketing_config !== undefined) updateData.marketing_config = marketing_config || {}
     if (contact_email !== undefined) updateData.contact_email = contact_email || null

@@ -28,8 +28,10 @@ export default function Home() {
   const [franchises, setFranchises] = useState<Array<{
     id: string;
     code: string;
-    name: string | null;
-    location_count: number;
+    name: string;
+    poster_url: string | null;
+    program_count: number;
+    campus_count: number;
   }>>([]);
   const [isLoadingFranchises, setIsLoadingFranchises] = useState(true);
   const [franchisesError, setFranchisesError] = useState<string | null>(null);
@@ -108,18 +110,26 @@ export default function Home() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // 加载公开 franchises，用于首页 Location 卡片
+  // 加载公开 v2 franchises（含 program_count、campus_count），用于首页 Location 列表
   useEffect(() => {
     const fetchFranchises = async () => {
       try {
         setIsLoadingFranchises(true);
         setFranchisesError(null);
-        const res = await fetch("/api/public/franchises");
+        const res = await fetch("/api/public/franchises-v2");
         if (!res.ok) {
           throw new Error("Failed to load franchises");
         }
         const data = await res.json();
-        setFranchises(data || []);
+        const list = Array.isArray(data) ? data : [];
+        setFranchises(list.map((f: any) => ({
+          id: f.id,
+          code: f.code,
+          name: f.name ?? "",
+          poster_url: f.poster_url ?? null,
+          program_count: f.program_count ?? 0,
+          campus_count: f.campus_count ?? 0,
+        })));
       } catch (err: any) {
         console.error("Error fetching public franchises:", err);
         setFranchisesError(err.message || "Failed to load franchises");
@@ -210,11 +220,12 @@ export default function Home() {
             </div>
           ) : (
             (() => {
-              // 直接使用 franchises 数据，已经包含了 location_count
               const franchiseCards = franchises.map((fr) => ({
                 code: fr.code,
-                name: fr.name || fr.code.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-                campusCount: fr.location_count,
+                name: fr.name,
+                posterUrl: fr.poster_url,
+                programCount: fr.program_count,
+                campusCount: fr.campus_count,
               }));
 
               return (
@@ -251,14 +262,8 @@ export default function Home() {
                         >
                           {franchiseCards.map((fr) => {
                             const href = `/locations/${encodeURIComponent(fr.code)}`;
-
-                            const baseDescription = "Local campus";
-                            const campusSuffix =
-                              fr.campusCount > 1
-                                ? ` • ${fr.campusCount} campuses`
-                                : fr.campusCount === 1
-                                  ? " • 1 campus"
-                                  : " • Coming soon";
+                            const programLabel = fr.programCount === 1 ? "1 program" : `${fr.programCount} programs`;
+                            const campusLabel = fr.campusCount === 1 ? "1 campus" : `${fr.campusCount} campuses`;
 
                             return (
                               <Link
@@ -267,12 +272,21 @@ export default function Home() {
                                 className="group relative border rounded-xl p-2 bg-card hover:bg-accent/50 transition-all duration-300 flex items-center justify-between shadow-sm hover:shadow-lg hover:border-primary/50"
                               >
                                 <div className="flex items-center gap-6 flex-1">
-                                  <div className="flex-shrink-0">
-                                    <div className="w-16 h-16 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                                      <span className="text-2xl font-bold text-primary">
-                                        {fr.name.charAt(0).toUpperCase()}
-                                      </span>
-                                    </div>
+                                  <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-transparent">
+                                    {fr.posterUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={fr.posterUrl}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center bg-transparent transition-colors">
+                                        <span className="text-2xl font-bold text-primary">
+                                          {fr.name.charAt(0).toUpperCase()}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-3 mb-1">
@@ -281,8 +295,7 @@ export default function Home() {
                                       </h4>
                                     </div>
                                     <p className="text-sm text-muted-foreground">
-                                      {baseDescription}
-                                      {campusSuffix}
+                                      {programLabel} • {campusLabel}
                                     </p>
                                   </div>
                                 </div>

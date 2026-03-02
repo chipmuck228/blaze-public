@@ -78,11 +78,19 @@ interface Program {
   franchise_id: string
 }
 
+interface Franchise {
+  id: string
+  code: string
+  name: string
+}
+
 export default function BlazeInstanceManagementPage() {
   const [instances, setInstances] = useState<Instance[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
+  const [franchises, setFranchises] = useState<Franchise[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedFranchiseFilter, setSelectedFranchiseFilter] = useState<string>("all")
   const [selectedProgramFilter, setSelectedProgramFilter] = useState<string>("all")
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("all")
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false)
@@ -90,21 +98,29 @@ export default function BlazeInstanceManagementPage() {
   const [editingInstance, setEditingInstance] = useState<Instance | null>(null)
 
   useEffect(() => {
-    fetchInstances()
     fetchPrograms()
-  }, [selectedProgramFilter, selectedStatusFilter])
+    fetchFranchises()
+  }, [])
+
+  useEffect(() => {
+    fetchInstances()
+  }, [selectedFranchiseFilter, selectedProgramFilter, selectedStatusFilter])
 
   const fetchInstances = async () => {
     try {
       setIsLoading(true)
       const params = new URLSearchParams()
+      if (selectedFranchiseFilter !== "all") {
+        params.set("franchiseId", selectedFranchiseFilter)
+      }
       if (selectedProgramFilter !== "all") {
         params.set("programId", selectedProgramFilter)
       }
       if (selectedStatusFilter !== "all") {
         params.set("status", selectedStatusFilter)
       }
-      params.set("activeOnly", "true")
+      // 默认显示全部（含 is_active=false），避免有数据却显示 No instances found
+      params.set("activeOnly", "false")
 
       const response = await fetch(`/api/admin/instance/v2?${params.toString()}`)
       if (response.ok) {
@@ -129,6 +145,18 @@ export default function BlazeInstanceManagementPage() {
       }
     } catch (error) {
       console.error("Error fetching programs:", error)
+    }
+  }
+
+  const fetchFranchises = async () => {
+    try {
+      const response = await fetch("/api/admin/franchises/v2")
+      if (response.ok) {
+        const data = await response.json()
+        setFranchises(data || [])
+      }
+    } catch (error) {
+      console.error("Error fetching franchises:", error)
     }
   }
 
@@ -228,7 +256,7 @@ export default function BlazeInstanceManagementPage() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Search</label>
               <div className="relative">
@@ -240,6 +268,22 @@ export default function BlazeInstanceManagementPage() {
                   className="pl-8"
                 />
               </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Franchise</label>
+              <Select value={selectedFranchiseFilter} onValueChange={setSelectedFranchiseFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Franchises" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Franchises</SelectItem>
+                  {franchises.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">Program</label>

@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "./ui/button"
-import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy, Rocket, Zap, Lightbulb } from "lucide-react"
+import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy, Rocket } from "lucide-react"
 import Link from "next/link"
-import Image from "next/image"
 
+/** V2 全局类别（v2_category 表，is_active = true） */
 interface Category {
   id: string
   name: string
   display_name: string
   description?: string | null
-  is_active: boolean
   poster_url?: string | null
+  display_order?: number
 }
 
 // 根据 v2_category 的 name 字段映射图标和颜色
@@ -93,6 +93,7 @@ export const Categories = () => {
       try {
         setIsLoading(true)
         setError(null)
+        // 从 v2_category 获取全局类别（仅 is_active = true）
         const response = await fetch('/api/public/categories')
         if (!response.ok) {
           throw new Error('Failed to fetch categories')
@@ -138,10 +139,10 @@ export const Categories = () => {
     <section className="bg-[#0f172a] text-white pt-16 pb-8">
       <div className="text-center mb-12 md:mb-16">
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-          Inspire & Empower
+          Blaze Categories
         </h2>
         <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-          Explore our diverse range of educational categories designed to inspire and empower learners
+          Explore our categories—each location may offer a selection of these. Choose a category to see available programs.
         </p>
       </div>
 
@@ -149,47 +150,42 @@ export const Categories = () => {
         {categories.map((category, index) => {
           const gradient = getCategoryGradient(category.name)
           const icon = getCategoryIcon(category.name)
-          
+          const href = `/programs?category=${encodeURIComponent(category.id)}`
+
           return (
-            <div
+            <Link
               key={category.id}
-              onClick={() => window.location.href = `/programs?category=${category.id}`}
-              className="w-full md:w-[calc(50%-1rem)] lg:w-[calc(25%-1.5rem)] max-w-sm bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col"
+              href={href}
+              className="w-full md:w-[calc(50%-1rem)] lg:w-[calc(25%-1.5rem)] max-w-sm bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              {/* Image/Gradient Header */}
+              {/* Poster / Gradient Header */}
               <div className="h-48 relative overflow-hidden shrink-0">
                 {category.poster_url ? (
                   <>
-                    <Image
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
                       src={category.poster_url}
-                      alt={category.display_name}
-                      fill
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                      priority={index < 2}
-                      sizes="(max-width: 768px) 100%, (max-width: 1024px) 50%, 25%"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
                   </>
                 ) : (
-                  <div 
+                  <div
                     className="w-full h-full flex items-center justify-center"
                     style={{
                       background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
                     }}
                   >
                     <div className="w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg bg-white/20 backdrop-blur-sm">
-                  {icon}
+                      {icon}
                     </div>
                   </div>
                 )}
-                
-                {/* Badges */}
+
                 <div className="absolute top-4 left-4 flex flex-col gap-2 items-start">
-                  <span 
-                    className="bg-[#2563eb] text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm uppercase tracking-wide"
+                  <span
+                    className="text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm uppercase tracking-wide"
                     style={{
                       background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`
                     }}
@@ -198,30 +194,27 @@ export const Categories = () => {
                   </span>
                 </div>
               </div>
-              
-              {/* Content */}
+
+              {/* Content: display_name, description */}
               <div className="p-6 flex flex-col flex-grow">
                 <h4 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-1">
                   {category.display_name}
                 </h4>
-                {category.description && (
+                {category.description ? (
                   <p className="text-slate-500 text-sm mb-4 line-clamp-2">{category.description}</p>
-                )}
-                {!category.description && (
+                ) : (
                   <p className="text-slate-500 text-sm mb-4 line-clamp-2">
-                    Explore our {category.display_name.toLowerCase()} programs designed for all skill levels.
+                    Explore {category.display_name} programs at our locations.
                   </p>
                 )}
-                
-                <div className="mt-auto">
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                    <span className="text-blue-600 font-bold text-sm flex items-center group-hover:translate-x-1 transition-transform">
-                      Explore <ArrowRight className="w-4 h-4 ml-1" />
-                    </span>
-                  </div>
+
+                <div className="mt-auto pt-4 border-t border-slate-100">
+                  <span className="text-blue-600 font-bold text-sm inline-flex items-center group-hover:translate-x-1 transition-transform">
+                    Explore <ArrowRight className="w-4 h-4 ml-1" />
+                  </span>
                 </div>
               </div>
-                </div>
+            </Link>
           )
         })}
       </div>

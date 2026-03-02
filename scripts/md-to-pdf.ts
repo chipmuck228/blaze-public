@@ -79,11 +79,11 @@ Markdown to PDF 转换工具
   # 转换单个文件并指定输出
   npm run md-to-pdf PRD-01-项目概述与产品定位.md output.pdf
   
-  # 转换目录中所有 PRD 文件
-  npm run md-to-pdf -- --dir . --pattern "PRD-*.md" --output pdfs/
+  # 转换目录中所有 PRD 文件（PRD 已归置到 docs/prd/）
+  npm run md-to-pdf -- --dir docs/prd --pattern "PRD-*.md" --output pdfs/
   
   # 转换目录中所有 .md 文件
-  npm run md-to-pdf -- --dir . --output pdfs/
+  npm run md-to-pdf -- --dir docs/prd --output pdfs/
 `)
 }
 

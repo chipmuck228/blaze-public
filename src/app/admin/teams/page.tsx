@@ -12,22 +12,31 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2 } from "lucide-react"
+import {
+  Search,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Plus,
+  Loader2,
+  Star,
+  CircleOff,
+  CheckCircle2,
+  Linkedin,
+  Twitter,
+  Facebook,
+  Instagram,
+  Youtube,
+  Globe,
+  Link2,
+  User,
+} from "lucide-react"
 import { TeamEditDialog } from "@/components/admin/TeamEditDialog"
-import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 
 interface TeamMember {
@@ -54,6 +63,17 @@ interface TeamMember {
     image?: string
     role: string
   }
+}
+
+function getSocialIcon(name: string) {
+  const n = name.toLowerCase()
+  if (n.includes("linkedin")) return Linkedin
+  if (n.includes("twitter") || n === "x") return Twitter
+  if (n.includes("facebook") || n.includes("fb")) return Facebook
+  if (n.includes("instagram") || n.includes("ig")) return Instagram
+  if (n.includes("youtube") || n.includes("yt")) return Youtube
+  if (n.includes("link") || n.includes("url")) return Link2
+  return Globe
 }
 
 function TeamsManagementPageContent() {
@@ -207,97 +227,101 @@ function TeamsManagementPageContent() {
               {searchQuery ? "No team members found matching your search." : "No team members yet."}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Image</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Social Networks</TableHead>
-                  <TableHead>Order</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTeams.map((team) => (
-                  <TableRow key={team.id}>
-                    <TableCell>
-                      <div className="relative w-12 h-12 rounded-full overflow-hidden">
-                        <Image
-                          src={team.image_url}
-                          alt={team.name}
-                          fill
-                          className="object-cover"
-                        />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredTeams.map((team) => (
+                <Card key={team.id} className="overflow-hidden flex flex-col">
+                  <div className="flex items-start gap-3 p-4">
+                    <div className="relative w-14 h-14 shrink-0 rounded-full overflow-hidden bg-muted">
+                      <Image
+                        src={team.image_url}
+                        alt={team.name}
+                        fill
+                        className="object-cover"
+                        sizes="56px"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-sm truncate">{team.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{team.position}</p>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(team)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(team.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{team.name}</TableCell>
-                    <TableCell>
                       {team.user ? (
-                        <div className="flex flex-col">
-                          <span className="font-medium">{team.user.name}</span>
-                          <span className="text-xs text-muted-foreground">{team.user.email}</span>
+                        <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground truncate">
+                          <User className="h-3.5 w-3.5 shrink-0" />
+                          <span title={team.user.email}>{team.user.name}</span>
                         </div>
                       ) : (
-                        <span className="text-muted-foreground text-sm">No user linked</span>
+                        <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+                          <User className="h-3.5 w-3.5 shrink-0" />
+                          <span>No user linked</span>
+                        </div>
                       )}
-                    </TableCell>
-                    <TableCell>{team.position}</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {team.description}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {team.is_featured && (
-                          <Badge variant="default" className="w-fit">Featured</Badge>
-                        )}
-                        {!team.is_active && (
-                          <Badge variant="secondary" className="w-fit">Inactive</Badge>
-                        )}
+                    </div>
+                  </div>
+                  {team.description && (
+                    <div className="px-4 pb-2">
+                      <p className="text-xs text-muted-foreground line-clamp-2">{team.description}</p>
+                    </div>
+                  )}
+                  <CardContent className="pt-0 pb-4 px-4 flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5" title={team.is_featured ? "Featured" : team.is_active !== false ? "Active" : "Inactive"}>
+                      {team.is_featured && (
+                        <Star className="h-4 w-4 text-amber-500 fill-amber-500" aria-label="Featured" />
+                      )}
+                      {team.is_active === false ? (
+                        <CircleOff className="h-4 w-4 text-muted-foreground" aria-label="Inactive" />
+                      ) : (
+                        !team.is_featured && (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" aria-label="Active" />
+                        )
+                      )}
+                    </div>
+                    {team.social_networks.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        {team.social_networks.map((sn) => {
+                          const Icon = getSocialIcon(sn.name)
+                          return (
+                            <a
+                              key={sn.id}
+                              href={sn.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted"
+                              title={`${sn.name}: ${sn.url}`}
+                              aria-label={sn.name}
+                            >
+                              <Icon className="h-4 w-4" />
+                            </a>
+                          )
+                        })}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {team.social_networks.map((sn) => (
-                          <span
-                            key={sn.id}
-                            className="text-xs bg-secondary px-2 py-1 rounded"
-                          >
-                            {sn.name}
-                          </span>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>{team.display_order}</TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(team)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(team.id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

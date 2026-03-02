@@ -67,8 +67,18 @@ export default function TrafficPage() {
   const [devices, setDevices] = useState<any>(null)
   const [browsers, setBrowsers] = useState<any>(null)
   const [operatingSystems, setOperatingSystems] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [visitsChartLoading, setVisitsChartLoading] = useState(true)
+  const [visitsChartError, setVisitsChartError] = useState<string | null>(null)
+  const [sourcesLoading, setSourcesLoading] = useState(true)
+  const [sourcesError, setSourcesError] = useState<string | null>(null)
+  const [devicesLoading, setDevicesLoading] = useState(true)
+  const [devicesError, setDevicesError] = useState<string | null>(null)
+  const [browsersLoading, setBrowsersLoading] = useState(true)
+  const [browsersError, setBrowsersError] = useState<string | null>(null)
+  const [osLoading, setOsLoading] = useState(true)
+  const [osError, setOsError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(true)
 
@@ -148,7 +158,6 @@ export default function TrafficPage() {
     }, [dateRange]),
   })
 
-  // 使用 useMemo 缓存数据检查
   const hasData = useMemo(
     () =>
       summary ||
@@ -159,83 +168,91 @@ export default function TrafficPage() {
       (operatingSystems && operatingSystems.operating_systems.length > 0),
     [summary, visitsChart, sources, devices, browsers, operatingSystems]
   )
+  const anyError = summaryError || visitsChartError || sourcesError || devicesError || browsersError || osError
 
-  const fetchAllData = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const [summaryRes, visitsChartRes, sourcesRes, devicesRes, browsersRes, osRes] =
-        await Promise.all([
-          fetch(`/api/admin/traffic/summary?${queryString}`),
-          fetch(`/api/admin/traffic/visits-chart?${queryString}`),
-          fetch(`/api/admin/traffic/sources?${queryString}`),
-          fetch(`/api/admin/traffic/devices?${queryString}`),
-          fetch(`/api/admin/traffic/browsers?${queryString}`),
-          fetch(`/api/admin/traffic/operating-systems?${queryString}`),
-        ])
+  const fetchAllData = useCallback(() => {
+    setSummaryLoading(true)
+    setSummaryError(null)
+    setVisitsChartLoading(true)
+    setVisitsChartError(null)
+    setSourcesLoading(true)
+    setSourcesError(null)
+    setDevicesLoading(true)
+    setDevicesError(null)
+    setBrowsersLoading(true)
+    setBrowsersError(null)
+    setOsLoading(true)
+    setOsError(null)
 
-      // 检查是否有错误响应
-      const errors: string[] = []
-      if (!summaryRes.ok) {
-        const errorData = await summaryRes.json().catch(() => ({}))
-        errors.push(`Summary: ${errorData.error || 'Failed to fetch'}`)
-      }
-      if (!visitsChartRes.ok) {
-        const errorData = await visitsChartRes.json().catch(() => ({}))
-        errors.push(`Visits Chart: ${errorData.error || 'Failed to fetch'}`)
-      }
-
-      if (errors.length > 0) {
-        setError(errors.join(', '))
-      }
-
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json()
-        setSummary(summaryData)
-      } else {
-        setSummary(null)
-      }
-
-      if (visitsChartRes.ok) {
-        const visitsChartData = await visitsChartRes.json()
-        setVisitsChart(visitsChartData)
-      } else {
-        setVisitsChart(null)
-      }
-
-      if (sourcesRes.ok) {
-        const sourcesData = await sourcesRes.json()
-        setSources(sourcesData)
-      } else {
-        setSources(null)
-      }
-
-      if (devicesRes.ok) {
-        const devicesData = await devicesRes.json()
-        setDevices(devicesData)
-      } else {
-        setDevices(null)
-      }
-
-      if (browsersRes.ok) {
-        const browsersData = await browsersRes.json()
-        setBrowsers(browsersData)
-      } else {
-        setBrowsers(null)
-      }
-
-      if (osRes.ok) {
-        const osData = await osRes.json()
-        setOperatingSystems(osData)
-      } else {
-        setOperatingSystems(null)
-      }
-    } catch (error: any) {
-      console.error('Error fetching traffic data:', error)
-      setError(error.message || 'Failed to fetch traffic data')
-    } finally {
-      setIsLoading(false)
-    }
+    const base = '/api/admin/traffic'
+    Promise.all([
+      fetch(`${base}/summary?${queryString}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to fetch')
+          }
+          return res.json()
+        })
+        .then(setSummary)
+        .catch((e: any) => setSummaryError(e?.message || 'Failed'))
+        .finally(() => setSummaryLoading(false)),
+      fetch(`${base}/visits-chart?${queryString}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to fetch')
+          }
+          return res.json()
+        })
+        .then(setVisitsChart)
+        .catch((e: any) => setVisitsChartError(e?.message || 'Failed'))
+        .finally(() => setVisitsChartLoading(false)),
+      fetch(`${base}/sources?${queryString}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to fetch')
+          }
+          return res.json()
+        })
+        .then(setSources)
+        .catch((e: any) => setSourcesError(e?.message || 'Failed'))
+        .finally(() => setSourcesLoading(false)),
+      fetch(`${base}/devices?${queryString}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to fetch')
+          }
+          return res.json()
+        })
+        .then(setDevices)
+        .catch((e: any) => setDevicesError(e?.message || 'Failed'))
+        .finally(() => setDevicesLoading(false)),
+      fetch(`${base}/browsers?${queryString}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to fetch')
+          }
+          return res.json()
+        })
+        .then(setBrowsers)
+        .catch((e: any) => setBrowsersError(e?.message || 'Failed'))
+        .finally(() => setBrowsersLoading(false)),
+      fetch(`${base}/operating-systems?${queryString}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error || 'Failed to fetch')
+          }
+          return res.json()
+        })
+        .then(setOperatingSystems)
+        .catch((e: any) => setOsError(e?.message || 'Failed'))
+        .finally(() => setOsLoading(false)),
+    ])
   }, [queryString])
 
   useEffect(() => {
@@ -273,33 +290,6 @@ export default function TrafficPage() {
       setIsExporting(false)
     }
   }, [summary, visitsChart, sources, devices, browsers, operatingSystems])
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading traffic data...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !hasData) {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">Traffic</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <DateRangePicker value={dateRange} onChange={setDateRange} />
-          </div>
-        </div>
-        <ErrorState message={error} onRetry={fetchAllData} />
-      </div>
-    )
-  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -361,12 +351,12 @@ export default function TrafficPage() {
 
         <TabsContent value="traffic" className="space-y-6">
           {/* Error Banner */}
-          {error && hasData && (
+          {anyError && hasData && (
             <Card className="border-destructive/50 bg-destructive/10">
               <CardContent className="flex items-center gap-2 py-4">
                 <AlertCircle className="h-5 w-5 text-destructive" />
                 <p className="text-sm text-destructive">
-                  Some data failed to load: {error}
+                  Some data failed to load. Use Retry to reload.
                 </p>
                 <Button
                   variant="ghost"
@@ -381,14 +371,39 @@ export default function TrafficPage() {
           )}
 
           {/* Summary Cards */}
-          {summary ? (
+          {summaryLoading && (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </CardContent>
+            </Card>
+          )}
+          {summaryError && !summaryLoading && (
+            <ErrorState message={summaryError} onRetry={fetchAllData} title="Summary failed" />
+          )}
+          {!summaryLoading && !summaryError && summary && (
             <TrafficSummaryCards data={summary} />
-          ) : (
-            !isLoading && <EmptyState title="No summary data" />
+          )}
+          {!summaryLoading && !summaryError && !summary && (
+            <EmptyState title="No summary data" />
           )}
 
           {/* Visits Chart */}
-          {visitsChart && visitsChart.data.length > 0 ? (
+          {visitsChartLoading && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Visits</CardTitle>
+                <CardDescription>Loading...</CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </CardContent>
+            </Card>
+          )}
+          {visitsChartError && !visitsChartLoading && (
+            <ErrorState message={visitsChartError} onRetry={fetchAllData} title="Visits chart failed" />
+          )}
+          {!visitsChartLoading && !visitsChartError && visitsChart && visitsChart.data.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Visits</CardTitle>
@@ -402,16 +417,29 @@ export default function TrafficPage() {
                 <VisitsLineChart data={visitsChart.data} />
               </CardContent>
             </Card>
-          ) : (
-            !isLoading && visitsChart && visitsChart.data.length === 0 && (
-              <EmptyState title="No visits data" description="No visits recorded for the selected time range." />
-            )
+          )}
+          {!visitsChartLoading && !visitsChartError && visitsChart && visitsChart.data.length === 0 && (
+            <EmptyState title="No visits data" description="No visits recorded for the selected time range." />
           )}
 
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Sources */}
-            {sources && sources.sources.length > 0 ? (
+            {sourcesLoading && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Sources by Visits</CardTitle>
+                  <CardDescription>Loading...</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+              </Card>
+            )}
+            {sourcesError && !sourcesLoading && (
+              <ErrorState message={sourcesError} onRetry={fetchAllData} title="Sources failed" />
+            )}
+            {!sourcesLoading && !sourcesError && sources && sources.sources.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Top Sources by Visits</CardTitle>
@@ -423,14 +451,27 @@ export default function TrafficPage() {
                   <SourcesBarChart data={sources.sources} />
                 </CardContent>
               </Card>
-            ) : (
-              !isLoading && sources && sources.sources.length === 0 && (
-                <EmptyState title="No sources data" />
-              )
+            )}
+            {!sourcesLoading && !sourcesError && sources && sources.sources.length === 0 && (
+              <EmptyState title="No sources data" />
             )}
 
             {/* Devices */}
-            {devices && devices.devices.length > 0 ? (
+            {devicesLoading && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Devices by Visits</CardTitle>
+                  <CardDescription>Loading...</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+              </Card>
+            )}
+            {devicesError && !devicesLoading && (
+              <ErrorState message={devicesError} onRetry={fetchAllData} title="Devices failed" />
+            )}
+            {!devicesLoading && !devicesError && devices && devices.devices.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Top Devices by Visits</CardTitle>
@@ -439,14 +480,27 @@ export default function TrafficPage() {
                   <DevicesDonutChart data={devices.devices} />
                 </CardContent>
               </Card>
-            ) : (
-              !isLoading && devices && devices.devices.length === 0 && (
-                <EmptyState title="No devices data" />
-              )
+            )}
+            {!devicesLoading && !devicesError && devices && devices.devices.length === 0 && (
+              <EmptyState title="No devices data" />
             )}
 
             {/* Browsers */}
-            {browsers && browsers.browsers.length > 0 ? (
+            {browsersLoading && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Browsers by Visits</CardTitle>
+                  <CardDescription>Loading...</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+              </Card>
+            )}
+            {browsersError && !browsersLoading && (
+              <ErrorState message={browsersError} onRetry={fetchAllData} title="Browsers failed" />
+            )}
+            {!browsersLoading && !browsersError && browsers && browsers.browsers.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Top Browsers by Visits</CardTitle>
@@ -455,14 +509,27 @@ export default function TrafficPage() {
                   <BrowsersBarChart data={browsers.browsers} />
                 </CardContent>
               </Card>
-            ) : (
-              !isLoading && browsers && browsers.browsers.length === 0 && (
-                <EmptyState title="No browsers data" />
-              )
+            )}
+            {!browsersLoading && !browsersError && browsers && browsers.browsers.length === 0 && (
+              <EmptyState title="No browsers data" />
             )}
 
             {/* Operating Systems */}
-            {operatingSystems && operatingSystems.operating_systems.length > 0 ? (
+            {osLoading && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Operating Systems by Visits</CardTitle>
+                  <CardDescription>Loading...</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+              </Card>
+            )}
+            {osError && !osLoading && (
+              <ErrorState message={osError} onRetry={fetchAllData} title="Operating systems failed" />
+            )}
+            {!osLoading && !osError && operatingSystems && operatingSystems.operating_systems.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Top Operating Systems by Visits</CardTitle>
@@ -471,17 +538,27 @@ export default function TrafficPage() {
                   <OperatingSystemsBarChart data={operatingSystems.operating_systems} />
                 </CardContent>
               </Card>
-            ) : (
-              !isLoading && operatingSystems && operatingSystems.operating_systems.length === 0 && (
-                <EmptyState title="No operating systems data" />
-              )
+            )}
+            {!osLoading && !osError && operatingSystems && operatingSystems.operating_systems.length === 0 && (
+              <EmptyState title="No operating systems data" />
             )}
           </div>
         </TabsContent>
 
         <TabsContent value="sources" className="space-y-6">
           {/* Sources Chart */}
-          {sources && sources.sources.length > 0 ? (
+          {sourcesLoading && (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </CardContent>
+            </Card>
+          )}
+          {sourcesError && !sourcesLoading && (
+            <ErrorState message={sourcesError} onRetry={fetchAllData} title="Sources failed" />
+          )}
+          {!sourcesLoading && !sourcesError && sources && sources.sources.length > 0 && (
+            <>
             <Card>
               <CardHeader>
                 <CardTitle>Top Traffic Sources</CardTitle>
@@ -493,12 +570,8 @@ export default function TrafficPage() {
                 <SourcesBarChart data={sources.sources} />
               </CardContent>
             </Card>
-          ) : (
-            !isLoading && <EmptyState title="No sources data" description="No traffic sources recorded for the selected time range." />
-          )}
 
           {/* Additional Sources Info */}
-          {sources && sources.sources.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Source Breakdown</CardTitle>
@@ -524,6 +597,10 @@ export default function TrafficPage() {
                 </div>
               </CardContent>
             </Card>
+            </>
+          )}
+          {!sourcesLoading && !sourcesError && (!sources || sources.sources.length === 0) && (
+            <EmptyState title="No sources data" description="No traffic sources recorded for the selected time range." />
           )}
         </TabsContent>
 

@@ -88,6 +88,8 @@ export async function POST(request: Request) {
       end_date,
       display_order,
       is_active,
+      featured,
+      poster_url,
     } = body
 
     // 验证必填字段
@@ -186,6 +188,8 @@ export async function POST(request: Request) {
         end_date,
         display_order: display_order || 0,
         is_active: is_active !== undefined ? is_active : true,
+        featured: featured === true,
+        poster_url: poster_url || null,
       })
       .select(`
         *,

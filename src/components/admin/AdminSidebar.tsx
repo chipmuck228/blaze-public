@@ -19,11 +19,11 @@ import {
   LayoutDashboard,
   Shield,
   UserCircle,
-  BookOpen,
+  // BookOpen, // Legacy - not used
   FolderTree,
   List,
-  Tag,
-  Link as LinkIcon,
+  // Tag, // Not used
+  // Link as LinkIcon, // Not used
   Calendar,
   MapPin,
   ChevronLeft,
@@ -37,7 +37,7 @@ import {
   FileText,
   BarChart3,
   AlertCircle,
-  Route,
+  // Route, // Legacy - not used
   Shapes,
   Sparkles,
 } from "lucide-react"
@@ -84,46 +84,47 @@ const menuItems = [
   },
 ]
 
-const courseMenuItems = [
-  {
-    title: "Programs",
-    href: "/admin/series",
-    icon: List,
-  },
-  {
-    title: "Offerings",
-    href: "/admin/offerings",
-    icon: Package,
-  },
-]
+// Legacy menu items - Hidden, using v2 tables instead
+// const courseMenuItems = [
+//   {
+//     title: "Programs",
+//     href: "/admin/series",
+//     icon: List,
+//   },
+//   {
+//     title: "Offerings",
+//     href: "/admin/offerings",
+//     icon: Package,
+//   },
+// ]
 
-const settingsMenuItems = [
-  {
-    title: "Categories",
-    href: "/admin/categories",
-    icon: FolderTree,
-  },
-  {
-    title: "Campuses",
-    href: "/admin/locations",
-    icon: MapPin,
-  },
-  {
-    title: "Franchises",
-    href: "/admin/franchises",
-    icon: Network,
-  },
-  {
-    title: "Learning Paths",
-    href: "/admin/learning-paths",
-    icon: Route,
-  },
-  {
-    title: "Offering Types",
-    href: "/admin/offering-types",
-    icon: Shapes,
-  },
-]
+// const settingsMenuItems = [
+//   {
+//     title: "Categories",
+//     href: "/admin/categories",
+//     icon: FolderTree,
+//   },
+//   {
+//     title: "Campuses",
+//     href: "/admin/locations",
+//     icon: MapPin,
+//   },
+//   {
+//     title: "Franchises",
+//     href: "/admin/franchises",
+//     icon: Network,
+//   },
+//   {
+//     title: "Learning Paths",
+//     href: "/admin/learning-paths",
+//     icon: Route,
+//   },
+//   {
+//     title: "Offering Types",
+//     href: "/admin/offering-types",
+//     icon: Shapes,
+//   },
+// ]
 
 const newsletterMenuItems = [
   {
@@ -158,25 +159,23 @@ const blazeContentMenuItems = [
     title: "Campuses",
     href: "/admin/blaze/campuses",
     icon: MapPin,
-    badge: "NEW",
   },
   {
     title: "Programs",
     href: "/admin/blaze/programs",
     icon: List,
-    badge: "NEW",
+    
   },
   {
     title: "Instances",
     href: "/admin/blaze/instance",
     icon: Calendar,
-    badge: "NEW",
+    
   },
   {
     title: "Offerings",
     href: "/admin/blaze/offerings",
     icon: Package,
-    badge: "NEW",
   },
 ]
 
@@ -185,19 +184,16 @@ const blazeSettingsMenuItems: MenuItem[] = [
     title: "Franchises",
     href: "/admin/blaze/franchises",
     icon: Network,
-    badge: "NEW",
   },
   {
     title: "Categories",
     href: "/admin/blaze/categories",
     icon: FolderTree,
-    badge: "NEW",
   },
   {
     title: "Offering Types",
     href: "/admin/blaze/offering-types",
     icon: Shapes,
-    badge: "NEW",
   },
 ]
 
@@ -216,15 +212,14 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
     router.refresh()
   }
 
-  // 检查是否有任何课程相关的页面是活动的
-  const isAnyCoursePageActive = courseMenuItems.some(
-    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-  )
+  // Legacy menu items are hidden - using v2 tables instead
+  // const isAnyCoursePageActive = courseMenuItems.some(
+  //   (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  // )
 
-  // 检查是否有任何设置相关的页面是活动的
-  const isAnySettingsPageActive = settingsMenuItems.some(
-    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-  )
+  // const isAnySettingsPageActive = settingsMenuItems.some(
+  //   (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  // )
 
   // 检查是否有任何 Newsletter 相关的页面是活动的
   const isAnyNewsletterPageActive = newsletterMenuItems.some(
@@ -303,139 +298,8 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
           )
         })}
 
-        {/* Content Admin 可展开菜单 */}
-        {!isCollapsed ? (
-          <Accordion type="single" collapsible defaultValue={isAnyCoursePageActive ? "courses" : undefined} className="w-full">
-            <AccordionItem value="courses" className="border-none">
-              <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                <div className="flex items-center gap-2 w-full">
-                  <BookOpen className="h-4 w-4" />
-                  <span className="text-sm font-medium pl-2">Content Admin</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-0 pt-2">
-                <div className="space-y-1 pl-6">
-                  {courseMenuItems.map((item) => {
-                    const Icon = item.icon
-                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                    
-                    return (
-                      <Link 
-                        key={item.href} 
-                        href={item.href}
-                        onClick={onNavigate}
-                      >
-                        <Button
-                          variant={isActive ? "secondary" : "ghost"}
-                          className={cn(
-                            "w-full justify-start text-sm",
-                            isActive && "bg-secondary"
-                          )}
-                        >
-                          <Icon className="mr-2 h-4 w-4" />
-                          {item.title}
-                        </Button>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        ) : (
-          <div className="space-y-1">
-            {courseMenuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-              
-              return (
-                <Link 
-                  key={item.href} 
-                  href={item.href} 
-                  title={item.title}
-                  onClick={onNavigate}
-                >
-                  <Button
-                    variant={isActive ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-center px-0",
-                      isActive && "bg-secondary"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </Button>
-                </Link>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Settings 可展开菜单 */}
-        {!isCollapsed ? (
-          <Accordion type="single" collapsible defaultValue={isAnySettingsPageActive ? "settings" : undefined} className="w-full">
-            <AccordionItem value="settings" className="border-none">
-              <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                <div className="flex items-center gap-2 w-full">
-                  <Settings className="h-4 w-4" />
-                  <span className="text-sm font-medium pl-2">Settings</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-0 pt-2">
-                <div className="space-y-1 pl-6">
-                  {settingsMenuItems.map((item) => {
-                    const Icon = item.icon
-                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                    
-                    return (
-                      <Link 
-                        key={item.href} 
-                        href={item.href}
-                        onClick={onNavigate}
-                      >
-                        <Button
-                          variant={isActive ? "secondary" : "ghost"}
-                          className={cn(
-                            "w-full justify-start text-sm",
-                            isActive && "bg-secondary"
-                          )}
-                        >
-                          <Icon className="mr-2 h-4 w-4" />
-                          {item.title}
-                        </Button>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        ) : (
-          <div className="space-y-1">
-            {settingsMenuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-              
-              return (
-                <Link 
-                  key={item.href} 
-                  href={item.href} 
-                  title={item.title}
-                  onClick={onNavigate}
-                >
-                  <Button
-                    variant={isActive ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-center px-0",
-                      isActive && "bg-secondary"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </Button>
-                </Link>
-              )
-            })}
-          </div>
-        )}
+        {/* Legacy Content Admin menu - Hidden, using Blaze Content Admin instead */}
+        {/* Legacy Settings menu - Hidden, using Blaze Settings instead */}
 
         {/* Newsletter 可展开菜单 */}
         {!isCollapsed ? (
@@ -535,11 +399,6 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
                         >
                           <Icon className="mr-2 h-4 w-4 text-primary" />
                           {item.title}
-                          {item.badge && (
-                            <Badge variant="default" className="ml-auto text-xs bg-primary text-primary-foreground">
-                              {item.badge}
-                            </Badge>
-                          )}
                         </Button>
                       </Link>
                     )

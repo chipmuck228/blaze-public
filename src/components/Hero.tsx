@@ -15,7 +15,7 @@ export const Hero = () => {
       <div className="relative z-10 w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-12 lg:py-0">
         <div className="max-w-xl">
           <span className="inline-block bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase mb-6 shadow-lg shadow-blue-500/20">
-            Winter 2026 Enrollment Open
+            Free Trial opened to register
           </span>
           <h1 className="text-5xl lg:text-7xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
             Build Your <br />

@@ -45,8 +45,10 @@ const migrationFiles = [
   'migrate-create-enrollment-functions.sql'
 ];
 
+const SQL_DIR = path.join(__dirname, '..', 'sql', 'root-migrations');
+
 async function runMigration(fileName) {
-  const filePath = path.join(__dirname, '..', fileName);
+  const filePath = path.join(SQL_DIR, fileName);
   
   if (!fs.existsSync(filePath)) {
     throw new Error(`文件不存在: ${filePath}`);
@@ -112,9 +114,9 @@ async function main() {
     console.log(`  ${index + 1}. ${file}`);
   });
   
-  console.log('\n或者使用 psql 命令行工具:');
-  console.log('  psql -h <host> -U <user> -d <database> -f migrate-create-students-tables.sql');
-  console.log('  psql -h <host> -U <user> -d <database> -f migrate-create-instance-enrollments-table.sql');
+  console.log('\n或者使用 psql 命令行工具（SQL 文件在 sql/root-migrations/）:');
+  console.log('  psql -h <host> -U <user> -d <database> -f sql/root-migrations/migrate-create-students-tables.sql');
+  console.log('  psql -h <host> -U <user> -d <database> -f sql/root-migrations/migrate-create-instance-enrollments-table.sql');
   console.log('  ...');
 }
 

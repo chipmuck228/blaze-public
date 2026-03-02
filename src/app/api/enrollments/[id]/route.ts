@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getInstanceEnrollmentById } from "@/lib/db"
+import {
+  getInstanceEnrollmentById,
+  confirmEnrollment,
+  cancelEnrollment,
+} from "@/lib/db"
 
 // GET: 获取单个注册详情（基于 instance_enrollments）
 export async function GET(

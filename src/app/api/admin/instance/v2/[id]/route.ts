@@ -171,7 +171,7 @@ export async function PUT(
       )
     }
 
-    // 构建更新数据
+    // 构建更新数据（Phase A 双写：平铺字段同时写入 instance_data_ext）
     const updateData: any = {}
     if (campus_id !== undefined) updateData.campus_id = campus_id
     if (price_override !== undefined) updateData.price_override = price_override
@@ -183,7 +183,21 @@ export async function PUT(
     if (days_of_week !== undefined) updateData.days_of_week = days_of_week
     if (max_students !== undefined) updateData.max_students = max_students
     if (current_students !== undefined) updateData.current_students = current_students
-    if (instance_data_ext !== undefined) updateData.instance_data_ext = { ...currentInstance.instance_data_ext, ...instance_data_ext }
+    const extFromFlat: Record<string, unknown> = {}
+    if (start_date !== undefined) extFromFlat.start_date = start_date
+    if (end_date !== undefined) extFromFlat.end_date = end_date
+    if (start_time !== undefined) extFromFlat.start_time = start_time
+    if (end_time !== undefined) extFromFlat.end_time = end_time
+    if (session_count !== undefined) extFromFlat.session_count = session_count
+    if (days_of_week !== undefined) extFromFlat.days_of_week = days_of_week
+    if (max_students !== undefined) extFromFlat.max_students = max_students
+    if (notes !== undefined) extFromFlat.notes = notes
+    const nextDataExt = {
+      ...(currentInstance.instance_data_ext || {}),
+      ...extFromFlat,
+      ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
+    }
+    updateData.instance_data_ext = nextDataExt
     if (icalendar_rrule !== undefined) updateData.icalendar_rrule = icalendar_rrule
     if (icalendar_exdates !== undefined) updateData.icalendar_exdates = icalendar_exdates
     if (icalendar_rdates !== undefined) updateData.icalendar_rdates = icalendar_rdates
@@ -235,7 +249,7 @@ export async function PUT(
   }
 }
 
-// 删除 Instance V2（软删除）
+// 删除 Instance V2（从 v2_instance 表物理删除）
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -247,8 +261,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 检查是否有活跃的 enrollments（如果有 enrollment 表）
-    // 这里假设有 enrollments 表，如果没有可以跳过这个检查
+    // 检查是否有活跃的 enrollments，有则不允许删除
     const { data: enrollments, error: enrollmentsError } = await supabaseAdmin
       .from("enrollments")
       .select("id")
@@ -258,7 +271,6 @@ export async function DELETE(
 
     if (enrollmentsError && enrollmentsError.code !== "PGRST116") {
       console.error("Error checking enrollments:", enrollmentsError)
-      // 继续执行删除，但记录错误
     }
 
     if (enrollments && enrollments.length > 0) {
@@ -268,10 +280,10 @@ export async function DELETE(
       )
     }
 
-    // 软删除：设置 is_active = false
+    // 从 v2_instance 表物理删除
     const { error: deleteError } = await supabaseAdmin
       .from("v2_instance")
-      .update({ is_active: false })
+      .delete()
       .eq("id", id)
 
     if (deleteError) {

@@ -80,6 +80,8 @@ export async function PUT(
       end_date,
       display_order,
       is_active,
+      featured,
+      poster_url,
     } = body
 
     // 验证必填字段
@@ -101,7 +103,7 @@ export async function PUT(
     // 检查 program 是否存在
     const { data: existing, error: existingError } = await supabaseAdmin
       .from("v2_program")
-      .select("id, franchise_id, category_id, name, display_order, is_active")
+      .select("id, franchise_id, category_id, name, display_order, is_active, featured, poster_url")
       .eq("id", id)
       .single()
 
@@ -120,6 +122,8 @@ export async function PUT(
       end_date,
       display_order: display_order !== undefined ? display_order : existing.display_order,
       is_active: is_active !== undefined ? is_active : existing.is_active,
+      ...(featured !== undefined && { featured: featured === true }),
+      ...(poster_url !== undefined && { poster_url: poster_url || null }),
     }
 
     const { data, error } = await supabaseAdmin

@@ -12,6 +12,8 @@ import { BusinessHours } from "./BusinessHours"
 
 interface LocationFeaturesProps {
   franchiseCode: string
+  /** 来自 v2_campus 的主地址，优先于 branding_config.contact.address 显示 */
+  primaryAddressFromCampus?: string | null
 }
 
 interface FranchiseV2 {
@@ -52,7 +54,7 @@ interface FranchiseV2 {
   } | null
 }
 
-export function LocationFeatures({ franchiseCode }: LocationFeaturesProps) {
+export function LocationFeatures({ franchiseCode, primaryAddressFromCampus }: LocationFeaturesProps) {
   const [franchise, setFranchise] = useState<FranchiseV2 | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,15 +105,15 @@ export function LocationFeatures({ franchiseCode }: LocationFeaturesProps) {
   const highlights = brandingConfig.highlights
   const contact = brandingConfig.contact
   const hasHighlights = highlights && (highlights.programs || highlights.schedule || highlights.focus)
-  const hasContact = contact && (contact.email || contact.phone || contact.address)
+  const hasContact = contact && (contact.email || contact.phone || contact.address || primaryAddressFromCampus)
 
   // 如果没有要显示的内容，不渲染组件
   if (!hasHighlights && !hasContact) {
     return null
   }
 
-  // 格式化地址
-  const formatAddress = () => {
+  // 地址：优先使用服务端传入的 v2_campus 主地址，否则用 branding_config.contact.address
+  const formatConfigAddress = () => {
     if (!contact?.address) return null
     const parts = [
       contact.address.street,
@@ -122,7 +124,7 @@ export function LocationFeatures({ franchiseCode }: LocationFeaturesProps) {
     return parts.length > 0 ? parts.join(', ') : null
   }
 
-  const address = formatAddress()
+  const address = primaryAddressFromCampus?.trim() || formatConfigAddress()
 
   return (
     <section className="py-16 sm:py-20 lg:py-24 bg-slate-50 dark:bg-slate-900">

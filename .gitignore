@@ -52,6 +52,7 @@ android/.idea/
 .cxx/
 local.properties
 
-# Documentation and SQL scripts (excluded from repository)
-*.md
-*.sql
+# Documentation, SQL scripts and PDFs (excluded from repository, including all subdirectories)
+**/*.md
+**/*.sql
+**/*.pdf

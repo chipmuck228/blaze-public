@@ -40,7 +40,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Calendar, Eye, Clock, Users, DollarSign, MapPin, X, AlertTriangle, Save } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Calendar, Eye, Clock, Users, DollarSign, MapPin, X, AlertTriangle, Save, Star, ImageIcon, Info } from "lucide-react"
+import { toast } from "sonner"
+import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
 
 interface BlazeProgram {
@@ -54,6 +57,8 @@ interface BlazeProgram {
   end_date: string
   display_order: number
   is_active: boolean
+  featured?: boolean
+  poster_url?: string | null
   created_at: string
   updated_at: string
   category?: {
@@ -98,6 +103,8 @@ interface HierarchyData {
       description?: string
       start_date: string
       end_date: string
+      featured?: boolean
+      poster_url?: string | null
       instances?: Array<{
         id: string
         offering_id: string
@@ -156,6 +163,10 @@ export default function BlazeProgramsManagementPage() {
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false)
   const [editingInstance, setEditingInstance] = useState<any | null>(null)
+  const [programToDelete, setProgramToDelete] = useState<{ id: string; display_name: string } | null>(null)
+  const [isDeletingProgram, setIsDeletingProgram] = useState(false)
+  const [posterFile, setPosterFile] = useState<File | null>(null)
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<Omit<BlazeProgram, 'id' | 'created_at' | 'updated_at' | 'category' | 'franchise'>>({
     category_id: "",
@@ -167,6 +178,8 @@ export default function BlazeProgramsManagementPage() {
     end_date: "",
     display_order: 0,
     is_active: true,
+    featured: false,
+    poster_url: "",
   })
 
   useEffect(() => {
@@ -279,33 +292,70 @@ export default function BlazeProgramsManagementPage() {
     }
   }
 
-  const handleDelete = async (programId: string) => {
-    const program = programs.find(p => p.id === programId)
-    if (!program) return
-
-    if (!confirm(`Are you sure you want to delete "${program.display_name}"? This will fail if there are instances using this program.`)) {
-      return
-    }
-
+  const handleConfirmDeleteProgram = async () => {
+    if (!programToDelete) return
+    setIsDeletingProgram(true)
     try {
-      const response = await fetch(`/api/admin/programs/v2/${programId}`, {
+      const response = await fetch(`/api/admin/programs/v2/${programToDelete.id}`, {
         method: "DELETE",
       })
 
       if (response.ok) {
         fetchHierarchy()
         fetchPrograms()
+        setProgramToDelete(null)
+        toast.success("Program deleted successfully")
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete program")
+        toast.error(data.error || "Failed to delete program")
       }
     } catch (error) {
       console.error("Error deleting program:", error)
-      alert("Failed to delete program")
+      toast.error("Failed to delete program")
+    } finally {
+      setIsDeletingProgram(false)
     }
   }
 
+  const handlePosterFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    if (file) {
+      setPosterFile(file)
+      setPosterPreviewUrl(URL.createObjectURL(file))
+    } else {
+      setPosterFile(null)
+      setPosterPreviewUrl(null)
+    }
+  }
+
+  const clearPosterFile = () => {
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
+    if (!editingProgram) setFormData((prev) => ({ ...prev, poster_url: "" }))
+  }
+
+  const uploadPosterFile = async (): Promise<string | null> => {
+    if (!posterFile) return null
+    const uploadFormData = new FormData()
+    uploadFormData.append("file", posterFile)
+    const res = await fetch("/api/admin/programs/v2/upload", {
+      method: "POST",
+      body: uploadFormData,
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || "Failed to upload poster")
+    }
+    const data = await res.json()
+    return data.url ?? null
+  }
+
   const handleEdit = (program: BlazeProgram) => {
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
     setEditingProgram(program)
     setFormData({
       category_id: program.category_id,
@@ -317,8 +367,9 @@ export default function BlazeProgramsManagementPage() {
       end_date: program.end_date,
       display_order: program.display_order,
       is_active: program.is_active,
+      featured: program.featured ?? false,
+      poster_url: program.poster_url ?? "",
     })
-    // 加载该 franchise 的 categories
     if (program.franchise_id) {
       fetchCategories(program.franchise_id)
     }
@@ -327,6 +378,9 @@ export default function BlazeProgramsManagementPage() {
 
   const handleAdd = () => {
     setEditingProgram(null)
+    if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl)
+    setPosterFile(null)
+    setPosterPreviewUrl(null)
     setFormData({
       category_id: "",
       franchise_id: "",
@@ -337,6 +391,8 @@ export default function BlazeProgramsManagementPage() {
       end_date: "",
       display_order: 0,
       is_active: true,
+      featured: false,
+      poster_url: "",
     })
     setCategories([])
     setIsEditDialogOpen(true)
@@ -347,22 +403,46 @@ export default function BlazeProgramsManagementPage() {
     setIsSubmitting(true)
 
     try {
+      let posterUrl: string | undefined = formData.poster_url || undefined
+      if (posterFile) {
+        posterUrl = (await uploadPosterFile()) ?? undefined
+      }
+
+      if (editingProgram) {
+        const submitData = {
+          ...formData,
+          description: formData.description || undefined,
+          name: formData.name.toLowerCase().trim(),
+          poster_url: posterUrl,
+        }
+        const response = await fetch(`/api/admin/programs/v2/${editingProgram.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submitData),
+        })
+        if (response.ok) {
+          fetchHierarchy()
+          fetchPrograms()
+          setIsEditDialogOpen(false)
+          setEditingProgram(null)
+          clearPosterFile()
+        } else {
+          const error = await response.json()
+          toast.error(error.error || "Failed to save program")
+        }
+        return
+      }
+
+      // Create: save program first, then patch poster if uploaded
       const submitData = {
         ...formData,
         description: formData.description || undefined,
         name: formData.name.toLowerCase().trim(),
+        poster_url: posterUrl,
       }
-
-      const url = editingProgram
-        ? `/api/admin/programs/v2/${editingProgram.id}`
-        : "/api/admin/programs/v2"
-      const method = editingProgram ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await fetch("/api/admin/programs/v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitData),
       })
 
@@ -371,13 +451,14 @@ export default function BlazeProgramsManagementPage() {
         fetchPrograms()
         setIsEditDialogOpen(false)
         setEditingProgram(null)
+        clearPosterFile()
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to save program")
+        toast.error(error.error || "Failed to save program")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving program:", error)
-      alert("Failed to save program")
+      toast.error(error?.message || "Failed to save program")
     } finally {
       setIsSubmitting(false)
     }
@@ -389,10 +470,10 @@ export default function BlazeProgramsManagementPage() {
     setModalMode('view')
   }
 
-  // Handle instance edit
-  const handleInstanceEdit = (instance: any) => {
+  // Handle instance edit (pass programId so dialog can show correct program in dropdown when hierarchy instance lacks program_id)
+  const handleInstanceEdit = (instance: any, programId?: string) => {
     setEditingInstance(instance)
-    setSelectedProgramId(instance.program_id)
+    setSelectedProgramId(programId ?? instance.program_id ?? null)
     setIsInstanceDialogOpen(true)
   }
 
@@ -423,11 +504,11 @@ export default function BlazeProgramsManagementPage() {
         closeModal()
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to delete instance")
+        toast.error(error.error || "Failed to delete instance")
       }
     } catch (error) {
       console.error("Error deleting instance:", error)
-      alert("Failed to delete instance")
+      toast.error("Failed to delete instance")
     }
   }
 
@@ -467,11 +548,11 @@ export default function BlazeProgramsManagementPage() {
         closeModal()
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to update instance")
+        toast.error(error.error || "Failed to update instance")
       }
     } catch (error) {
       console.error("Error updating instance:", error)
-      alert("Failed to update instance")
+      toast.error("Failed to update instance")
     } finally {
       setIsUpdating(false)
     }
@@ -485,6 +566,73 @@ export default function BlazeProgramsManagementPage() {
     })
   }
 
+  // Format instance_data_ext value for display based on instance_schema field type
+  const formatSchemaValue = (value: unknown, fieldConfig: { type?: string; options?: string[] }): string => {
+    if (value === undefined || value === null) return "—"
+    switch (fieldConfig?.type) {
+      case "boolean":
+        return value ? "Yes" : "No"
+      case "number":
+        return typeof value === "number" ? String(value) : String(value)
+      case "date":
+        if (typeof value === "string") {
+          try {
+            return new Date(value).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+          } catch {
+            return String(value)
+          }
+        }
+        return String(value)
+      case "time":
+        if (typeof value === "string") {
+          const [h, m] = value.split(":")
+          const hour = parseInt(h, 10)
+          const ampm = hour >= 12 ? "PM" : "AM"
+          const displayHour = hour % 12 || 12
+          return `${displayHour}:${m || "00"} ${ampm}`
+        }
+        return String(value)
+      case "multiselect":
+        return Array.isArray(value) ? value.join(", ") : String(value)
+      case "select":
+      case "text":
+      default:
+        return String(value)
+    }
+  }
+
+  // Render schema-driven instance_data_ext fields for the View modal (display_scope admin or both)
+  const renderInstanceSchemaFields = (instance: any) => {
+    const schema = instance?.offering?.offering_type?.instance_schema?.fields as Record<string, { type?: string; label?: string; options?: string[] }> | undefined
+    const ext = (instance?.instance_data_ext || {}) as Record<string, unknown>
+    if (!schema || typeof schema !== "object") return null
+    const entries = Object.entries(schema).filter(([_, config]) => {
+      if (!config) return false
+      const scope = (config as any).display_scope
+      return scope === "admin" || scope === "both" || scope === undefined
+    })
+    if (entries.length === 0) return null
+    return (
+      <div className="space-y-4 mt-6">
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Additional details</h3>
+        <div className="space-y-3">
+          {entries.map(([key, config]) => {
+            const label = (config as any).label || key
+            const value = ext[key]
+            const display = formatSchemaValue(value, config as any)
+            if (display === "—" && (config as any).required !== true) return null
+            return (
+              <div key={key} className="flex justify-between items-center py-3 border-b border-slate-50">
+                <span className="text-sm text-slate-500">{label}</span>
+                <span className="font-bold text-slate-900 text-right max-w-[60%]">{display}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   const getStatusBackgroundColor = (isActive: boolean): string => {
     return isActive 
       ? 'bg-green-50 dark:bg-green-900/20' 
@@ -494,42 +642,66 @@ export default function BlazeProgramsManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Blaze Programs Management</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage programs (product series) using the new Blaze system. Programs belong to Categories and Franchises.
+        <h1 className="text-3xl font-bold">Programs (V2)</h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl">
+          Programs are the operational units that combine a <strong>Franchise</strong> and a subscribed <strong>Category</strong> with a time range (e.g. &quot;Spring 2026 Session&quot;). Under each program you create <strong>Instances</strong>—the actual bookable classes (date, time, campus, offering, capacity) that parents see and enroll in.
         </p>
       </div>
 
+      <Card className="mb-6 border-primary/20 bg-primary/5">
+        <CardHeader className="pb-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <Info className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="text-base">How Programs fit in the V2 model</CardTitle>
+              <CardDescription className="text-sm leading-relaxed">
+                <strong>Category</strong> (global) — A learning theme or level (e.g. Beginner Robotics, Competition Prep). Franchises subscribe to categories in &quot;Franchise Subscriptions&quot;. &bull; <strong>Program</strong> — A session or term under one franchise and one category, with start/end dates (e.g. &quot;Spring 2026 Robotics&quot;). &bull; <strong>Instance</strong> — A concrete class tied to an Offering: schedule, campus, capacity, and price. Users enroll in instances.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search programs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
+          <div className="space-y-4">
+            <div>
+              <CardTitle>Programs by Franchise &amp; Category</CardTitle>
+              <CardDescription>
+                Programs are grouped by franchise and their subscribed categories. Use search and franchise filter to find a program; expand a category to add or edit programs and their instances.
+              </CardDescription>
+            </div>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search programs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 w-64"
+                  />
+                </div>
+                <Select value={selectedFranchiseFilter} onValueChange={setSelectedFranchiseFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by franchise" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Franchises</SelectItem>
+                    {franchises.map((franchise) => (
+                      <SelectItem key={franchise.id} value={franchise.id}>
+                        {franchise.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleAdd}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Program
+                </Button>
               </div>
-              <Select value={selectedFranchiseFilter} onValueChange={setSelectedFranchiseFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by franchise" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Franchises</SelectItem>
-                  {franchises.map((franchise) => (
-                    <SelectItem key={franchise.id} value={franchise.id}>
-                      {franchise.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={handleAdd}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Program
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -547,30 +719,48 @@ export default function BlazeProgramsManagementPage() {
               </Button>
             </div>
           ) : hierarchyData.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No programs found.
+            <div className="text-center py-12 space-y-4">
+              <p className="text-muted-foreground max-w-md mx-auto">
+                No franchises or programs to show. Make sure franchises exist and have subscribed to at least one category in <strong>Franchise Subscriptions</strong> (Categories page). Then use <strong>Add Program</strong> to create a program for a franchise and category; after saving, add instances to open classes for enrollment.
+              </p>
+              <Button variant="outline" onClick={handleAdd}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Program
+              </Button>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {hierarchyData
-                .filter((franchise) => {
-                  if (selectedFranchiseFilter !== "all" && franchise.id !== selectedFranchiseFilter) {
-                    return false
-                  }
-                  // Filter by search query
-                  if (searchQuery) {
-                    const q = searchQuery.toLowerCase()
-                    return franchise.categories.some((category) =>
-                      category.programs.some((programItem) =>
-                        programItem.name.toLowerCase().includes(q) ||
-                        programItem.display_name.toLowerCase().includes(q) ||
-                        programItem.description?.toLowerCase().includes(q)
-                      )
+          ) : (() => {
+              const filteredHierarchy = hierarchyData.filter((franchise) => {
+                if (selectedFranchiseFilter !== "all" && franchise.id !== selectedFranchiseFilter) {
+                  return false
+                }
+                if (searchQuery) {
+                  const q = searchQuery.toLowerCase()
+                  return franchise.categories.some((category) =>
+                    category.programs.some((programItem) =>
+                      programItem.name.toLowerCase().includes(q) ||
+                      programItem.display_name.toLowerCase().includes(q) ||
+                      programItem.description?.toLowerCase().includes(q)
                     )
-                  }
-                  return true
-                })
-                .map((franchise) => (
+                  )
+                }
+                return true
+              })
+              if (filteredHierarchy.length === 0) {
+                return (
+                  <div className="text-center py-12 space-y-4">
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      No programs match the current search or franchise filter. Try changing the filter or search term, or <strong>Add Program</strong> to create one.
+                    </p>
+                    <Button variant="outline" onClick={handleAdd}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Program
+                    </Button>
+                  </div>
+                )
+              }
+              return (
+            <div className="space-y-4">
+              {filteredHierarchy.map((franchise) => (
                   <Card key={franchise.id}>
                     <CardHeader>
                       <div className="flex items-center justify-between">
@@ -581,7 +771,9 @@ export default function BlazeProgramsManagementPage() {
                           {franchise.categories.length} Categor{franchise.categories.length !== 1 ? 'ies' : 'y'}
                         </Badge>
                       </div>
-                      <CardDescription>Code: {franchise.code}</CardDescription>
+                      <CardDescription>
+                        Code: {franchise.code}. Programs under this franchise&apos;s subscribed categories; expand a category to manage programs and instances.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <Accordion type="multiple" className="w-full">
@@ -604,15 +796,13 @@ export default function BlazeProgramsManagementPage() {
                               <div className="space-y-3 pt-2 pb-4">
                                 {category.programs
                                   .filter((programItem) => {
-                                    if (searchQuery) {
-                                      const q = searchQuery.toLowerCase()
-                                      return (
-                                        programItem.name.toLowerCase().includes(q) ||
-                                        programItem.display_name.toLowerCase().includes(q) ||
-                                        programItem.description?.toLowerCase().includes(q)
-                                      )
-                                    }
-                                    return true
+                                    if (!searchQuery) return true
+                                    const q = searchQuery.toLowerCase()
+                                    return (
+                                      programItem.name.toLowerCase().includes(q) ||
+                                      programItem.display_name.toLowerCase().includes(q) ||
+                                      programItem.description?.toLowerCase().includes(q)
+                                    )
                                   })
                                   .map((programItem) => {
                                     const foundProgram = programs.find((p: BlazeProgram) => p.id === programItem.id)
@@ -620,15 +810,41 @@ export default function BlazeProgramsManagementPage() {
                                     return (
                                       <Card key={programItem.id} className="border-l-2 border-l-primary/20">
                                         <CardHeader className="pb-3">
-                                          <div className="flex items-center justify-between">
-                                            <div className="flex-1">
-                                              <CardTitle className="text-base">{programItem.display_name}</CardTitle>
-                                              <CardDescription className="text-xs">{programItem.name}</CardDescription>
-                                              {programItem.description && (
-                                                <p className="text-sm text-muted-foreground mt-2">{programItem.description}</p>
+                                          <div className="flex items-start gap-4">
+                                            {/* Poster thumbnail (left) */}
+                                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex-shrink-0">
+                                              {programItem.poster_url ? (
+                                                <img
+                                                  src={programItem.poster_url}
+                                                  alt=""
+                                                  className="w-full h-full object-cover"
+                                                />
+                                              ) : (
+                                                <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 p-1">
+                                                  <ImageIcon className="h-8 w-8 sm:h-9 sm:w-9 mb-0.5" strokeWidth={1.5} />
+                                                  <span className="text-[10px] sm:text-xs text-center leading-tight">No poster</span>
+                                                </div>
                                               )}
                                             </div>
-                                            <DropdownMenu>
+                                            {/* Program info (right) */}
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center justify-between gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="flex items-center gap-2 flex-wrap">
+                                                    <CardTitle className="text-base">{programItem.display_name}</CardTitle>
+                                                    {programItem.featured && (
+                                                      <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200 border-amber-200 dark:border-amber-800">
+                                                        <Star className="h-3 w-3 mr-0.5 fill-current" />
+                                                        Featured
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+                                                  <CardDescription className="text-xs">{programItem.name}</CardDescription>
+                                                  {programItem.description && (
+                                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{programItem.description}</p>
+                                                  )}
+                                                </div>
+                                                <DropdownMenu>
                                               <DropdownMenuTrigger asChild>
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                                                   <MoreVertical className="h-4 w-4" />
@@ -649,20 +865,22 @@ export default function BlazeProgramsManagementPage() {
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                   className="text-destructive"
-                                                  onClick={() => handleDelete(programItem.id)}
+                                                  onClick={() => setProgramToDelete({ id: programItem.id, display_name: programItem.display_name })}
                                                 >
                                                   <Trash2 className="mr-2 h-4 w-4" />
                                                   Delete
                                                 </DropdownMenuItem>
                                               </DropdownMenuContent>
                                             </DropdownMenu>
+                                              </div>
+                                            </div>
                                           </div>
                                         </CardHeader>
                                         <CardContent>
                                           {/* Display Instances */}
                                           <div className="flex items-center justify-between mb-2">
                                             <p className="text-sm font-medium text-muted-foreground">
-                                              Instances ({programItem.instances?.length || 0})
+                                              Instances ({programItem.instances?.length || 0}) — bookable classes (offering, schedule, campus, capacity)
                                             </p>
                                             <Button
                                               size="sm"
@@ -732,7 +950,7 @@ export default function BlazeProgramsManagementPage() {
                                                             <Eye className="mr-2 h-4 w-4" />
                                                             View
                                                           </DropdownMenuItem>
-                                                          <DropdownMenuItem onClick={() => handleInstanceEdit(instance)}>
+                                                          <DropdownMenuItem onClick={() => handleInstanceEdit(instance, programItem.id)}>
                                                             <Edit className="mr-2 h-4 w-4" />
                                                             Edit
                                                           </DropdownMenuItem>
@@ -751,7 +969,7 @@ export default function BlazeProgramsManagementPage() {
                                               </div>
                                             </div>
                                           ) : (
-                                            <p className="text-sm text-muted-foreground italic">No instances created yet</p>
+                                            <p className="text-sm text-muted-foreground italic">No instances yet. Add an instance to open a class for enrollment (choose an offering, dates, campus, and capacity).</p>
                                           )}
                                           <div className="mt-4 pt-4 border-t">
                                             <Button
@@ -784,181 +1002,229 @@ export default function BlazeProgramsManagementPage() {
                   </Card>
                 ))}
             </div>
-          )}
+              )
+            })()}
         </CardContent>
       </Card>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-[700px] max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editingProgram ? "Edit Program" : "Add New Program"}</DialogTitle>
             <DialogDescription>
-              {editingProgram ? "Update program information" : "Create a new program (product series) belonging to a Category and Franchise"}
+              {editingProgram
+                ? "Update program name, dates, poster, and status. Franchise and category cannot be changed after creation."
+                : "A program defines a session or term (e.g. Spring 2026) under one franchise and one subscribed category. Set the date range and display options; you can add instances (bookable classes) after saving."}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="franchise_id">Franchise *</Label>
-              <Select
-                value={formData.franchise_id}
-                onValueChange={(value) => {
-                  setFormData({
-                    ...formData,
-                    franchise_id: value,
-                    category_id: "", // Reset category when franchise changes
-                  })
-                }}
-                required
-                disabled={!!editingProgram}
-              >
-                <SelectTrigger id="franchise_id">
-                  <SelectValue placeholder="Select a franchise" />
-                </SelectTrigger>
-                <SelectContent>
-                  {franchises
-                    .filter(f => f.is_active)
-                    .map((franchise) => (
-                      <SelectItem key={franchise.id} value={franchise.id}>
-                        {franchise.name} ({franchise.code})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {editingProgram && (
-                <p className="text-xs text-muted-foreground">
-                  Franchise cannot be changed after creation.
-                </p>
-              )}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">Franchise &amp; Category</CardTitle>
+                  <CardDescription className="text-xs">Programs belong to one franchise and one of its subscribed categories. This choice cannot be changed after creation. If a category is missing, subscribe to it in the Categories page under &quot;Franchise Subscriptions&quot;.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="franchise_id" className="text-xs">Franchise <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={formData.franchise_id}
+                        onValueChange={(value) => {
+                          setFormData({
+                            ...formData,
+                            franchise_id: value,
+                            category_id: "",
+                          })
+                        }}
+                        required
+                        disabled={!!editingProgram}
+                      >
+                        <SelectTrigger id="franchise_id" className="h-9">
+                          <SelectValue placeholder="Select a franchise" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {franchises
+                            .filter(f => f.is_active)
+                            .map((franchise) => (
+                              <SelectItem key={franchise.id} value={franchise.id}>
+                                {franchise.name} ({franchise.code})
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="category_id" className="text-xs">Category <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={formData.category_id}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, category_id: value })
+                        }
+                        required
+                        disabled={!formData.franchise_id || isLoadingCategories || !!editingProgram}
+                      >
+                        <SelectTrigger id="category_id" className="h-9">
+                          <SelectValue placeholder={isLoadingCategories ? "Loading..." : formData.franchise_id ? "Select a category" : "Select franchise first"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.display_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {!formData.franchise_id && (
+                    <p className="text-xs text-muted-foreground">Select a franchise first.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">Name &amp; Description</CardTitle>
+                  <CardDescription className="text-xs">Use a stable internal name (e.g. spring_2026_robotics). Display name is shown on the site. Internal name cannot be changed after creation.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="name" className="text-xs">Name (Internal) <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => {
+                          const value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
+                          setFormData({ ...formData, name: value })
+                        }}
+                        placeholder="e.g., spring_2024_robotics"
+                        required
+                        disabled={!!editingProgram}
+                        className="h-9"
+                      />
+                      <p className="text-[11px] text-muted-foreground">Lowercase, numbers, underscores only.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="display_name" className="text-xs">Display Name <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="display_name"
+                        value={formData.display_name}
+                        onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                        placeholder="e.g., Spring 2024 Robotics Program"
+                        required
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="description" className="text-xs">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Program description"
+                      rows={3}
+                      className="resize-none text-sm"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">Poster</CardTitle>
+                  <CardDescription className="text-xs">Program poster image. JPEG, PNG or WebP, max 5MB. Uploaded when you save.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <PosterUploadField
+                    id="program_poster"
+                    label="Poster image"
+                    hint="Optional. Upload happens when you save the program."
+                    previewSrc={posterPreviewUrl || (editingProgram && formData.poster_url && !posterFile ? (formData.poster_url as string) : null) || null}
+                    onFileChange={handlePosterFileChange}
+                    onClear={clearPosterFile}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">Schedule &amp; Status</CardTitle>
+                  <CardDescription className="text-xs">Start and end dates define the program&apos;s term. Display order controls how programs are listed. Inactive programs are hidden from the public site.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="start_date" className="text-xs">Start Date <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="start_date"
+                        type="date"
+                        value={formData.start_date}
+                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                        required
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="end_date" className="text-xs">End Date <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="end_date"
+                        type="date"
+                        value={formData.end_date}
+                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                        required
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="display_order" className="text-xs">Display Order</Label>
+                      <Input
+                        id="display_order"
+                        type="number"
+                        value={formData.display_order}
+                        onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
+                        placeholder="0"
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="is_active" className="text-xs">Active</Label>
+                      <Select
+                        value={formData.is_active ? "true" : "false"}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, is_active: value === "true" })
+                        }
+                      >
+                        <SelectTrigger id="is_active" className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Active</SelectItem>
+                          <SelectItem value="false">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-2 border-t mt-3">
+                    <Checkbox
+                      id="featured"
+                      checked={formData.featured ?? false}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, featured: checked === true })
+                      }
+                    />
+                    <Label htmlFor="featured" className="text-xs font-normal cursor-pointer">
+                      Featured program (show prominently on public pages)
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="category_id">Category *</Label>
-              <Select
-                value={formData.category_id}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, category_id: value })
-                }
-                required
-                disabled={!formData.franchise_id || isLoadingCategories || !!editingProgram}
-              >
-                <SelectTrigger id="category_id">
-                  <SelectValue placeholder={isLoadingCategories ? "Loading..." : formData.franchise_id ? "Select a category" : "Select a franchise first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {editingProgram && (
-                <p className="text-xs text-muted-foreground">
-                  Category cannot be changed after creation.
-                </p>
-              )}
-              {!formData.franchise_id && (
-                <p className="text-xs text-muted-foreground">
-                  Please select a franchise first.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name">Name (Internal) *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => {
-                  const value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
-                  setFormData({ ...formData, name: value })
-                }}
-                placeholder="e.g., spring_2024_robotics"
-                required
-                disabled={!!editingProgram}
-              />
-              <p className="text-xs text-muted-foreground">
-                Internal identifier (lowercase letters, numbers, and underscores only). Cannot be changed after creation.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="display_name">Display Name *</Label>
-              <Input
-                id="display_name"
-                value={formData.display_name}
-                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                placeholder="e.g., Spring 2024 Robotics Program"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Program description"
-                rows={4}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start_date">Start Date *</Label>
-                <Input
-                  id="start_date"
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="end_date">End Date *</Label>
-                <Input
-                  id="end_date"
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="display_order">Display Order</Label>
-              <Input
-                id="display_order"
-                type="number"
-                value={formData.display_order}
-                onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
-                placeholder="0"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="is_active">Active Status</Label>
-              <Select
-                value={formData.is_active ? "true" : "false"}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, is_active: value === "true" })
-                }
-              >
-                <SelectTrigger id="is_active">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">Active</SelectItem>
-                  <SelectItem value="false">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <DialogFooter>
+            <DialogFooter className="flex-shrink-0 pt-4 border-t mt-4">
               <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancel
               </Button>
@@ -989,6 +1255,78 @@ export default function BlazeProgramsManagementPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Program confirmation — same style as Instance modal */}
+      {programToDelete && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => !isDeletingProgram && setProgramToDelete(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-[24px] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative px-8 pt-8 pb-6">
+              <button
+                type="button"
+                onClick={() => !isDeletingProgram && setProgramToDelete(null)}
+                disabled={isDeletingProgram}
+                className="absolute right-4 top-6 p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                  <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    Delete Program
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                    You are about to delete{" "}
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      {programToDelete.display_name}
+                    </span>
+                    . This action cannot be undone.
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
+                    If this program has instances, the delete will fail and you’ll need to remove them first.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-8 pb-8 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProgramToDelete(null)}
+                disabled={isDeletingProgram}
+                className="min-w-[80px]"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleConfirmDeleteProgram}
+                disabled={isDeletingProgram}
+                className="min-w-[100px]"
+              >
+                {isDeletingProgram ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Instance Modal - View, Edit, Delete */}
       {modalMode && selectedInstance && (
@@ -1161,6 +1499,8 @@ export default function BlazeProgramsManagementPage() {
                           </span>
                         </div>
                       )}
+
+                      {renderInstanceSchemaFields(selectedInstance)}
                     </div>
                   </div>
                 </div>

@@ -25,11 +25,10 @@ export const metadata: Metadata = {
   description: "Blaze Robotics Academy is a robotics education platform for students in the Seattle area.",
   icons: {
     icon: [
-      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
     ],
-    shortcut: '/favicon-32x32.png', // 使用 32x32 PNG 作为快捷方式图标
-    apple: '/apple-touch-icon.png', // Apple devices (180x180 recommended)
+    shortcut: '/favicon-32x32.png',
+    apple: '/favicon-32x32.png',
   },
 };
 
