@@ -346,7 +346,7 @@ interface RouteProps {
               <Link href="/" className="flex items-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/Blaze+New+logos+1 copy.webp"
+                  src="/Blaze+New+logos+1.webp"
                   alt="BLAZE ROBOTICS Academy"
                   className="h-12 w-auto object-contain"
                 />
