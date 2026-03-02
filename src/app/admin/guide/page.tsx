@@ -50,6 +50,7 @@ const deploymentItems = [
   { id: "deployment-auth", title: "Auth Configuration", icon: KeyRound },
   { id: "deployment-mail", title: "Mail Subscription Configuration", icon: Mail },
   { id: "deployment-supabase", title: "Supabase Data Connection", icon: Database },
+  { id: "deployment-db-init", title: "Database Initialization", icon: Database },
   { id: "deployment-vercel", title: "GitHub + Vercel Deployment", icon: CloudCog },
 ]
 const allSectionIds = [overviewItem.id, ...operationItems.map((i) => i.id), ...deploymentItems.map((i) => i.id)]
@@ -1228,6 +1229,54 @@ export default function AdminGuidePage() {
                       </div>
                       <p className="text-muted-foreground">
                         For local or script access (migrations, seeding), use <code>NEXT_PUBLIC_SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code>. Server API uses the same key via <code>supabaseAdmin</code>.
+                      </p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="deployment-db-init" id="deployment-db-init" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Database className="h-4 w-4" />
+                      Database Initialization
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4 text-sm">
+                      <p className="text-muted-foreground">
+                        For a <strong>new Supabase project</strong>, run the SQL initialization scripts to create all required tables. Scripts are in <code>sql/init/</code> and must be executed in order.
+                      </p>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">File</th>
+                              <th className="text-left p-3 font-medium">Purpose</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-muted-foreground">
+                            <tr className="border-b">
+                              <td className="p-3"><code>00-supabase-init.sql</code></td>
+                              <td className="p-3">Creates all tables: users, password_reset_tokens, v2_offering_type, v2_category, v2_franchise, v2_franchise_category_map, v2_campus, v2_offering, v2_program, v2_instance, students, user_students, instance_enrollments; indexes; triggers; RLS policies.</td>
+                            </tr>
+                            <tr className="border-b">
+                              <td className="p-3"><code>01-seed-offering-types.sql</code></td>
+                              <td className="p-3">Inserts default offering types (course, camp, workshop, free_trial, gift_card, competition) and example categories. Safe to run multiple times (ON CONFLICT DO NOTHING).</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-2">How to run on Supabase</h3>
+                        <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                          <li>Open Supabase Dashboard → your project → <strong>SQL Editor</strong>.</li>
+                          <li>Copy the contents of <code>sql/init/00-supabase-init.sql</code> into a new query and run it.</li>
+                          <li>Copy the contents of <code>sql/init/01-seed-offering-types.sql</code> into a new query and run it.</li>
+                          <li>Optionally use <strong>Supabase CLI</strong>: <code>supabase db push</code> if you have migrations linked; or run the SQL files via <code>psql</code> against your project connection string.</li>
+                        </ol>
+                      </div>
+                      <p className="text-muted-foreground">
+                        After initialization, configure at least one <strong>Franchise</strong> and subscribe it to <strong>Categories</strong> via the admin UI; then create <strong>Programs</strong> and <strong>Instances</strong> to enable enrollments.
                       </p>
                     </div>
                   </AccordionContent>
