@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Trash2, Code, LayoutGrid, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Code, LayoutGrid, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const FIELD_TYPES = ['text', 'number', 'boolean', 'select', 'multiselect', 'array', 'date', 'time'] as const
@@ -155,33 +155,33 @@ export function SchemaEditor({
   return (
     <div className={cn('flex flex-col', className)}>
       <Tabs value={mode} onValueChange={(v) => (v === 'json' ? setMode('json') : handleSwitchToVisual())}>
-        <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center justify-between gap-3 mb-3">
           {title && <span className="text-sm font-medium text-muted-foreground">{title}</span>}
-          <TabsList className="h-9">
-            <TabsTrigger value="visual" className="gap-1.5">
+          <TabsList className="h-9 rounded-lg bg-muted/60 p-0.5">
+            <TabsTrigger value="visual" className="gap-1.5 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm px-3">
               <LayoutGrid className="h-4 w-4" />
               Visual
             </TabsTrigger>
-            <TabsTrigger value="json" className="gap-1.5">
+            <TabsTrigger value="json" className="gap-1.5 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm px-3">
               <Code className="h-4 w-4" />
               JSON
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="visual" className="mt-2 space-y-2">
-          <div className="rounded-md border bg-muted/30 p-3" style={{ minHeight }}>
+        <TabsContent value="visual" className="mt-3 space-y-3">
+          <div className="rounded-lg border border-border/80 bg-muted/20 p-4" style={{ minHeight }}>
             {fieldEntries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                <p className="text-sm">No fields defined.</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
+                <p className="text-sm font-medium">No fields defined</p>
                 <p className="text-xs mt-1">Add a field or switch to JSON to edit raw schema.</p>
-                <Button type="button" variant="outline" size="sm" className="mt-3 gap-1" onClick={addField}>
+                <Button type="button" variant="outline" size="sm" className="mt-4 rounded-lg gap-2 border-dashed" onClick={addField}>
                   <Plus className="h-4 w-4" />
                   Add field
                 </Button>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {fieldEntries.map(([key, def], index) => (
                   <FieldCard
                     key={key}
@@ -193,7 +193,7 @@ export function SchemaEditor({
                     onMoveDown={index < fieldEntries.length - 1 ? () => moveField(key, 'down') : undefined}
                   />
                 ))}
-                <Button type="button" variant="outline" size="sm" className="w-full gap-1 mt-1" onClick={addField}>
+                <Button type="button" variant="outline" size="sm" className="w-full gap-2 mt-2 rounded-lg border-dashed h-9" onClick={addField}>
                   <Plus className="h-4 w-4" />
                   Add field
                 </Button>
@@ -202,7 +202,7 @@ export function SchemaEditor({
           </div>
         </TabsContent>
 
-        <TabsContent value="json" className="mt-2">
+        <TabsContent value="json" className="mt-3">
           <div className="space-y-2">
             <Textarea
               value={jsonInput}
@@ -272,21 +272,22 @@ function FieldCard({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="py-3 px-4 flex flex-row items-center gap-2">
-        <div className="flex items-center gap-1 shrink-0">
-          {onMoveUp && (
-            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveUp}>
-              ↑
-            </Button>
-          )}
-          {onMoveDown && (
-            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveDown}>
-              ↓
-            </Button>
-          )}
-        </div>
-        <div className="flex-1 grid grid-cols-[1fr,auto,1fr] gap-2 items-center min-w-0">
+    <Card className="overflow-hidden rounded-lg border border-border/80 shadow-none">
+      <CardHeader className="py-3 px-4 space-y-3">
+        {/* Row 1: Move + Key + Type badge + Label */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center shrink-0">
+            {onMoveUp && (
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground" onClick={onMoveUp} title="Move up">
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+            )}
+            {onMoveDown && (
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground" onClick={onMoveDown} title="Move down">
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
           <Input
             value={fieldKey}
             onChange={(e) => {
@@ -294,29 +295,31 @@ function FieldCard({
               if (v && v !== fieldKey) onUpdate({ key: v })
             }}
             placeholder="field_key"
-            className="font-mono text-sm h-8"
+            className="font-mono text-sm h-8 w-[140px] shrink-0 rounded-md"
           />
-          <Badge variant="secondary" className="font-mono text-xs shrink-0">
+          <Badge variant="secondary" className="font-mono text-xs shrink-0 rounded-md">
             {type}
           </Badge>
           <Input
             value={label}
             onChange={(e) => update({ label: e.target.value })}
             placeholder="Label"
-            className="h-8"
+            className="h-8 flex-1 min-w-[120px] rounded-md"
           />
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1">
+        {/* Row 2: Required, Type select, Scope select, Expand, Delete */}
+        <div className="flex flex-wrap items-center gap-3 pl-[4.5rem]">
+          <div className="flex items-center gap-1.5">
             <Checkbox
               id={`req-${fieldKey}`}
               checked={required}
               onCheckedChange={(c) => update({ required: c === true })}
+              className="rounded"
             />
-            <Label htmlFor={`req-${fieldKey}`} className="text-xs cursor-pointer">Required</Label>
+            <Label htmlFor={`req-${fieldKey}`} className="text-xs cursor-pointer text-muted-foreground">Required</Label>
           </div>
           <Select value={type} onValueChange={(v) => update({ type: v })}>
-            <SelectTrigger className="w-[100px] h-8">
+            <SelectTrigger className="w-[110px] h-8 rounded-md text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -326,7 +329,7 @@ function FieldCard({
             </SelectContent>
           </Select>
           <Select value={displayScope} onValueChange={(v) => update({ display_scope: v })}>
-            <SelectTrigger className="w-[90px] h-8">
+            <SelectTrigger className="w-[90px] h-8 rounded-md text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -335,17 +338,18 @@ function FieldCard({
               ))}
             </SelectContent>
           </Select>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setExpanded(!expanded)}>
-            {expanded ? '−' : '+'}
+          <div className="flex-1" />
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground" onClick={() => setExpanded(!expanded)} title={expanded ? 'Collapse' : 'More options'}>
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={onRemove}>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground hover:text-destructive" onClick={onRemove} title="Remove field">
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
       {expanded && (
-        <CardContent className="pt-0 pb-3 px-4 border-t space-y-3">
-          <div className="grid grid-cols-2 gap-3 pt-3">
+        <CardContent className="pt-0 pb-4 px-4 border-t bg-muted/20 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
             <div className="space-y-1">
               <Label className="text-xs">Placeholder</Label>
               <Input

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,33 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
+import { Search, Edit, Trash2, Plus, Loader2, RefreshCcw, Save, X } from "lucide-react"
 import { SchemaEditor } from "@/components/admin/SchemaEditor"
+import { cn } from "@/lib/utils"
 
 interface V2OfferingType {
   id: string
@@ -47,12 +26,33 @@ interface V2OfferingType {
   description?: string
   icon?: string
   color?: string
-  offering_schema: Record<string, any>
-  instance_schema: Record<string, any>
+  offering_schema: Record<string, unknown>
+  instance_schema: Record<string, unknown>
   display_order: number
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+function jsonToMarkdownBlock(obj: Record<string, unknown>): string {
+  try {
+    const json = JSON.stringify(obj, null, 2)
+    return "```json\n" + json + "\n```"
+  } catch {
+    return "```json\n{}\n```"
+  }
+}
+
+const emptyFormData = {
+  code: "",
+  name: "",
+  description: "",
+  icon: "",
+  color: "",
+  offering_schema: {} as Record<string, unknown>,
+  instance_schema: {} as Record<string, unknown>,
+  display_order: 0,
+  is_active: true,
 }
 
 export default function BlazeOfferingTypesManagementPage() {
@@ -60,25 +60,15 @@ export default function BlazeOfferingTypesManagementPage() {
   const [filteredTypes, setFilteredTypes] = useState<V2OfferingType[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [editingType, setEditingType] = useState<V2OfferingType | null>(null)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [formData, setFormData] = useState<Omit<V2OfferingType, 'id' | 'created_at' | 'updated_at'>>({
-    code: "",
-    name: "",
-    description: "",
-    icon: "",
-    color: "",
-    offering_schema: {},
-    instance_schema: {},
-    display_order: 0,
-    is_active: true,
-  })
-
+  // Inline edit: "new" = add form, type.id = edit that type, null = no edit
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [formData, setFormData] = useState(emptyFormData)
   const [offeringSchemaJson, setOfferingSchemaJson] = useState("{}")
   const [instanceSchemaJson, setInstanceSchemaJson] = useState("{}")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchOfferingTypes()
@@ -103,49 +93,19 @@ export default function BlazeOfferingTypesManagementPage() {
       setIsLoading(true)
       setError(null)
       const response = await fetch("/api/admin/offering-types/v2?includeInactive=true")
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch offering types")
-      }
-
+      if (!response.ok) throw new Error("Failed to fetch offering types")
       const data = await response.json()
       setOfferingTypes(data)
       setFilteredTypes(data)
-    } catch (err: any) {
-      console.error("Error fetching offering types:", err)
-      setError(err.message || "Failed to load offering types")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load offering types")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleDelete = async (typeId: string) => {
-    const type = offeringTypes.find(t => t.id === typeId)
-    if (!type) return
-
-    if (!confirm(`Are you sure you want to delete "${type.name}"? This will fail if there are offerings using this type.`)) {
-      return
-    }
-
-    try {
-      const response = await fetch(`/api/admin/offering-types/v2/${typeId}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        fetchOfferingTypes()
-      } else {
-        const data = await response.json()
-        alert(data.error || "Failed to delete offering type")
-      }
-    } catch (error) {
-      console.error("Error deleting offering type:", error)
-      alert("Failed to delete offering type")
-    }
-  }
-
-  const handleEdit = (type: V2OfferingType) => {
-    setEditingType(type)
+  const startEdit = (type: V2OfferingType) => {
+    setEditingId(type.id)
     setFormData({
       code: type.code,
       name: type.name,
@@ -159,338 +119,426 @@ export default function BlazeOfferingTypesManagementPage() {
     })
     setOfferingSchemaJson(JSON.stringify(type.offering_schema || {}, null, 2))
     setInstanceSchemaJson(JSON.stringify(type.instance_schema || {}, null, 2))
-    setIsEditDialogOpen(true)
+    setSubmitError(null)
   }
 
-  const handleAdd = () => {
-    setEditingType(null)
-    setFormData({
-      code: "",
-      name: "",
-      description: "",
-      icon: "",
-      color: "",
-      offering_schema: {},
-      instance_schema: {},
-      display_order: 0,
-      is_active: true,
-    })
+  const startAdd = () => {
+    setEditingId("new")
+    setFormData(emptyFormData)
     setOfferingSchemaJson("{}")
     setInstanceSchemaJson("{}")
-    setIsEditDialogOpen(true)
+    setSubmitError(null)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const cancelEdit = () => {
+    setEditingId(null)
+    setSubmitError(null)
+  }
+
+  const handleSave = async () => {
     setIsSubmitting(true)
+    setSubmitError(null)
 
     try {
-      // 解析 JSON 配置
-      let offeringSchema = {}
-      let instanceSchema = {}
+      let offeringSchema: Record<string, unknown> = {}
+      let instanceSchema: Record<string, unknown> = {}
       try {
         offeringSchema = offeringSchemaJson ? JSON.parse(offeringSchemaJson) : {}
         instanceSchema = instanceSchemaJson ? JSON.parse(instanceSchemaJson) : {}
-      } catch (err) {
-        alert("Invalid JSON in Schema fields")
+      } catch {
+        setSubmitError("Invalid JSON in schema fields")
         setIsSubmitting(false)
         return
       }
 
-      const submitData = {
-        ...formData,
-        offering_schema: offeringSchema,
-        instance_schema: instanceSchema,
+      const payload = {
+        code: formData.code,
+        name: formData.name,
         description: formData.description || undefined,
         icon: formData.icon || undefined,
         color: formData.color || undefined,
+        display_order: formData.display_order,
+        is_active: formData.is_active,
+        offering_schema: offeringSchema,
+        instance_schema: instanceSchema,
       }
 
-      const url = editingType
-        ? `/api/admin/offering-types/v2/${editingType.id}`
-        : "/api/admin/offering-types/v2"
-      const method = editingType ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(submitData),
-      })
-
-      if (response.ok) {
-        fetchOfferingTypes()
-        setIsEditDialogOpen(false)
-        setEditingType(null)
+      if (editingId === "new") {
+        const res = await fetch("/api/admin/offering-types/v2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || "Failed to create")
+        }
       } else {
-        const error = await response.json()
-        alert(error.error || "Failed to save offering type")
+        const res = await fetch(`/api/admin/offering-types/v2/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || "Failed to update")
+        }
       }
-    } catch (error) {
-      console.error("Error saving offering type:", error)
-      alert("Failed to save offering type")
+      cancelEdit()
+      fetchOfferingTypes()
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to save")
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+  const handleDelete = async (typeId: string) => {
+    const type = offeringTypes.find((t) => t.id === typeId)
+    if (!type) return
+    if (!confirm(`Delete "${type.name}"? This will fail if any offerings use this type.`)) return
+
+    try {
+      const res = await fetch(`/api/admin/offering-types/v2/${typeId}`, { method: "DELETE" })
+      if (res.ok) {
+        if (editingId === typeId) cancelEdit()
+        fetchOfferingTypes()
+      } else {
+        const data = await res.json()
+        alert(data.error || "Failed to delete")
+      }
+    } catch {
+      alert("Failed to delete offering type")
+    }
+  }
+
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
     })
-  }
 
   return (
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">V2 Offering Types Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage offering types (product type configurations) using the V2 database schema
+          Manage offering types (product type configurations). Edit, save, or delete directly on each card.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Offering Types</CardTitle>
-              <CardDescription>
-                A list of all offering types in the V2 system
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search offering types..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
-                />
-              </div>
-              <Button onClick={handleAdd}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Offering Type
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : error ? (
-            <div className="text-center py-12 space-y-4">
-              <p className="text-destructive text-lg">{error}</p>
-              <Button onClick={fetchOfferingTypes}>
-                <RefreshCcw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
-            </div>
-          ) : filteredTypes.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No offering types found matching your search." : "No offering types found."}
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTypes.map((type) => (
-                    <TableRow key={type.id}>
-                      <TableCell className="font-mono text-sm">{type.code}</TableCell>
-                      <TableCell className="font-medium">{type.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={type.is_active ? "default" : "secondary"}>
-                          {type.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(type.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(type)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDelete(type.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search offering types..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 h-10 rounded-lg bg-muted/50 border-muted-foreground/20 focus-visible:ring-2"
+          />
+        </div>
+        <Button
+          onClick={startAdd}
+          disabled={editingId === "new"}
+          size="default"
+          className="h-10 rounded-lg gap-2 shadow-sm hover:shadow"
+        >
+          <Plus className="h-4 w-4" />
+          Add Offering Type
+        </Button>
+      </div>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>{editingType ? "Edit Offering Type" : "Add New Offering Type"}</DialogTitle>
-            <DialogDescription>
-              {editingType ? "Update offering type information" : "Create a new offering type"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto pr-1">
-              <Tabs defaultValue="basic" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                  <TabsTrigger value="offering-schema">Offering Schema</TabsTrigger>
-                  <TabsTrigger value="instance-schema">Instance Schema</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="basic" className="mt-4">
-                  <div className="space-y-6">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Identity</CardTitle>
-                        <CardDescription>Code and display name. Code cannot be changed after creation.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="code">Code *</Label>
-                            <Input
-                              id="code"
-                              value={formData.code}
-                              onChange={(e) => setFormData({ ...formData, code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-                              placeholder="e.g. course, camp, workshop"
-                              required
-                              disabled={!!editingType}
-                              className="font-mono"
-                            />
-                            <p className="text-xs text-muted-foreground">Lowercase, numbers, underscores only.</p>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="name">Display name *</Label>
-                            <Input
-                              id="name"
-                              value={formData.name}
-                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                              placeholder="e.g. Course, Camp, Workshop"
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="description">Description</Label>
-                          <Textarea
-                            id="description"
-                            value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            placeholder="Brief description of this offering type"
-                            rows={3}
-                            className="resize-none"
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Status</CardTitle>
-                        <CardDescription>Whether this offering type is active. Inactive types cannot be used for new offerings.</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="is_active"
-                            checked={formData.is_active}
-                            onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked === true })}
-                          />
-                          <Label htmlFor="is_active" className="cursor-pointer font-medium">
-                            Active
-                          </Label>
-                        </div>
-                      </CardContent>
-                    </Card>
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 space-y-4">
+          <p className="text-destructive text-lg">{error}</p>
+          <Button onClick={fetchOfferingTypes} variant="outline" size="lg" className="rounded-lg gap-2">
+            <RefreshCcw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-6 grid-cols-1">
+          {/* New card (when adding) */}
+          {editingId === "new" && (
+            <Card className="border-dashed border-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">New Offering Type</CardTitle>
+                <CardDescription>Fill in the fields below and click Save.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Code *</Label>
+                    <Input
+                      value={formData.code}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          code: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""),
+                        })
+                      }
+                      placeholder="e.g. course, camp"
+                      className="font-mono"
+                    />
                   </div>
-                </TabsContent>
-
-                <TabsContent value="offering-schema" className="mt-4">
+                  <div className="space-y-2">
+                    <Label>Display name *</Label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g. Course, Camp"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Brief description"
+                    rows={2}
+                    className="resize-none"
+                  />
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="new_is_active"
+                      checked={formData.is_active}
+                      onCheckedChange={(c) => setFormData({ ...formData, is_active: c === true })}
+                    />
+                    <Label htmlFor="new_is_active" className="cursor-pointer">Active</Label>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Offering schema (JSON)</Label>
                   <SchemaEditor
-                    title="Offering Schema"
                     value={offeringSchemaJson}
                     onChange={setOfferingSchemaJson}
-                    placeholder='{"fields": {"description": {"type": "text", "label": "Description", "required": true}, ...}}'
-                    minHeight="360px"
+                    minHeight="200px"
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Defines fields for this offering type (e.g. description, base_price, base_capacity). Use Visual to edit fields or JSON for raw edit.
-                  </p>
-                </TabsContent>
-
-                <TabsContent value="instance-schema" className="mt-4">
+                </div>
+                <div className="space-y-2">
+                  <Label>Instance schema (JSON)</Label>
                   <SchemaEditor
-                    title="Instance Schema"
                     value={instanceSchemaJson}
                     onChange={setInstanceSchemaJson}
-                    placeholder='{"fields": {"start_date": {"type": "date", "label": "Start Date", "required": true}, ...}}'
-                    minHeight="360px"
+                    minHeight="200px"
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Defines fields for each instance of this type (e.g. start_date, max_students, notes). Use Visual to edit fields or JSON for raw edit.
-                  </p>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={
-                  isSubmitting || 
-                  !formData.name || 
-                  !formData.code
-                } 
-                className="w-full sm:w-auto"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingType ? (
-                  "Update Offering Type"
-                ) : (
-                  "Create Offering Type"
+                </div>
+                {submitError && (
+                  <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{submitError}</p>
                 )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                <div className="flex flex-wrap items-center gap-3 pt-4 border-t">
+                  <Button
+                    onClick={handleSave}
+                    disabled={isSubmitting || !formData.code || !formData.name}
+                    size="default"
+                    className="rounded-lg gap-2 min-w-[100px]"
+                  >
+                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save
+                  </Button>
+                  <Button variant="outline" size="default" onClick={cancelEdit} disabled={isSubmitting} className="rounded-lg gap-2">
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {filteredTypes.map((type) => (
+            <Card
+              key={type.id}
+              className={cn(
+                "flex flex-col",
+                editingId === type.id && "ring-2 ring-primary"
+              )}
+            >
+              {editingId === type.id ? (
+                <>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Edit: {type.name}</CardTitle>
+                    <CardDescription>Code: <code className="font-mono">{type.code}</code> (cannot change)</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 flex-1 overflow-hidden flex flex-col min-h-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Display name *</Label>
+                        <Input
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Order</Label>
+                        <Input
+                          type="number"
+                          value={formData.display_order}
+                          onChange={(e) =>
+                            setFormData({ ...formData, display_order: parseInt(e.target.value, 10) || 0 })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        rows={2}
+                        className="resize-none"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`active-${type.id}`}
+                        checked={formData.is_active}
+                        onCheckedChange={(c) => setFormData({ ...formData, is_active: c === true })}
+                      />
+                      <Label htmlFor={`active-${type.id}`} className="cursor-pointer">Active</Label>
+                    </div>
+                    <div className="space-y-2 min-h-0 flex flex-col">
+                      <Label>Offering schema</Label>
+                      <div className="min-h-[180px]">
+                        <SchemaEditor
+                          value={offeringSchemaJson}
+                          onChange={setOfferingSchemaJson}
+                          minHeight="180px"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2 min-h-0 flex flex-col">
+                      <Label>Instance schema</Label>
+                      <div className="min-h-[180px]">
+                        <SchemaEditor
+                          value={instanceSchemaJson}
+                          onChange={setInstanceSchemaJson}
+                          minHeight="180px"
+                        />
+                      </div>
+                    </div>
+                    {submitError && (
+                      <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{submitError}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3 pt-4 border-t flex-shrink-0">
+                      <Button
+                        onClick={handleSave}
+                        disabled={isSubmitting || !formData.name}
+                        size="default"
+                        className="rounded-lg gap-2 min-w-[100px]"
+                      >
+                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save
+                      </Button>
+                      <Button variant="outline" size="default" onClick={cancelEdit} disabled={isSubmitting} className="rounded-lg gap-2">
+                        <X className="h-4 w-4" />
+                        Cancel
+                      </Button>
+                      <span className="inline-block w-px h-6 bg-border mx-1" aria-hidden />
+                      <Button
+                        variant="ghost"
+                        size="default"
+                        onClick={() => handleDelete(type.id)}
+                        disabled={isSubmitting}
+                        title="Delete"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg gap-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                    </div>
+                  </CardContent>
+                </>
+              ) : (
+                <>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-lg">{type.name}</CardTitle>
+                        <CardDescription className="font-mono text-xs mt-0.5">{type.code}</CardDescription>
+                      </div>
+                      <Badge variant={type.is_active ? "default" : "secondary"}>
+                        {type.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => startEdit(type)}
+                        className="rounded-lg gap-1.5 h-8 px-3 shadow-sm"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg gap-1.5 h-8 px-3"
+                        onClick={() => handleDelete(type.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-0">
+                    {type.description && (
+                      <p className="text-sm text-muted-foreground">{type.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Created {formatDate(type.created_at)}
+                    </p>
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Offering schema (type_config_data)</p>
+                      <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
+                        <ReactMarkdown
+                          components={{
+                            pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
+                            code: ({ className, children }) => (
+                              <code className={cn(className, "text-[11px]")}>{children}</code>
+                            ),
+                          }}
+                        >
+                          {jsonToMarkdownBlock((type.offering_schema || {}) as Record<string, unknown>)}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Instance schema (instance_data_ext)</p>
+                      <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
+                        <ReactMarkdown
+                          components={{
+                            pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
+                            code: ({ className, children }) => (
+                              <code className={cn(className, "text-[11px]")}>{children}</code>
+                            ),
+                          }}
+                        >
+                          {jsonToMarkdownBlock((type.instance_schema || {}) as Record<string, unknown>)}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </CardContent>
+                </>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && !error && filteredTypes.length === 0 && !editingId && (
+        <div className="text-center py-12 text-muted-foreground">
+          {searchQuery ? "No offering types match your search." : "No offering types yet. Click Add Offering Type to create one."}
+        </div>
+      )}
     </div>
   )
 }

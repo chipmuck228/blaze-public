@@ -18,6 +18,7 @@ import {
   DollarSign,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { InstanceRecommendations } from "@/components/category/InstanceRecommendations"
 
 const OFFERING_TYPE_LABELS: Record<string, { overview: string; audience: string; outcomes: string; prerequisites: string }> = {
   course: { overview: "Program Overview", audience: "Target Audience", outcomes: "What You'll Learn", prerequisites: "Prerequisites" },
@@ -442,6 +443,15 @@ export function InstanceDetail() {
                 </Link>
               </Button>
             </div>
+
+            {data.offering?.offering_type?.id && (
+              <InstanceRecommendations
+                offeringTypeId={data.offering.offering_type.id}
+                excludeOfferingId={data.offering.id}
+                categoryId={category?.id}
+                categorySlug={categorySlug || (category?.name ? String(category.name).replace(/_/g, "-") : "")}
+              />
+            )}
           </div>
         </div>
       </div>

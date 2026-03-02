@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -28,8 +29,28 @@ import {
   KeyRound,
   Database,
   CloudCog,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+interface V2OfferingTypeSchema {
+  id: string
+  code: string
+  name: string
+  description?: string
+  offering_schema: Record<string, unknown>
+  instance_schema: Record<string, unknown>
+  is_active: boolean
+}
+
+function jsonToMarkdownBlock(obj: Record<string, unknown>): string {
+  try {
+    const json = JSON.stringify(obj, null, 2)
+    return "```json\n" + json + "\n```"
+  } catch {
+    return "```json\n{}\n```"
+  }
+}
 
 // Table of contents: Overview, Operation Guide (collapsible), Deployment Guide (collapsible)
 const overviewItem = { id: "overview", title: "Overview", icon: Info }
@@ -59,6 +80,29 @@ export default function AdminGuidePage() {
   const [activeSection, setActiveSection] = useState<string>("overview")
   const [operationOpen, setOperationOpen] = useState<string[]>(["hierarchy"])
   const [deploymentOpen, setDeploymentOpen] = useState<string[]>(["deployment-auth"])
+  const [offeringTypes, setOfferingTypes] = useState<V2OfferingTypeSchema[]>([])
+  const [offeringTypesLoading, setOfferingTypesLoading] = useState(true)
+  const [offeringTypesError, setOfferingTypesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setOfferingTypesLoading(true)
+      setOfferingTypesError(null)
+      try {
+        const res = await fetch("/api/admin/offering-types/v2?includeInactive=true")
+        if (!res.ok) throw new Error("Failed to fetch offering types")
+        const data = await res.json()
+        if (!cancelled) setOfferingTypes(data)
+      } catch (e) {
+        if (!cancelled) setOfferingTypesError(e instanceof Error ? e.message : "Failed to load")
+      } finally {
+        if (!cancelled) setOfferingTypesLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -668,233 +712,66 @@ export default function AdminGuidePage() {
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-8">
-              {/* 1. Course */}
-              <div>
-                <h3 className="text-lg font-semibold mb-1">1. Course</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Recurring class: description, base price, capacity, session count, curriculum outline; per-instance age range, target grades, instructor, classroom.
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema → type_config_data</p>
-                    <p className="text-xs text-muted-foreground mb-2">Key fields: description, base_price, currency, target_audience, learning_outcomes, prerequisites, base_capacity, base_sessions_count, curriculum_outline, materials_included, certificate_available.</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-48 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "description": { "type": "text", "label": "Course description", "required": true, "display_scope": "both" },
-    "base_price": { "type": "number", "label": "Base price", "required": true, "min": 0, "step": 0.01, "display_scope": "both" },
-    "currency": { "type": "text", "label": "Currency", "default": "USD", "display_scope": "both" },
-    "base_capacity": { "type": "number", "label": "Base capacity", "min": 1, "default": 20, "display_scope": "both" },
-    "base_sessions_count": { "type": "number", "label": "Session count", "min": 1, "default": 8, "display_scope": "both" },
-    "materials_included": { "type": "boolean", "label": "Materials included", "default": false, "display_scope": "both" },
-    "certificate_available": { "type": "boolean", "label": "Certificate available", "default": false, "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema → instance_data_ext</p>
-                    <p className="text-xs text-muted-foreground mb-2">Key fields: age_min, age_max, target_grades (multiselect), instructor_name, classroom_number, special_equipment (array).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-48 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "age_min": { "type": "number", "label": "Min age", "required": true, "min": 0, "max": 18, "display_scope": "both" },
-    "age_max": { "type": "number", "label": "Max age", "required": true, "min": 0, "max": 18, "display_scope": "both" },
-    "target_grades": { "type": "multiselect", "label": "Target grades", "options": ["K","1","2","3","4","5","6","7","8","9","10","11","12"], "display_scope": "both" },
-    "instructor_name": { "type": "text", "label": "Instructor name", "display_scope": "both" },
-    "classroom_number": { "type": "text", "label": "Classroom number", "display_scope": "both" },
-    "special_equipment": { "type": "array", "label": "Special equipment", "items": { "type": "string" }, "display_scope": "admin" }
-  }
-}`}</pre>
+              <p className="text-sm text-muted-foreground mb-4">
+                Schemas below are loaded from <code>v2_offering_type</code>. Offering schema defines <code>type_config_data</code> on Offerings; instance schema defines <code>instance_data_ext</code> on Instances.
+              </p>
+              {offeringTypesLoading && (
+                <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Loading offering types…</span>
+                </div>
+              )}
+              {offeringTypesError && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+                  {offeringTypesError}
+                </div>
+              )}
+              {!offeringTypesLoading && !offeringTypesError && offeringTypes.length === 0 && (
+                <p className="text-sm text-muted-foreground">No offering types found. Configure them in Admin → Blaze → Offering Types.</p>
+              )}
+              {!offeringTypesLoading && !offeringTypesError && offeringTypes.map((type, index) => (
+                <div key={type.id}>
+                  <h3 className="text-lg font-semibold mb-1">
+                    {index + 1}. {type.name} <span className="font-mono text-sm font-normal text-muted-foreground">({type.code})</span>
+                    {!type.is_active && <Badge variant="secondary" className="ml-2">Inactive</Badge>}
+                  </h3>
+                  {type.description && (
+                    <p className="text-sm text-muted-foreground mb-3">{type.description}</p>
+                  )}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema → type_config_data</p>
+                      <div className="overflow-x-auto max-h-64 overflow-y-auto bg-background p-3 rounded border text-xs font-mono">
+                        <ReactMarkdown
+                          components={{
+                            pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
+                            code: ({ className, children }) => (
+                              <code className={cn(className, "text-[11px]")}>{children}</code>
+                            ),
+                          }}
+                        >
+                          {jsonToMarkdownBlock((type.offering_schema || {}) as Record<string, unknown>)}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema → instance_data_ext</p>
+                      <div className="overflow-x-auto max-h-64 overflow-y-auto bg-background p-3 rounded border text-xs font-mono">
+                        <ReactMarkdown
+                          components={{
+                            pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
+                            code: ({ className, children }) => (
+                              <code className={cn(className, "text-[11px]")}>{children}</code>
+                            ),
+                          }}
+                        >
+                          {jsonToMarkdownBlock((type.instance_schema || {}) as Record<string, unknown>)}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* 2. Camp */}
-              <div>
-                <h3 className="text-lg font-semibold mb-1">2. Camp</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Multi-day camp: description, price, meal_option (standard/vegetarian/vegan/no_meal), equipment_list, activities; per-instance age range, after_care_available, camp_shirt_provided, meal_provided.
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">description, base_price, currency, target_audience, learning_outcomes, prerequisites, base_capacity, meal_option (select), equipment_list (array), activities (array).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-40 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "description": { "type": "text", "label": "Camp description", "required": true, "display_scope": "both" },
-    "base_price": { "type": "number", "label": "Base price", "required": true, "min": 0, "step": 0.01, "display_scope": "both" },
-    "meal_option": { "type": "select", "label": "Meal option", "options": ["standard","vegetarian","vegan","no_meal"], "default": "standard", "display_scope": "both" },
-    "base_capacity": { "type": "number", "label": "Base capacity", "min": 1, "default": 30, "display_scope": "both" },
-    "equipment_list": { "type": "array", "label": "Equipment list", "items": { "type": "string" }, "display_scope": "both" },
-    "activities": { "type": "array", "label": "Activities", "items": { "type": "string" }, "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">age_min, age_max, after_care_available, camp_shirt_provided, meal_provided, special_needs (admin).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-40 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "age_min": { "type": "number", "label": "Min age", "required": true, "min": 0, "max": 18, "display_scope": "both" },
-    "age_max": { "type": "number", "label": "Max age", "required": true, "min": 0, "max": 18, "display_scope": "both" },
-    "after_care_available": { "type": "boolean", "label": "After care available", "default": false, "display_scope": "both" },
-    "camp_shirt_provided": { "type": "boolean", "label": "Camp shirt provided", "default": false, "display_scope": "both" },
-    "meal_provided": { "type": "boolean", "label": "Meal provided", "default": false, "display_scope": "both" },
-    "special_needs": { "type": "text", "label": "Special needs", "multiline": true, "display_scope": "admin" }
-  }
-}`}</pre>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Gift Card */}
-              <div>
-                <h3 className="text-lg font-semibold mb-1">3. Gift Card</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Gift card product: description, base_price, valid_through (months), denomination_options; per-instance denomination, expiry_date, delivery_method (email/sms/print), recipient_name, message (admin).
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">description, base_price, currency, valid_through (1–24 months), denomination_options (array of numbers), usage_restrictions.</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-36 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "description": { "type": "text", "label": "Gift card description", "required": true, "display_scope": "both" },
-    "base_price": { "type": "number", "label": "Base price", "required": true, "min": 0, "step": 0.01, "display_scope": "both" },
-    "valid_through": { "type": "number", "label": "Valid through (months)", "required": true, "min": 1, "max": 24, "default": 12, "display_scope": "both" },
-    "denomination_options": { "type": "array", "label": "Denomination options", "items": { "type": "number", "min": 0, "step": 0.01 }, "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">denomination, expiry_date, recipient_name (admin), message (admin), delivery_method (select: email/sms/print).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-36 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "denomination": { "type": "number", "label": "Denomination", "required": true, "min": 0, "step": 0.01, "display_scope": "both" },
-    "expiry_date": { "type": "date", "label": "Expiry date", "display_scope": "both" },
-    "delivery_method": { "type": "select", "label": "Delivery method", "options": ["email","sms","print"], "default": "email", "display_scope": "admin" }
-  }
-}`}</pre>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Workshop */}
-              <div>
-                <h3 className="text-lg font-semibold mb-1">4. Workshop</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Single or multi-session workshop: is_multidrop, drop_in_price (conditional), workshop_duration (hours), materials_provided, skill_level; per-instance age range, max_students, instructor_name, workshop_topic, available_drop_ins (when offering.is_multidrop).
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">description, is_multidrop (boolean), base_price, drop_in_price (condition: is_multidrop), workshop_duration (0.5–8h), materials_provided, skill_level (beginner/intermediate/advanced).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-40 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "description": { "type": "text", "label": "Workshop description", "required": true, "display_scope": "both" },
-    "is_multidrop": { "type": "boolean", "label": "Multi-drop supported", "default": false, "display_scope": "both" },
-    "base_price": { "type": "number", "label": "Base price", "required": true, "min": 0, "step": 0.01, "display_scope": "both" },
-    "drop_in_price": { "type": "number", "label": "Drop-in price", "min": 0, "condition": { "field": "is_multidrop", "equals": true }, "display_scope": "both" },
-    "workshop_duration": { "type": "number", "label": "Duration (hours)", "required": true, "min": 0.5, "max": 8, "step": 0.5, "default": 2, "display_scope": "both" },
-    "skill_level": { "type": "select", "label": "Skill level", "options": ["beginner","intermediate","advanced"], "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">age_min, age_max, max_students, instructor_name, workshop_topic, special_requirements, available_drop_ins (condition: offering.is_multidrop).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-40 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "age_min": { "type": "number", "label": "Min age", "min": 0, "max": 18, "display_scope": "both" },
-    "age_max": { "type": "number", "label": "Max age", "min": 0, "max": 18, "display_scope": "both" },
-    "max_students": { "type": "number", "label": "Max students", "required": true, "min": 1, "default": 15, "display_scope": "both" },
-    "workshop_topic": { "type": "text", "label": "Workshop topic", "display_scope": "both" },
-    "available_drop_ins": { "type": "number", "label": "Available drop-in slots", "min": 0, "condition": { "field": "offering.is_multidrop", "equals": true }, "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Competition */}
-              <div>
-                <h3 className="text-lg font-semibold mb-1">5. Competition</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Competition event: description, base_price, base_capacity, competition_format (team/individual/both), min_team_size / max_team_size (conditional), rules_url, equipment_required; per-instance start_date, end_date, start_time, end_time, max_students, venue, round_name, registration_deadline.
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">description, base_price, currency, target_audience, learning_outcomes, prerequisites, base_capacity, competition_format (team/individual/both), min_team_size/max_team_size (when format=team), rules_url, equipment_required (array).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-44 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "description": { "type": "text", "label": "Competition description", "required": true, "display_scope": "both" },
-    "base_price": { "type": "number", "label": "Registration fee", "required": true, "min": 0, "step": 0.01, "display_scope": "both" },
-    "base_capacity": { "type": "number", "label": "Base capacity", "min": 1, "default": 50, "display_scope": "both" },
-    "competition_format": { "type": "select", "label": "Competition format", "options": ["team","individual","both"], "default": "team", "display_scope": "both" },
-    "min_team_size": { "type": "number", "label": "Min team size", "min": 1, "max": 10, "condition": { "field": "competition_format", "equals": "team" }, "display_scope": "both" },
-    "max_team_size": { "type": "number", "label": "Max team size", "min": 1, "max": 10, "condition": { "field": "competition_format", "equals": "team" }, "display_scope": "both" },
-    "rules_url": { "type": "text", "label": "Rules URL", "display_scope": "both" },
-    "equipment_required": { "type": "array", "label": "Equipment required", "items": { "type": "string" }, "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">start_date, end_date, start_time, end_time, max_students, venue, round_name, registration_deadline, notes (admin).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-44 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "start_date": { "type": "date", "label": "Start date", "required": true, "display_scope": "both" },
-    "end_date": { "type": "date", "label": "End date", "required": true, "display_scope": "both" },
-    "start_time": { "type": "time", "label": "Start time", "display_scope": "both" },
-    "end_time": { "type": "time", "label": "End time", "display_scope": "both" },
-    "max_students": { "type": "number", "label": "Max students/teams", "required": true, "min": 1, "display_scope": "both" },
-    "venue": { "type": "text", "label": "Venue", "display_scope": "both" },
-    "round_name": { "type": "text", "label": "Round name", "display_scope": "both" },
-    "registration_deadline": { "type": "date", "label": "Registration deadline", "display_scope": "both" },
-    "notes": { "type": "text", "label": "Notes", "multiline": true, "display_scope": "admin" }
-  }
-}`}</pre>
-                  </div>
-                </div>
-              </div>
-
-              {/* 6. Free Trial */}
-              <div>
-                <h3 className="text-lg font-semibold mb-1">6. Free Trial</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Trial session(s): description, base_price (often 0), trial_type (single_session / multi_session / time_limited), trial_sessions_count (when multi_session), trial_days (when time_limited), base_capacity; per-instance start_date, end_date, start_time, end_time, max_students, notes (admin).
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">description, base_price, currency, target_audience, learning_outcomes, prerequisites, trial_type (single_session/multi_session/time_limited), trial_sessions_count (condition: multi_session), trial_days (condition: time_limited), base_capacity, eligibility_notes.</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-44 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "description": { "type": "text", "label": "Trial description", "required": true, "display_scope": "both" },
-    "base_price": { "type": "number", "label": "Trial price", "required": true, "min": 0, "step": 0.01, "default": 0, "display_scope": "both" },
-    "trial_type": { "type": "select", "label": "Trial type", "options": ["single_session","multi_session","time_limited"], "default": "single_session", "display_scope": "both" },
-    "trial_sessions_count": { "type": "number", "label": "Trial sessions count", "min": 1, "max": 10, "condition": { "field": "trial_type", "in": ["multi_session"] }, "display_scope": "both" },
-    "trial_days": { "type": "number", "label": "Trial validity (days)", "min": 1, "max": 30, "condition": { "field": "trial_type", "equals": "time_limited" }, "display_scope": "both" },
-    "base_capacity": { "type": "number", "label": "Trial capacity per session", "min": 1, "default": 10, "display_scope": "both" }
-  }
-}`}</pre>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema</p>
-                    <p className="text-xs text-muted-foreground mb-2">start_date, end_date (optional for multi-session), start_time, end_time, max_students, notes (admin).</p>
-                    <pre className="text-[10px] overflow-x-auto max-h-44 overflow-y-auto bg-background p-2 rounded border">{`{
-  "fields": {
-    "start_date": { "type": "date", "label": "Start date", "required": true, "display_scope": "both" },
-    "end_date": { "type": "date", "label": "End date", "display_scope": "both" },
-    "start_time": { "type": "time", "label": "Start time", "display_scope": "both" },
-    "end_time": { "type": "time", "label": "End time", "display_scope": "both" },
-    "max_students": { "type": "number", "label": "Max students", "required": true, "min": 1, "display_scope": "both" },
-    "notes": { "type": "text", "label": "Notes", "multiline": true, "display_scope": "admin" }
-  }
-}`}</pre>
-                  </div>
-                </div>
-              </div>
+              ))}
 
               <p className="text-sm text-muted-foreground border-t pt-4">
                 Full schema definitions, including all field properties (placeholder, description, display_scope), are in <strong>docs/design/Database_redesign_document_v2.md</strong>. The tables <code>v2_offering.type_config_data</code> and <code>v2_instance.instance_data_ext</code> store the actual values; they are validated against the Offering Type&apos;s <code>offering_schema</code> and <code>instance_schema</code>.

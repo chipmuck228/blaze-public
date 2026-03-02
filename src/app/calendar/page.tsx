@@ -5,6 +5,7 @@ import { Navbar } from '@/components/Navbar'
 import { Footer } from '@/components/Footer'
 import { AIChatButton } from '@/components/location/AIChatButton'
 import { AboutHero } from '@/components/about/AboutHero'
+import { CalendarByOffering } from '@/components/calendar/CalendarByOffering'
 import { Calendar as CalendarIcon, ChevronRight, Loader2, MapPin } from 'lucide-react'
 import Link from 'next/link'
 
@@ -220,6 +221,8 @@ export default function CalendarPage() {
               </div>
             </div>
           </section>
+
+          <CalendarByOffering instances={programItems} />
         </div>
       </main>
       <Footer />
