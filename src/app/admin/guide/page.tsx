@@ -30,6 +30,9 @@ import {
   Database,
   CloudCog,
   Loader2,
+  Map,
+  Sparkles,
+  CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -68,18 +71,18 @@ const operationItems = [
   { id: "notes", title: "Important Notes", icon: BookOpen },
 ]
 const deploymentItems = [
-  { id: "deployment-auth", title: "Auth Configuration", icon: KeyRound },
-  { id: "deployment-mail", title: "Mail Subscription Configuration", icon: Mail },
-  { id: "deployment-supabase", title: "Supabase Data Connection", icon: Database },
-  { id: "deployment-db-init", title: "Database Initialization", icon: Database },
-  { id: "deployment-vercel", title: "GitHub + Vercel Deployment", icon: CloudCog },
+  { id: "deployment-vercel", title: "Vercel Deployment", icon: CloudCog },
+  { id: "deployment-google-auth", title: "Google Auth", icon: KeyRound },
+  { id: "deployment-google-map", title: "Google Map", icon: Map },
+  { id: "deployment-google-gemini", title: "Google Gemini", icon: Sparkles },
+  { id: "deployment-stripe", title: "Stripe", icon: CreditCard },
 ]
 const allSectionIds = [overviewItem.id, ...operationItems.map((i) => i.id), ...deploymentItems.map((i) => i.id)]
 
 export default function AdminGuidePage() {
   const [activeSection, setActiveSection] = useState<string>("overview")
   const [operationOpen, setOperationOpen] = useState<string[]>(["hierarchy"])
-  const [deploymentOpen, setDeploymentOpen] = useState<string[]>(["deployment-auth"])
+  const [deploymentOpen, setDeploymentOpen] = useState<string[]>(["deployment-vercel"])
   const [offeringTypes, setOfferingTypes] = useState<V2OfferingTypeSchema[]>([])
   const [offeringTypesLoading, setOfferingTypesLoading] = useState(true)
   const [offeringTypesError, setOfferingTypesError] = useState<string | null>(null)
@@ -966,227 +969,224 @@ export default function AdminGuidePage() {
                 <Settings className="h-5 w-5" />
                 Deployment Guide
               </CardTitle>
-              <CardDescription>Environment and configuration for deployment: Auth, mail, Supabase, GitHub + Vercel</CardDescription>
+              <CardDescription>Vercel, Google (Auth / Map / Gemini), Stripe, and environment setup</CardDescription>
             </CardHeader>
             <CardContent>
               <Accordion type="multiple" value={deploymentOpen} onValueChange={setDeploymentOpen} className="w-full">
-                <AccordionItem value="deployment-auth" id="deployment-auth" className="scroll-mt-24 border rounded-lg px-4 mb-2">
-                  <AccordionTrigger className="hover:no-underline">
-                    <span className="flex items-center gap-2">
-                      <KeyRound className="h-4 w-4" />
-                      Auth Configuration
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 text-sm">
-                      <p className="text-muted-foreground">
-                        This project uses <strong>NextAuth.js</strong> with Credentials (email + password) and Google OAuth. Configure the following in <code>.env.local</code> (or production environment variables):
-                      </p>
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left p-3 font-medium">Variable</th>
-                              <th className="text-left p-3 font-medium">Description</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-muted-foreground">
-                            <tr className="border-b">
-                              <td className="p-3"><code>AUTH_SECRET</code></td>
-                              <td className="p-3">NextAuth.js encryption secret; at least 32 characters. Generate with <code>openssl rand -base64 32</code></td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>NEXTAUTH_URL</code></td>
-                              <td className="p-3">Full app URL, e.g. <code>https://yourdomain.com</code>; use <code>http://localhost:3000</code> for local dev</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>GOOGLE_CLIENT_ID</code></td>
-                              <td className="p-3">Google OAuth 2.0 Client ID (create in Google Cloud Console)</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>GOOGLE_CLIENT_SECRET</code></td>
-                              <td className="p-3">Google OAuth 2.0 Client Secret</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-muted-foreground">
-                        For proxy in restricted networks, set <code>HTTP_PROXY</code> / <code>HTTPS_PROXY</code>. Run <code>node scripts/check/check-env-vars.js</code> to verify required variables.
-                      </p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="deployment-mail" id="deployment-mail" className="scroll-mt-24 border rounded-lg px-4 mb-2">
-                  <AccordionTrigger className="hover:no-underline">
-                    <span className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      Mail Subscription Configuration
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 text-sm">
-                      <p className="text-muted-foreground">
-                        Verification, password reset, invite emails, and <strong>Newsletter</strong> (welcome, unsubscribe link) are sent via SMTP. Configure in <code>.env.local</code>:
-                      </p>
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left p-3 font-medium">Variable</th>
-                              <th className="text-left p-3 font-medium">Description</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-muted-foreground">
-                            <tr className="border-b">
-                              <td className="p-3"><code>SMTP_HOST</code></td>
-                              <td className="p-3">SMTP server; default <code>smtp.gmail.com</code></td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>SMTP_PORT</code></td>
-                              <td className="p-3">Port; typically 587 (TLS) or 465 (SSL)</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>SMTP_USER</code></td>
-                              <td className="p-3">Sender email account</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>SMTP_PASSWORD</code></td>
-                              <td className="p-3">Sender password or app password (use Gmail App Password if needed)</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>SMTP_FROM</code></td>
-                              <td className="p-3">Optional; From address; falls back to <code>SMTP_USER</code> if unset</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-muted-foreground">
-                        Newsletter subscribe/unsubscribe links use the site base URL: set <code>NEXT_PUBLIC_APP_URL</code> (or rely on <code>VERCEL_URL</code> on Vercel) so unsubscribe links are correct.
-                      </p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="deployment-supabase" id="deployment-supabase" className="scroll-mt-24 border rounded-lg px-4 mb-2">
-                  <AccordionTrigger className="hover:no-underline">
-                    <span className="flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      Supabase Data Connection
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 text-sm">
-                      <p className="text-muted-foreground">
-                        The project uses <strong>Supabase</strong> as the backend database and auth data source. Set these in <code>.env.local</code> or Vercel environment variables:
-                      </p>
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left p-3 font-medium">Variable</th>
-                              <th className="text-left p-3 font-medium">Description</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-muted-foreground">
-                            <tr className="border-b">
-                              <td className="p-3"><code>NEXT_PUBLIC_SUPABASE_URL</code></td>
-                              <td className="p-3">Supabase project URL; from Dashboard → Settings → API</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td>
-                              <td className="p-3">Anonymous (public) key for browser; subject to RLS</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>SUPABASE_SERVICE_ROLE_KEY</code></td>
-                              <td className="p-3">Service role key for server only; bypasses RLS; never expose to client</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-muted-foreground">
-                        For local or script access (migrations, seeding), use <code>NEXT_PUBLIC_SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code>. Server API uses the same key via <code>supabaseAdmin</code>.
-                      </p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="deployment-db-init" id="deployment-db-init" className="scroll-mt-24 border rounded-lg px-4 mb-2">
-                  <AccordionTrigger className="hover:no-underline">
-                    <span className="flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      Database Initialization
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4 text-sm">
-                      <p className="text-muted-foreground">
-                        For a <strong>new Supabase project</strong>, run the SQL initialization scripts to create all required tables. Scripts are in <code>sql/init/</code> and must be executed in order.
-                      </p>
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left p-3 font-medium">File</th>
-                              <th className="text-left p-3 font-medium">Purpose</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-muted-foreground">
-                            <tr className="border-b">
-                              <td className="p-3"><code>00-supabase-init.sql</code></td>
-                              <td className="p-3">Creates all tables: users, password_reset_tokens, v2_offering_type, v2_category, v2_franchise, v2_franchise_category_map, v2_campus, v2_offering, v2_program, v2_instance, students, user_students, instance_enrollments; indexes; triggers; RLS policies.</td>
-                            </tr>
-                            <tr className="border-b">
-                              <td className="p-3"><code>01-seed-offering-types.sql</code></td>
-                              <td className="p-3">Inserts default offering types (course, camp, workshop, free_trial, gift_card, competition) and example categories. Safe to run multiple times (ON CONFLICT DO NOTHING).</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold mb-2">How to run on Supabase</h3>
-                        <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                          <li>Open Supabase Dashboard → your project → <strong>SQL Editor</strong>.</li>
-                          <li>Copy the contents of <code>sql/init/00-supabase-init.sql</code> into a new query and run it.</li>
-                          <li>Copy the contents of <code>sql/init/01-seed-offering-types.sql</code> into a new query and run it.</li>
-                          <li>Optionally use <strong>Supabase CLI</strong>: <code>supabase db push</code> if you have migrations linked; or run the SQL files via <code>psql</code> against your project connection string.</li>
-                        </ol>
-                      </div>
-                      <p className="text-muted-foreground">
-                        After initialization, configure at least one <strong>Franchise</strong> and subscribe it to <strong>Categories</strong> via the admin UI; then create <strong>Programs</strong> and <strong>Instances</strong> to enable enrollments.
-                      </p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
                 <AccordionItem value="deployment-vercel" id="deployment-vercel" className="scroll-mt-24 border rounded-lg px-4 mb-2">
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <CloudCog className="h-4 w-4" />
-                      GitHub + Vercel Deployment
+                      Vercel Deployment
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="space-y-4 text-sm">
-                      <ol className="list-decimal list-inside space-y-3 text-muted-foreground">
-                        <li>
-                          <strong>Code hosting:</strong> Push the project to a GitHub repository (if needed, create a repo then <code>git remote add origin &lt;url&gt;</code> and push).
-                        </li>
-                        <li>
-                          <strong>Connect Vercel:</strong> Log in at <a href="https://vercel.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">vercel.com</a>, click Import Project, select the GitHub repo; choose Next.js as framework and keep the root directory as-is.
-                        </li>
-                        <li>
-                          <strong>Environment variables:</strong> In Vercel project Settings → Environment Variables, add all deployment variables from <code>.env.local</code> (Auth, SMTP, Supabase, etc.) and select the right environments (Production / Preview).
-                        </li>
-                        <li>
-                          <strong>Deploy:</strong> Save to trigger the first deploy; each push to the main (or configured) branch will trigger new deployments. Check the Deployments page for build logs and the live URL.
-                        </li>
-                        <li>
-                          <strong>Custom domain (optional):</strong> In Settings → Domains, add your domain and configure CNAME at your DNS provider. After going live, set <code>NEXTAUTH_URL</code> and <code>NEXT_PUBLIC_APP_URL</code> to the final domain.
-                        </li>
-                      </ol>
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. Create project</h3>
                       <p className="text-muted-foreground">
-                        If the project uses crons in <code>vercel.json</code> (e.g. enrollment processing, newsletter send), Vercel will register them for production automatically.
+                        Sign in at <a href="https://vercel.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">vercel.com</a>, click <strong>Add New</strong> → <strong>Project</strong>. Choose your Git provider and authorize if needed.
+                      </p>
+
+                      <h3 className="font-semibold">2. Link GitHub repo</h3>
+                      <p className="text-muted-foreground">
+                        Import the repository that contains this app. Select the correct org/account, pick the repo, set root directory (leave as <code>./</code>), and choose framework <strong>Next.js</strong>. Do not override Build Command / Output unless required.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Result:</strong> Vercel creates a project and triggers the first build from the default branch.
+                      </p>
+
+                      <h3 className="font-semibold">3. Integrate Supabase and get keys</h3>
+                      <p className="text-muted-foreground">
+                        In <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Supabase Dashboard</a>: create a project (or use existing). Go to <strong>Settings → API</strong>. You need:
+                      </p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                        <li><code>Project URL</code> → use as <code>NEXT_PUBLIC_SUPABASE_URL</code></li>
+                        <li><code>anon</code> (public) key → <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
+                        <li><code>service_role</code> key → <code>SUPABASE_SERVICE_ROLE_KEY</code> (server-only, never expose to client)</li>
+                      </ul>
+                      <p className="text-muted-foreground">
+                        Run DB init scripts in Supabase <strong>SQL Editor</strong> (<code>sql/init/00-supabase-init.sql</code>, then <code>01-seed-offering-types.sql</code>) for a new project.
+                      </p>
+
+                      <h3 className="font-semibold">4. Integrate Blob Storage and get keys</h3>
+                      <p className="text-muted-foreground">
+                        This app can use <strong>Vercel Blob</strong> for uploads (e.g. posters). In Vercel: Project → <strong>Storage</strong> → create a Blob store. Then in <strong>Settings → Environment Variables</strong> you will see (or add):
+                      </p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                        <li><code>BLOB_READ_WRITE_TOKEN</code> — token for server-side uploads/downloads</li>
+                      </ul>
+                      <p className="text-muted-foreground">
+                        Add the same variable in <code>.env.local</code> for local dev; use the token from the Vercel Blob dashboard for the store linked to the project.
+                      </p>
+
+                      <h3 className="font-semibold">5. Integrate AI Gateway and get API key</h3>
+                      <p className="text-muted-foreground">
+                        If the app uses an AI Gateway (e.g. for chat or AI features), create an API key in the gateway provider dashboard and set it as <code>AI_GATEWAY_API_KEY</code> or the variable name used in the codebase. Add it in Vercel Environment Variables and in <code>.env.local</code> for local runs.
+                      </p>
+
+                      <h3 className="font-semibold">6. Vercel environment variables</h3>
+                      <p className="text-muted-foreground">
+                        In Vercel: Project → <strong>Settings → Environment Variables</strong>. Add every variable your app needs (Production and optionally Preview):
+                      </p>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">Variable</th>
+                              <th className="text-left p-3 font-medium">Description</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-muted-foreground">
+                            <tr className="border-b"><td className="p-3"><code>AUTH_SECRET</code></td><td className="p-3">NextAuth secret (e.g. <code>openssl rand -base64 32</code>)</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>NEXTAUTH_URL</code></td><td className="p-3">Production URL, e.g. <code>https://your-app.vercel.app</code></td></tr>
+                            <tr className="border-b"><td className="p-3"><code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code></td><td className="p-3">Supabase (step 3)</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>BLOB_READ_WRITE_TOKEN</code></td><td className="p-3">Vercel Blob (step 4)</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code></td><td className="p-3">Google OAuth (see Google Auth)</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>SMTP_*</code>, <code>NEXT_PUBLIC_APP_URL</code></td><td className="p-3">Mail and app URL</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>STRIPE_*</code></td><td className="p-3">Stripe (see Stripe section)</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-muted-foreground">
+                        After saving, redeploy so new variables take effect. Use <code>NEXTAUTH_URL</code> and <code>NEXT_PUBLIC_APP_URL</code> set to your production domain once you add a custom domain.
+                      </p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="deployment-google-auth" id="deployment-google-auth" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4" />
+                      Google Auth
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. Get Client ID and Secret</h3>
+                      <p className="text-muted-foreground">
+                        In <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Console</a>: create or select a project → <strong>APIs &amp; Services → Credentials</strong> → <strong>Create Credentials → OAuth client ID</strong>. Application type: <strong>Web application</strong>. You get:
+                      </p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                        <li><strong>Client ID</strong> → <code>GOOGLE_CLIENT_ID</code></li>
+                        <li><strong>Client Secret</strong> → <code>GOOGLE_CLIENT_SECRET</code></li>
+                      </ul>
+
+                      <h3 className="font-semibold">2. Configure in project and Google</h3>
+                      <p className="text-muted-foreground">
+                        <strong>In Google Console:</strong> In the same OAuth client, set <strong>Authorized JavaScript origins</strong> to your app URLs (e.g. <code>http://localhost:3000</code>, <code>https://your-app.vercel.app</code>, <code>https://yourdomain.com</code>). Add each environment you use.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>In project:</strong> Put <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> in <code>.env.local</code> (local) and in Vercel Environment Variables (production). NextAuth uses these for the Google provider.
+                      </p>
+
+                      <h3 className="font-semibold">3. Callback and redirect URLs</h3>
+                      <p className="text-muted-foreground">
+                        <strong>Google Console:</strong> In the OAuth client, set <strong>Authorized redirect URIs</strong> to your NextAuth callback URL: <code>{"{NEXTAUTH_URL}/api/auth/callback/google"}</code>. Example: <code>https://your-app.vercel.app/api/auth/callback/google</code>.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>In project:</strong> <code>NEXTAUTH_URL</code> must match the origin you use (e.g. <code>http://localhost:3000</code> locally, <code>https://your-app.vercel.app</code> on Vercel). NextAuth builds the callback URL from <code>NEXTAUTH_URL</code> + <code>/api/auth/callback/google</code>. No extra redirect config is needed in code if <code>NEXTAUTH_URL</code> is correct.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Result:</strong> Users can sign in with Google; after auth they are redirected back to your app.
+                      </p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="deployment-google-map" id="deployment-google-map" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Map className="h-4 w-4" />
+                      Google Map
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. How the project uses Google Maps</h3>
+                      <p className="text-muted-foreground">
+                        The app may use Google Maps (or Maps JavaScript API) for location pages, campus maps, or address display. The map is loaded via the Google Maps script and uses an API key restricted to your domains.
+                      </p>
+
+                      <h3 className="font-semibold">2. Get a Google Maps API key</h3>
+                      <p className="text-muted-foreground">
+                        In <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Console</a>: same project as Auth (or a dedicated one) → <strong>APIs &amp; Services → Library</strong> → enable <strong>Maps JavaScript API</strong> (and optionally <strong>Geocoding API</strong>). Then <strong>Credentials → Create Credentials → API key</strong>. Restrict the key: <strong>Application restrictions</strong> → HTTP referrers → add your site URLs (e.g. <code>https://yourdomain.com/*</code>, <code>http://localhost:3000/*</code>); <strong>API restrictions</strong> → restrict to Maps JavaScript API (and Geocoding if used).
+                      </p>
+
+                      <h3 className="font-semibold">3. Configure the key in the project</h3>
+                      <p className="text-muted-foreground">
+                        Set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> (or the env name used in the code) to the API key value. Add it in <code>.env.local</code> for local dev and in Vercel Environment Variables for production. The <code>NEXT_PUBLIC_</code> prefix exposes it to the browser; keep key restrictions tight so it is only valid on your domains.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Result:</strong> Maps and related APIs work on your app for the allowed referrers.
+                      </p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="deployment-google-gemini" id="deployment-google-gemini" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      Google Gemini
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. How the project uses Google Gemini</h3>
+                      <p className="text-muted-foreground">
+                        The app may call Google Gemini (Generative AI) for features such as AI chat, content suggestions, or assistant flows. Requests are sent from the server using the Gemini API and the response is used in the UI or stored as needed.
+                      </p>
+
+                      <h3 className="font-semibold">2. Get a Gemini API key</h3>
+                      <p className="text-muted-foreground">
+                        In <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google AI Studio</a> (or Cloud Console with Gemini API enabled): create an API key for the Gemini / Generative AI API. Copy the key and store it securely.
+                      </p>
+                      <p className="text-muted-foreground">
+                        In the project, set <code>GOOGLE_GEMINI_API_KEY</code> (or the variable name used in the code) to this key. Add it only in server-side env (e.g. <code>.env.local</code> and Vercel Environment Variables) and never expose it to the client. Do not use the <code>NEXT_PUBLIC_</code> prefix for this key.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Result:</strong> Server-side Gemini calls succeed and AI features work in the app.
+                      </p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="deployment-stripe" id="deployment-stripe" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      Stripe
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. How the project integrates Stripe</h3>
+                      <p className="text-muted-foreground">
+                        The app uses Stripe for payments (e.g. enrollment checkout, refunds). The server creates Payment Intents or Checkout sessions and stores <code>stripe_customer_id</code> on users. Webhooks may be used for payment confirmation; the publishable key is used on the client for Stripe.js when needed.
+                      </p>
+
+                      <h3 className="font-semibold">2. Get Stripe keys</h3>
+                      <p className="text-muted-foreground">
+                        In <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Stripe Dashboard</a>: <strong>Developers → API keys</strong>. You need:
+                      </p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                        <li><strong>Publishable key</strong> (pk_…) → <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code></li>
+                        <li><strong>Secret key</strong> (sk_…) → <code>STRIPE_SECRET_KEY</code> (server-only)</li>
+                      </ul>
+                      <p className="text-muted-foreground">
+                        For webhooks: <strong>Developers → Webhooks</strong> → Add endpoint (e.g. <code>https://your-app.vercel.app/api/webhooks/stripe</code>) and select events (e.g. <code>payment_intent.succeeded</code>). Copy the <strong>Signing secret</strong> (whsec_…) → <code>STRIPE_WEBHOOK_SECRET</code>.
+                      </p>
+
+                      <h3 className="font-semibold">3. Local dev and Vercel production</h3>
+                      <p className="text-muted-foreground">
+                        <strong>Local:</strong> In <code>.env.local</code> set <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>, <code>STRIPE_SECRET_KEY</code>, and (if testing webhooks) <code>STRIPE_WEBHOOK_SECRET</code>. Use Stripe test keys (pk_test_…, sk_test_…) for development. For local webhook testing, use <a href="https://stripe.com/docs/stripe-cli" target="_blank" rel="noopener noreferrer" className="text-primary underline">Stripe CLI</a> to forward events: <code>stripe listen --forward-to localhost:3000/api/webhooks/stripe</code> and set <code>STRIPE_WEBHOOK_SECRET</code> to the CLI-provided secret.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Vercel:</strong> In Project → Settings → Environment Variables, add the same variable names with production values (pk_live_…, sk_live_…) for Production, and optionally test keys for Preview. Add the production webhook endpoint in Stripe and set <code>STRIPE_WEBHOOK_SECRET</code> to that endpoint’s signing secret.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Result:</strong> Payments work in dev (test mode) and in production (live mode) with webhooks for reliable confirmation.
                       </p>
                     </div>
                   </AccordionContent>

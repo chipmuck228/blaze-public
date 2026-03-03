@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle } from "lucide-react";
+import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
   // Navbar 统一深蓝色（与白底搭配）
@@ -601,14 +601,15 @@ interface RouteProps {
               })}
 
               {/* Book Free Trial Button */}
-              <button 
-                className="bg-[#1e3a5f] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-transform hover:bg-[#2d4a6f] hidden md:block"
-                onClick={() => {
-                  // TODO: Add action for Book Free Trial
-                }}
+              <a
+                href="https://app.amilia.com/store/en/blazeroboticsacademy/shop/programs/119725?subCategoryIds=6193105&subCategoryIds=6193106"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#1e3a5f] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-transform hover:bg-[#2d4a6f] hidden md:inline-flex items-center justify-center gap-1.5"
               >
                 Book Free Trial
-              </button>
+                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+              </a>
 
               {/* User Menu (cart and mode toggle hidden) */}
               {status === "loading" ? (
@@ -649,31 +650,7 @@ interface RouteProps {
                         </div>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator className="bg-slate-200" />
-                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
-                        <Link href="/portal" className="cursor-pointer">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          <span>Portal</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
-                        <Link href="/profile" className="cursor-pointer">
-                          <User className="mr-2 h-4 w-4" />
-                          <span>Profile</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
-                        <Link href="/enrollments" className="cursor-pointer">
-                          <FileText className="mr-2 h-4 w-4" />
-                          <span>Enrollments</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="rounded-md hover:bg-slate-100">
-                        <Link href="/billing" className="cursor-pointer">
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          <span>Billing</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-slate-200" />
+                      {/* C端暂时隐藏：Portal / Profile / Enrollments / Billing */}
                       <DropdownMenuItem
                         className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-slate-100"
                         onClick={handleSignOut}
@@ -955,16 +932,16 @@ interface RouteProps {
 
               {/* Book Free Trial Button - Mobile */}
               <div className="pt-4 px-3 pb-2">
-                <button 
-                  className="w-full bg-[#1e3a5f] text-white px-6 py-4 rounded-xl font-bold text-base active:scale-95 transition-transform hover:bg-[#2d4a6f]"
-                  onClick={() => {
-                    setIsOpen(false);
-                    // TODO: Add action for Book Free Trial
-                    // Could open a dialog, navigate to a page, or trigger an event
-                  }}
+                <a
+                  href="https://app.amilia.com/store/en/blazeroboticsacademy/shop/programs/119725?subCategoryIds=6193105&subCategoryIds=6193106"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 bg-[#1e3a5f] text-white px-6 py-4 rounded-xl font-bold text-base active:scale-95 transition-transform hover:bg-[#2d4a6f]"
+                  onClick={() => setIsOpen(false)}
                 >
                   Book Free Trial
-                </button>
+                  <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                </a>
               </div>
 
               {/* User Section */}
@@ -993,50 +970,7 @@ interface RouteProps {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100"
-                      asChild
-                    >
-                      <Link
-                        href="/profile"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <User className="mr-2 h-4 w-4" />
-                        Profile
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100"
-                      asChild
-                    >
-                      <Link
-                        href="/settings"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <Settings className="mr-2 h-4 w-4" />
-                        Settings
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100"
-                      asChild
-                    >
-                      <Link
-                        href="/enrollments/cart"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <ShoppingCart className="mr-2 h-4 w-4" />
-                        Shopping Cart
-                        {cartCount > 0 && (
-                          <Badge variant="secondary" className="ml-2 bg-[#1e3a5f] text-white">
-                            {cartCount > 9 ? "9+" : cartCount}
-                          </Badge>
-                        )}
-                      </Link>
-                    </Button>
+                    {/* C端暂时隐藏：Profile / Settings / Shopping Cart */}
                     <Button
                       variant="outline"
                       className="w-full justify-start bg-white border-slate-200 text-red-600 hover:text-red-700 hover:bg-slate-100"

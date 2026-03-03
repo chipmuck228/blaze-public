@@ -11,30 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, MapPin } from "lucide-react"
+import { Search, Edit, Trash2, Plus, Loader2, RefreshCcw, MapPin } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -79,8 +57,8 @@ export default function BlazeCampusesManagementPage() {
   const [filteredCampuses, setFilteredCampuses] = useState<BlazeCampus[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [editingCampus, setEditingCampus] = useState<BlazeCampus | null>(null)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingCampusId, setEditingCampusId] = useState<string | null>(null)
+  const [addingNew, setAddingNew] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [franchises, setFranchises] = useState<BlazeFranchise[]>([])
@@ -185,7 +163,8 @@ export default function BlazeCampusesManagementPage() {
   }
 
   const handleEdit = (campus: BlazeCampus) => {
-    setEditingCampus(campus)
+    setAddingNew(false)
+    setEditingCampusId(campus.id)
     setFormData({
       franchise_id: campus.franchise_id,
       name: campus.name,
@@ -201,11 +180,11 @@ export default function BlazeCampusesManagementPage() {
       longitude: campus.longitude,
       is_active: campus.is_active,
     })
-    setIsEditDialogOpen(true)
   }
 
   const handleAdd = () => {
-    setEditingCampus(null)
+    setEditingCampusId(null)
+    setAddingNew(true)
     setFormData({
       franchise_id: "",
       name: "",
@@ -221,7 +200,11 @@ export default function BlazeCampusesManagementPage() {
       longitude: undefined,
       is_active: true,
     })
-    setIsEditDialogOpen(true)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingCampusId(null)
+    setAddingNew(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -241,10 +224,10 @@ export default function BlazeCampusesManagementPage() {
         longitude: formData.longitude || undefined,
       }
 
-      const url = editingCampus
-        ? `/api/blaze/campuses/${editingCampus.id}`
+      const url = editingCampusId
+        ? `/api/blaze/campuses/${editingCampusId}`
         : "/api/blaze/campuses"
-      const method = editingCampus ? "PUT" : "POST"
+      const method = editingCampusId ? "PUT" : "POST"
 
       const response = await fetch(url, {
         method,
@@ -256,8 +239,8 @@ export default function BlazeCampusesManagementPage() {
 
       if (response.ok) {
         fetchCampuses()
-        setIsEditDialogOpen(false)
-        setEditingCampus(null)
+        setEditingCampusId(null)
+        setAddingNew(false)
       } else {
         const error = await response.json()
         alert(error.error || "Failed to save campus")
@@ -294,6 +277,133 @@ export default function BlazeCampusesManagementPage() {
     if (campus.franchise) return campus.franchise.name || campus.franchise.code
     return "N/A"
   }
+
+  const formId = editingCampusId ?? "new"
+  const renderInlineForm = (_campus: BlazeCampus | null) => (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`${formId}-franchise_id`}>Franchise *</Label>
+        <Select
+          value={formData.franchise_id}
+          onValueChange={(value) => setFormData({ ...formData, franchise_id: value })}
+          required
+        >
+          <SelectTrigger id={`${formId}-franchise_id`}>
+            <SelectValue placeholder={isLoadingFranchises ? "Loading..." : "Select franchise"} />
+          </SelectTrigger>
+          <SelectContent>
+            {franchises.map((f) => (
+              <SelectItem key={f.id} value={f.id}>{f.name} ({f.code})</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-name`}>Name *</Label>
+          <Input
+            id={`${formId}-name`}
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="Campus name"
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-display_name`}>Display Name *</Label>
+          <Input
+            id={`${formId}-display_name`}
+            value={formData.display_name}
+            onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+            placeholder="Display name"
+            required
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${formId}-address`}>Address</Label>
+        <Input
+          id={`${formId}-address`}
+          value={formData.address}
+          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+          placeholder="Street address"
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-city`}>City</Label>
+          <Input
+            id={`${formId}-city`}
+            value={formData.city}
+            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+            placeholder="City"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-state`}>State</Label>
+          <Input
+            id={`${formId}-state`}
+            value={formData.state}
+            onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+            placeholder="State"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-zip_code`}>Zip</Label>
+          <Input
+            id={`${formId}-zip_code`}
+            value={formData.zip_code}
+            onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+            placeholder="Zip"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-phone`}>Phone</Label>
+          <Input
+            id={`${formId}-phone`}
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            placeholder="Phone"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${formId}-email`}>Email</Label>
+          <Input
+            id={`${formId}-email`}
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            placeholder="Email"
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${formId}-is_active`}>Status</Label>
+        <Select
+          value={formData.is_active ? "active" : "inactive"}
+          onValueChange={(v) => setFormData({ ...formData, is_active: v === "active" })}
+        >
+          <SelectTrigger id={`${formId}-is_active`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex gap-2 pt-2">
+        <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit} className="flex-1">
+          Cancel
+        </Button>
+        <Button type="submit" size="sm" disabled={isSubmitting || !formData.name || !formData.display_name || !formData.franchise_id} className="flex-1">
+          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : editingCampusId ? "Update" : "Create"}
+        </Button>
+      </div>
+    </form>
+  )
 
   return (
     <div className="p-8">
@@ -343,285 +453,87 @@ export default function BlazeCampusesManagementPage() {
                 Retry
               </Button>
             </div>
-          ) : filteredCampuses.length === 0 ? (
+          ) : filteredCampuses.length === 0 && !addingNew ? (
             <div className="text-center py-12 text-muted-foreground">
               {searchQuery ? "No campuses found matching your search." : "No campuses found."}
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Display Name</TableHead>
-                    <TableHead>Address</TableHead>
-                    <TableHead>City</TableHead>
-                    <TableHead>State</TableHead>
-                    <TableHead>Country</TableHead>
-                    <TableHead>Franchise</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCampuses.map((campus) => (
-                    <TableRow key={campus.id}>
-                      <TableCell className="font-medium">{campus.name}</TableCell>
-                      <TableCell>{campus.display_name}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {campus.address || "N/A"}
-                      </TableCell>
-                      <TableCell>{campus.city || "N/A"}</TableCell>
-                      <TableCell>{campus.state || "N/A"}</TableCell>
-                      <TableCell>{campus.country || "US"}</TableCell>
-                      <TableCell>{getFranchiseLabel(campus)}</TableCell>
-                      <TableCell>{campus.phone || "N/A"}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {campus.email || "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={campus.is_active ? "default" : "secondary"}>
-                          {campus.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(campus.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {addingNew && (
+                <Card className="border-dashed">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">New Campus</CardTitle>
+                    <CardDescription>Fill in the form and save</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {renderInlineForm(null)}
+                  </CardContent>
+                </Card>
+              )}
+              {filteredCampuses.map((campus) => (
+                <Card key={campus.id}>
+                  {editingCampusId === campus.id ? (
+                    <>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">Edit Campus</CardTitle>
+                        <CardDescription>{campus.display_name}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {renderInlineForm(campus)}
+                      </CardContent>
+                    </>
+                  ) : (
+                    <>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <CardTitle className="text-lg truncate">{campus.display_name || campus.name}</CardTitle>
+                            <CardDescription className="truncate">{campus.name}</CardDescription>
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(campus)}>
+                              <Edit className="h-4 w-4" />
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(campus)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDelete(campus.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(campus.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2 pt-0 text-sm">
+                        {getFranchiseLabel(campus) !== "N/A" && (
+                          <p className="text-muted-foreground">
+                            <span className="font-medium text-foreground">Franchise:</span> {getFranchiseLabel(campus)}
+                          </p>
+                        )}
+                        {formatAddress(campus) !== "N/A" && (
+                          <p className="flex items-start gap-1.5 text-muted-foreground">
+                            <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
+                            {formatAddress(campus)}
+                          </p>
+                        )}
+                        {(campus.phone || campus.email) && (
+                          <p className="text-muted-foreground">
+                            {campus.phone || ""}
+                            {campus.phone && campus.email ? " · " : ""}
+                            {campus.email || ""}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between pt-2">
+                          <Badge variant={campus.is_active ? "default" : "secondary"}>
+                            {campus.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{formatDate(campus.created_at)}</span>
+                        </div>
+                      </CardContent>
+                    </>
+                  )}
+                </Card>
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-[600px] lg:max-w-[700px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>{editingCampus ? "Edit Campus" : "Add New Campus"}</DialogTitle>
-            <DialogDescription>
-              {editingCampus ? "Update campus information" : "Create a new campus"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="franchise_id">Franchise *</Label>
-              <Select
-                value={formData.franchise_id}
-                onValueChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    franchise_id: value,
-                  })
-                }
-                required
-              >
-                <SelectTrigger id="franchise_id">
-                  <SelectValue placeholder={isLoadingFranchises ? "Loading..." : "Select a franchise"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {franchises.map((franchise) => (
-                    <SelectItem key={franchise.id} value={franchise.id}>
-                      {franchise.name} ({franchise.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name">Campus Name *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Main Campus, Downtown Center"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="display_name">Display Name *</Label>
-              <Input
-                id="display_name"
-                value={formData.display_name}
-                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                placeholder="e.g., Main Campus, Downtown Center"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Input
-                id="address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="e.g., 123 Main Street"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  placeholder="e.g., New York"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  placeholder="e.g., NY"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="zip_code">Zip Code</Label>
-                <Input
-                  id="zip_code"
-                  value={formData.zip_code}
-                  onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
-                  placeholder="e.g., 10001"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="country">Country</Label>
-                <Input
-                  id="country"
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  placeholder="e.g., US"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="e.g., (555) 123-4567"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="e.g., info@example.com"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="latitude">Latitude</Label>
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="any"
-                  value={formData.latitude ?? ""}
-                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="e.g., 40.7128"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="longitude">Longitude</Label>
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="any"
-                  value={formData.longitude ?? ""}
-                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="e.g., -74.0060"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="is_active">Status</Label>
-              <Select
-                value={formData.is_active ? "active" : "inactive"}
-                onValueChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    is_active: value === "active",
-                  })
-                }
-              >
-                <SelectTrigger id="is_active">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            </div>
-            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting || !formData.name || !formData.display_name || !formData.franchise_id} className="w-full sm:w-auto">
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingCampus ? (
-                  "Update Campus"
-                ) : (
-                  "Create Campus"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

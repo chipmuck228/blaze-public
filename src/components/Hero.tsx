@@ -2,7 +2,7 @@
 import { Button } from "./ui/button";
 import { HeroCards } from "./HeroCards";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 
 export const Hero = () => {
   return (
@@ -14,9 +14,15 @@ export const Hero = () => {
       </div>
       <div className="relative z-10 w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-12 lg:py-0">
         <div className="max-w-xl">
-          <span className="inline-block bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase mb-6 shadow-lg shadow-blue-500/20">
+          <a
+            href="https://app.amilia.com/store/en/blazeroboticsacademy/shop/programs/119725?subCategoryIds=6193105&subCategoryIds=6193106"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase mb-6 shadow-lg shadow-blue-500/20 hover:bg-[#1d4ed8] transition-colors"
+          >
             Free Trial opened to register
-          </span>
+            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          </a>
           <h1 className="text-5xl lg:text-7xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
             Build Your <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#38bdf8] to-[#2563eb]">Future.</span>
