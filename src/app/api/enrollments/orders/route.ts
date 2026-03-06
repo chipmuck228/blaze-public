@@ -41,6 +41,7 @@ export async function GET(request: Request) {
           end_date,
           start_time,
           end_time,
+          is_course_type,
           offering:offerings_v2(
             id,
             name,

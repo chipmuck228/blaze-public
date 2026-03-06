@@ -1,37 +1,79 @@
 'use client'
 
+import { useState, useEffect } from "react"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
 import { AIChatButton } from "@/components/location/AIChatButton"
-import { Download, FileText, Monitor, Book, ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
+import { Download, FileText, Monitor, Book, ArrowLeft } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
+interface ResourceItem {
+  id: string
+  title: string
+  description?: string
+  icon?: string
+  icon_color?: string
+  document_url?: string
+  document_label: string
+  open_in_new_tab: boolean
+}
+
+interface ResourceCategory {
+  id: string
+  display_name: string
+  display_order: number
+  resources: ResourceItem[]
+}
+
+const iconMap = {
+  monitor: Monitor,
+  book: Book,
+  "file-text": FileText,
+} as const
+
+const colorClassMap: Record<string, string> = {
+  "blue-500": "text-blue-500",
+  "red-500": "text-red-500",
+  "orange-500": "text-orange-500",
+  "purple-500": "text-purple-500",
+  "green-500": "text-green-500",
+  "slate-500": "text-slate-500",
+}
+
+function ResourceIcon({ icon, iconColor }: { icon?: string; iconColor?: string }) {
+  const IconComponent = icon && icon in iconMap ? iconMap[icon as keyof typeof iconMap] : FileText
+  const colorClass = iconColor && colorClassMap[iconColor] ? colorClassMap[iconColor] : "text-slate-500"
+  const style = iconColor?.startsWith("#") ? { color: iconColor } : undefined
+  return <IconComponent className={`w-6 h-6 ${colorClass}`} style={style} />
+}
+
 export default function ResourcesPage() {
-  const resources = [
-    {
-      category: 'Software & Tools',
-      items: [
-        { title: 'VEXcode IQ', desc: 'Programming environment for IQ robots', icon: <Monitor className="w-6 h-6 text-blue-500" /> },
-        { title: 'VEXcode V5', desc: 'Programming environment for V5 robots', icon: <Monitor className="w-6 h-6 text-red-500" /> },
-        { title: 'Fusion 360', desc: 'CAD software for 3D modeling', icon: <Monitor className="w-6 h-6 text-orange-500" /> },
-      ]
-    },
-    {
-      category: 'Competition Manuals',
-      items: [
-        { title: 'Rapid Relay (IQ) Manual', desc: 'Official game rules 2025-2026', icon: <Book className="w-6 h-6 text-purple-500" /> },
-        { title: 'High Stakes (V5) Manual', desc: 'Official game rules 2025-2026', icon: <Book className="w-6 h-6 text-green-500" /> },
-      ]
-    },
-    {
-      category: 'Parent Guides',
-      items: [
-        { title: 'New Parent Handbook', desc: 'Everything you need to know', icon: <FileText className="w-6 h-6 text-slate-500" /> },
-        { title: 'Tournament Checklist', desc: 'What to bring on game day', icon: <FileText className="w-6 h-6 text-slate-500" /> },
-      ]
+  const [categories, setCategories] = useState<ResourceCategory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch("/api/public/resources/v2")
+        if (!res.ok) throw new Error("Failed to load resources")
+        const data = await res.json()
+        if (!cancelled) setCategories(data.categories ?? [])
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
-  ]
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <>
@@ -40,48 +82,90 @@ export default function ResourcesPage() {
         <div className="pb-24">
           <section className="bg-[#0f172a] py-20 text-white text-center relative">
             <div className="max-w-7xl mx-auto px-4">
-              {/* Back Button */}
-              <div className="absolute top-6 left-4 md:left-8">
-                <Link href="/">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:text-[#38bdf8] hover:bg-white/10"
-                  >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Home
-                  </Button>
-                </Link>
-              </div>
+              
               <h1 className="text-5xl font-extrabold mb-4">Resources</h1>
-              <p className="text-[#38bdf8] text-xl">Tools and documentation for students and parents.</p>
+              <p className="text-[#38bdf8] text-xl">
+                Tools and documentation for students and parents.
+              </p>
             </div>
           </section>
 
           <div className="max-w-7xl mx-auto px-4 py-16">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {resources.map((cat, idx) => (
-                <div key={idx} className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-lg transition-shadow">
-                  <h2 className="text-2xl font-bold text-slate-900 mb-6">{cat.category}</h2>
-                  <div className="space-y-6">
-                    {cat.items.map((item, i) => (
-                      <div key={i} className="flex items-start space-x-4 p-4 rounded-xl hover:bg-slate-50 transition-colors group cursor-pointer">
-                        <div className="bg-slate-100 p-3 rounded-lg group-hover:bg-white group-hover:shadow-md transition-all shrink-0">
-                          {item.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{item.title}</h3>
-                          <p className="text-sm text-slate-500 mb-2">{item.desc}</p>
-                          <span className="text-xs font-bold text-blue-600 flex items-center">
-                            <Download className="w-3 h-3 mr-1" /> Download
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+            {loading ? (
+              <div className="text-center py-16 text-slate-500">
+                Loading resources...
+              </div>
+            ) : error ? (
+              <div className="text-center py-16 text-slate-600">
+                <p>{error}</p>
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="text-center py-16 text-slate-500">
+                No resources available at the moment.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {categories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-lg transition-shadow"
+                  >
+                    <h2 className="text-2xl font-bold text-slate-900 mb-6">
+                      {cat.display_name}
+                    </h2>
+                    <div className="space-y-6">
+                      {cat.resources.length === 0 ? (
+                        <p className="text-sm text-slate-500">No resources in this category.</p>
+                      ) : (
+                        cat.resources.map((item) => {
+                          const content = (
+                            <>
+                              <div className="bg-slate-100 p-3 rounded-lg group-hover:bg-white group-hover:shadow-md transition-all shrink-0">
+                                <ResourceIcon
+                                  icon={item.icon}
+                                  iconColor={item.icon_color}
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                                  {item.title}
+                                </h3>
+                                {item.description && (
+                                  <p className="text-sm text-slate-500 mb-2">
+                                    {item.description}
+                                  </p>
+                                )}
+                                <span className="text-xs font-bold text-blue-600 flex items-center">
+                                  <Download className="w-3 h-3 mr-1" />
+                                  {item.document_label}
+                                </span>
+                              </div>
+                            </>
+                          )
+                          const className =
+                            "flex items-start space-x-4 p-4 rounded-xl hover:bg-slate-50 transition-colors group cursor-pointer w-full text-left"
+                          return item.document_url ? (
+                            <a
+                              key={item.id}
+                              href={item.document_url}
+                              target={item.open_in_new_tab ? "_blank" : undefined}
+                              rel={item.open_in_new_tab ? "noopener noreferrer" : undefined}
+                              className={className}
+                            >
+                              {content}
+                            </a>
+                          ) : (
+                            <div key={item.id} className={className}>
+                              {content}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </main>

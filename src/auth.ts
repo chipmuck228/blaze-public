@@ -2,7 +2,7 @@ import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import type { NextAuthConfig } from "next-auth"
-import { getUserByEmail, verifyPassword, createOrUpdateGoogleUser } from "@/lib/db"
+import { getUserByEmail, getUserById, verifyPassword, createOrUpdateGoogleUser } from "@/lib/db"
 
 // 开发环境调试
 if (process.env.NODE_ENV === 'development') {
@@ -127,10 +127,21 @@ export const authConfig = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string
-        session.user.name = token.name as string
         session.user.email = token.email as string
-        session.user.image = token.image as string | null | undefined
         session.user.role = token.role as string || 'user'
+        if (token.id) {
+          const dbUser = await getUserById(token.id as string)
+          if (dbUser) {
+            session.user.name = dbUser.name
+            session.user.image = dbUser.image ?? (token.image as string | null | undefined)
+          } else {
+            session.user.name = token.name as string
+            session.user.image = token.image as string | null | undefined
+          }
+        } else {
+          session.user.name = token.name as string
+          session.user.image = token.image as string | null | undefined
+        }
       }
       return session
     },

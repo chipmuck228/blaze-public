@@ -86,7 +86,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 获取当前 instance
+    // 获取当前 instance 及 offering.type_config_data（用于 is_course_type）
     const { data: currentInstance, error: fetchError } = await supabaseAdmin
       .from("v2_instance")
       .select(`
@@ -94,6 +94,7 @@ export async function PUT(
         offering:v2_offering(
           id,
           offering_type_id,
+          type_config_data,
           offering_type:v2_offering_type(instance_schema)
         )
       `)
@@ -198,6 +199,9 @@ export async function PUT(
       ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
     }
     updateData.instance_data_ext = nextDataExt
+    // is_course_type：从 offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
+    const offeringData = Array.isArray(currentInstance.offering) ? currentInstance.offering[0] : currentInstance.offering
+    updateData.is_course_type = !!(offeringData as any)?.type_config_data?.portal_config?.is_course_type
     if (icalendar_rrule !== undefined) updateData.icalendar_rrule = icalendar_rrule
     if (icalendar_exdates !== undefined) updateData.icalendar_exdates = icalendar_exdates
     if (icalendar_rdates !== undefined) updateData.icalendar_rdates = icalendar_rdates

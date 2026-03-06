@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     }
 
     // v2_instance: select both table columns (start_date, end_date, etc.) and instance_data_ext; prefer table columns when present
+    // C-end programs page: only show course-type instances (is_course_type = true)
     let query = supabaseAdmin
       .from("v2_instance")
       .select(
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
         start_time,
         end_time,
         max_students,
+        is_course_type,
         instance_data_ext,
         program:v2_program!inner(
           id,
@@ -106,7 +108,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    let list = (rows || []) as any[]
+    // C-end: only show course-type instances (design: PORTAL_OFFERING_TYPE_DESIGN)
+    let list = ((rows || []) as any[]).filter((row: any) => row?.is_course_type === true)
     const getStart = (row: any) => row?.start_date ?? row?.instance_data_ext?.start_date ?? ""
     const getStartTime = (row: any) => row?.start_time ?? row?.instance_data_ext?.start_time ?? ""
     list = list.sort((a, b) => {

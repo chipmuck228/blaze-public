@@ -8,6 +8,7 @@ import Image from '@tiptap/extension-image'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   DropdownMenu,
@@ -35,6 +36,13 @@ interface RichTextEditorProps {
   onChange: (value: string) => void
   placeholder?: string
   className?: string
+  /** Optional label above the editor (e.g. for form fields). */
+  label?: string
+  /** Optional hint text below the label. */
+  hint?: string
+  /** Min height of the editor area in px. Default 300. Use a smaller value (e.g. 160) for inline config fields. */
+  minHeight?: number
+  disabled?: boolean
 }
 
 export function RichTextEditor({
@@ -42,6 +50,10 @@ export function RichTextEditor({
   onChange,
   placeholder = 'Enter content...',
   className = '',
+  label,
+  hint,
+  minHeight = 300,
+  disabled = false,
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -71,10 +83,12 @@ export function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none min-h-[300px] p-4',
+        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none p-4 ${disabled ? 'opacity-60 pointer-events-none' : ''}`,
+        style: `min-height: ${minHeight}px`,
         'data-placeholder': placeholder,
       },
     },
+    editable: !disabled,
   })
 
   // 同步外部 value 变化到编辑器
@@ -87,12 +101,15 @@ export function RichTextEditor({
   if (!editor) {
     return (
       <div className={className}>
+        {label && <Label className="text-xs">{label}</Label>}
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
         <Textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           rows={12}
-          className="font-mono text-sm"
+          className="font-mono text-sm mt-1.5"
+          disabled={disabled}
         />
         <p className="text-xs text-muted-foreground mt-2">
           TipTap editor not available. Install dependencies: <code className="bg-muted px-1 rounded">npm install @tiptap/react @tiptap/starter-kit @tiptap/extension-link @tiptap/extension-image @tiptap/extension-text-style @tiptap/extension-color</code>
@@ -103,8 +120,10 @@ export function RichTextEditor({
 
   return (
     <div className={className}>
+      {label && <Label className="text-xs">{label}</Label>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {/* Toolbar */}
-      <div className="border rounded-t-lg p-2 bg-muted flex flex-wrap gap-1">
+      <div className={`border rounded-t-lg p-2 bg-muted flex flex-wrap gap-1 mt-1.5 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
         <Button
           type="button"
           variant="ghost"
@@ -297,7 +316,6 @@ export function RichTextEditor({
       <style jsx global>{`
         .ProseMirror {
           outline: none;
-          min-height: 300px;
           padding: 1rem;
         }
         .ProseMirror p.is-editor-empty:first-child::before {

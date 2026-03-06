@@ -132,7 +132,7 @@ export default function StudentsPage() {
             </p>
           </div>
           {!isStudentAccount && (
-            <Button onClick={() => router.push('/students/new')}>
+            <Button onClick={() => router.push('/profile')}>
               <Plus className="mr-2 h-4 w-4" />
               Add Student
             </Button>
@@ -145,7 +145,7 @@ export default function StudentsPage() {
               <User className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground mb-4">No students added yet</p>
               {!isStudentAccount && (
-                <Button onClick={() => router.push('/students/new')}>
+                <Button onClick={() => router.push('/profile')}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Your First Student
                 </Button>
@@ -194,17 +194,17 @@ export default function StudentsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/students/${student.id}`)}
+                      onClick={() => router.push('/profile')}
                       className="flex-1"
                     >
-                      View
+                      Manage on Profile
                     </Button>
                     {!isStudentAccount && (
                       <>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => router.push(`/students/${student.id}/edit`)}
+                          onClick={() => router.push('/profile')}
                           className="flex-1"
                         >
                           <Edit className="h-4 w-4" />

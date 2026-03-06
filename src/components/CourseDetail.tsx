@@ -595,7 +595,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
     if (students.length === 0) {
       // 没有学生，提示用户先添加学生
       if (confirm('You need to add a student first. Would you like to go to the students page?')) {
-        router.push('/students/new');
+        router.push('/profile');
       }
       return;
     }
@@ -684,7 +684,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
     if (!finalStudentId || !finalStudentName) {
       alert('Please add a student first.');
-      router.push('/students/new');
+      router.push('/profile');
       return;
     }
 
@@ -1830,7 +1830,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
             </Button>
             <Button
               onClick={() => {
-                router.push('/students/new');
+                router.push('/profile');
               }}
               variant="outline"
               className="flex-1"

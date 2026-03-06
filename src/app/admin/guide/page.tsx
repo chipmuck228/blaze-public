@@ -33,6 +33,7 @@ import {
   Map,
   Sparkles,
   CreditCard,
+  LayoutGrid,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -68,6 +69,7 @@ const operationItems = [
   { id: "franchise", title: "Franchise & Subscription", icon: MapPin },
   { id: "program", title: "Program", icon: List },
   { id: "instance", title: "Instance", icon: Calendar },
+  { id: "design-example", title: "Example: Categories & Programs", icon: LayoutGrid },
   { id: "notes", title: "Important Notes", icon: BookOpen },
 ]
 const deploymentItems = [
@@ -537,6 +539,9 @@ export default function AdminGuidePage() {
                     </tbody>
                   </table>
                 </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>Markdown (rich text):</strong> When <code>type</code> is <code>text</code> and <code>multiline: true</code>, and the field name is <code>target_audience</code>, <code>learning_outcomes</code>, or <code>prerequisites</code>, the admin shows an Edit/Preview Markdown editor and the frontend renders Markdown. See &quot;Markdown editing&quot; in the Offering section above.
+                </p>
               </div>
 
               <div>
@@ -822,6 +827,56 @@ export default function AdminGuidePage() {
                 <li>Status: draft, published, suspended, archived. Only <strong>published</strong> Offerings can be used to create Instances.</li>
                 <li>No Franchise reference—fully global and reusable across Franchises.</li>
               </ul>
+
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                <h4 className="font-semibold text-sm">Markdown editing (rich text)</h4>
+                <p className="text-sm text-muted-foreground">
+                  In the Add/Edit Offering dialog, the following fields support <strong>Markdown</strong> editing and preview; the frontend detail page renders them with formatting:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li><strong>Basic Info</strong>: Description (admin only)</li>
+                  <li><strong>Configuration</strong> (per offering_schema): <code>target_audience</code>, <code>learning_outcomes</code>, <code>prerequisites</code> — when the schema defines multiline text, the admin shows an Edit/Preview Markdown editor.</li>
+                </ul>
+                <p className="text-sm text-muted-foreground mt-2">Markdown syntax for rich-text editing (left: what you type; right: how it appears on the frontend):</p>
+                <div className="overflow-x-auto rounded-md border text-sm mt-2">
+                  <table className="w-full text-muted-foreground">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2 font-medium w-1/2">Input (Markdown source)</th>
+                        <th className="text-left p-2 font-medium">Display effect</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono text-xs">
+                      <tr className="border-b"><td className="p-2"><code># Heading</code></td><td className="p-2">Level 1 heading (largest)</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>## Subheading</code></td><td className="p-2">Level 2 heading</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>### Level 3</code></td><td className="p-2">Level 3 heading</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>**bold**</code> or <code>__bold__</code></td><td className="p-2">Bold</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>*italic*</code> or <code>_italic_</code></td><td className="p-2">Italic</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>***bold italic***</code></td><td className="p-2">Bold + italic</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>- item</code> or <code>* item</code></td><td className="p-2">Unordered list (bullets)</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>1. First</code> <code>2. Second</code></td><td className="p-2">Ordered list (numbers)</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>[link text](https://url)</code></td><td className="p-2">Clickable link (opens in new tab)</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>`inline code`</code></td><td className="p-2">Monospace highlight</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>&gt; quote</code></td><td className="p-2">Blockquote</td></tr>
+                      <tr className="border-b"><td className="p-2">Blank line before next paragraph</td><td className="p-2">New paragraph</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>---</code> or <code>***</code> (alone on a line)</td><td className="p-2">Horizontal rule</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-md border bg-background p-3 font-mono text-xs overflow-x-auto mt-2">
+                  <p className="text-muted-foreground mb-1">Example (learning outcomes):</p>
+                  <pre className="whitespace-pre-wrap">{`After this course you will be able to:
+
+- **Understand** basic robotics concepts
+- *Build* simple structures hands-on
+- Use the [official docs](https://example.com) for reference
+
+> We recommend completing "Intro to Programming" before enrolling.`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Content is stored as Markdown source; the frontend Instance detail page uses the same Markdown renderer for consistent display.
+                </p>
+              </div>
                   </AccordionContent>
                 </AccordionItem>
 
@@ -904,6 +959,87 @@ export default function AdminGuidePage() {
                 <strong>Price:</strong> If <code>price_override</code> is null, effective price is the Offering&apos;s{" "}
                 <code>base_price</code>.
               </p>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="design-example" id="design-example" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <LayoutGrid className="h-4 w-4" />
+                      Example: Categories &amp; Programs
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                The following example is from an <strong>operator’s perspective</strong>: your organization offers Offering Types such as <strong>Course, Camp, Competition, Workshop</strong>. You need to design Categories and Programs for the site and understand how they relate to Offerings and Instances. Full design details are in <code>docs/design/Database_redesign_document_v2.md</code>.
+              </p>
+
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <h4 className="font-semibold text-sm">Design principles (summary)</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li><strong>Category</strong> = theme/domain (e.g. Beginner Robotics, Competition Robotics), not product shape. One Category can have many Offering Types (course, camp, workshop, competition).</li>
+                  <li><strong>Offering</strong> = global product definition; belongs to one Category + one Offering Type; reusable across Franchises and Programs.</li>
+                  <li><strong>Program</strong> = a term/session for a Franchise and a Category (e.g. Spring 2026). Program links Franchise + Category (Franchise must have subscribed to that Category).</li>
+                  <li><strong>Instance</strong> = an enrollable run; belongs to one Program and references one Offering (that Offering must belong to the Program’s Category).</li>
+                </ul>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-4">
+                <h4 className="font-semibold text-sm">Example: organization at a glance</h4>
+                <p className="text-xs text-muted-foreground">
+                  Assume one Franchise &quot;Blaze Beijing&quot; subscribes to two Categories: &quot;Beginner Robotics&quot; and &quot;Competition Robotics&quot;. Create one Spring 2026 Program per Category, then create several Instances under each Program, each referencing an Offering from that Category.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2 text-sm">
+                  <div className="space-y-2">
+                    <p className="font-medium text-muted-foreground">Global layer (Library)</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                      <li><strong>Category</strong>: Beginner Robotics, Competition Robotics</li>
+                      <li><strong>Offering</strong> (examples):
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          <li>Beginner Robotics → Course &quot;VEX IQ Intro&quot;, Camp &quot;Winter Experience&quot;, Workshop &quot;Weekend Creative Lab&quot;</li>
+                          <li>Competition Robotics → Competition &quot;VEX School League&quot;, Course &quot;Competition Strategy&quot;</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-muted-foreground">Operations layer (Franchise + Program + Instance)</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                      <li><strong>Franchise</strong>: Blaze Beijing (subscribed to the two Categories above)</li>
+                      <li><strong>Program</strong>: Beginner Robotics · Spring 2026, Competition Robotics · Spring 2026</li>
+                      <li><strong>Instance</strong> (examples):
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          <li>Under &quot;Beginner Robotics · Spring 2026&quot;: run &quot;VEX IQ Intro&quot; in Jan, &quot;Weekend Creative Lab&quot; in Feb</li>
+                          <li>Under &quot;Competition Robotics · Spring 2026&quot;: run &quot;VEX School League&quot; in Mar, &quot;Competition Strategy&quot; in Feb</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="rounded-md border bg-background p-3 font-mono text-xs text-muted-foreground overflow-x-auto">
+                  <pre className="whitespace-pre-wrap">{`Category (global)          Offering (global; Category + Offering Type)
+─────────────────────────────────────────────────────────────
+Beginner Robotics  ──┬── Course:      VEX IQ Intro
+                    ├── Camp:        Winter Experience
+                    └── Workshop:    Weekend Creative Lab
+
+Competition Robotics ──┬── Competition: VEX School League
+                      └── Course:      Competition Strategy
+
+Franchise: Blaze Beijing (subscribed to Beginner Robotics, Competition Robotics)
+
+Program (Franchise + Category + term)    Instance (enrollable runs)
+─────────────────────────────────────────────────────────────
+Beginner Robotics · Spring 2026   ──┬── Instance of "VEX IQ Intro" (Jan)
+                                    └── Instance of "Weekend Creative Lab" (Feb)
+
+Competition Robotics · Spring 2026 ──┬── Instance of "VEX School League" (Mar)
+                                    └── Instance of "Competition Strategy" (Feb)`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  <strong>Summary:</strong> Category and Offering are global. Program fixes &quot;who (Franchise) runs which term for which theme (Category)&quot;. Instance is the concrete enrollable run (which product, when, where); the Offering referenced by an Instance must belong to that Program’s Category.
+                </p>
+              </div>
                   </AccordionContent>
                 </AccordionItem>
 

@@ -69,7 +69,13 @@ export function TrafficTracker() {
         })
 
         if (!response.ok) {
-          console.error('Failed to track page view')
+          const errBody = await response.text()
+          console.error(
+            'Failed to track page view:',
+            response.status,
+            response.statusText,
+            errBody || undefined
+          )
         }
       } catch (error) {
         // 静默失败，不影响用户体验

@@ -287,6 +287,33 @@ export async function PUT(
       )
     }
 
+    // Sync is_course_type to all instances of this offering (design: PORTAL_OFFERING_TYPE_DESIGN, INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN)
+    if (configData !== undefined && typeof configData === "object" && configData !== null) {
+      const portalConfig = configData.portal_config
+      const isCourseType =
+        portalConfig && typeof portalConfig === "object" && typeof portalConfig.is_course_type === "boolean"
+          ? portalConfig.is_course_type
+          : undefined
+      if (isCourseType !== undefined) {
+        const instanceUpdate = { is_course_type: isCourseType }
+        const { error: instanceErr } = await supabaseAdmin
+          .from("v2_instance")
+          .update(instanceUpdate)
+          .eq("offering_id", id)
+        if (instanceErr) {
+          console.error("Error syncing is_course_type to v2_instance:", instanceErr)
+        }
+        // If project uses instance_v2 table for enrollments/orders, sync there too
+        const { error: instanceV2Err } = await supabaseAdmin
+          .from("instance_v2")
+          .update(instanceUpdate)
+          .eq("offering_id", id)
+        if (instanceV2Err) {
+          console.error("Error syncing is_course_type to instance_v2 (table may not exist or lack column):", instanceV2Err.message)
+        }
+      }
+    }
+
     return NextResponse.json(data, { status: 200 })
   } catch (error: any) {
     console.error("Error updating offering:", error)

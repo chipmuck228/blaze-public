@@ -9,22 +9,15 @@ import { MobileLayout } from "@/app/mobile-layout"
 import { usePlatform } from "@/hooks/usePlatform"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { 
   User, 
-  Mail, 
   Calendar, 
   CreditCard, 
   BookOpen, 
   MapPin, 
   Clock,
-  Edit,
-  Save,
-  X,
   CheckCircle2,
   Loader2,
   FileText,
@@ -35,7 +28,6 @@ import {
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { UserAnalytics } from "@/components/UserAnalytics"
 import { AddPaymentMethodDialog } from "@/components/payment/AddPaymentMethodDialog"
 import { Trash2, Star } from "lucide-react"
 import { Footer } from "@/components/Footer"
@@ -62,6 +54,13 @@ interface Enrollment {
     end_date: string
     start_time?: string
     end_time?: string
+    is_course_type?: boolean
+    offering?: {
+      id?: string
+      name?: string
+      description?: string
+      base_price?: number
+    }
     assignment?: {
       course?: {
         name: string
@@ -148,15 +147,16 @@ export default function ProfilePage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [billingHistory, setBillingHistory] = useState<BillingRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
   const [isAddPaymentMethodOpen, setIsAddPaymentMethodOpen] = useState(false)
   const [isRemovingPaymentMethod, setIsRemovingPaymentMethod] = useState<string | null>(null)
   const [isSettingDefault, setIsSettingDefault] = useState<string | null>(null)
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null)
   const [invoiceData, setInvoiceData] = useState<any>(null)
   const [sendingInvoiceIds, setSendingInvoiceIds] = useState<Set<string>>(new Set())
+  const [cartItems, setCartItems] = useState<any[]>([])
+  const [waitlistItems, setWaitlistItems] = useState<any[]>([])
+  const [credits, setCredits] = useState<any[]>([])
+  const [students, setStudents] = useState<{ id: string; name: string; can_view_progress: boolean }[]>([])
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -169,6 +169,10 @@ export default function ProfilePage() {
       fetchEnrollments()
       fetchPaymentMethods()
       fetchBillingHistory()
+      fetchCart()
+      fetchWaitlist()
+      fetchCredits()
+      fetchStudents()
     }
   }, [status, session, router])
 
@@ -178,7 +182,6 @@ export default function ProfilePage() {
       if (response.ok) {
         const data = await response.json()
         setProfile(data)
-        setEditName(data.name)
       }
     } catch (error) {
       console.error("Error fetching profile:", error)
@@ -189,10 +192,10 @@ export default function ProfilePage() {
 
   const fetchEnrollments = async () => {
     try {
-      const response = await fetch("/api/user/enrollments")
+      const response = await fetch("/api/enrollments/orders")
       if (response.ok) {
         const data = await response.json()
-        setEnrollments(data)
+        setEnrollments(data.enrollments || [])
       }
     } catch (error) {
       console.error("Error fetching enrollments:", error)
@@ -264,6 +267,88 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error("Error fetching payment methods:", error)
+    }
+  }
+
+  const fetchCart = async () => {
+    try {
+      const res = await fetch("/api/enrollments/cart")
+      if (res.ok) {
+        const data = await res.json()
+        setCartItems(data.items || [])
+      }
+    } catch (e) {
+      console.error("Error fetching cart:", e)
+    }
+  }
+
+  const fetchWaitlist = async () => {
+    try {
+      const res = await fetch("/api/enrollments/waitlist")
+      if (res.ok) {
+        const data = await res.json()
+        setWaitlistItems(data.waitlist || data.items || [])
+      }
+    } catch (e) {
+      console.error("Error fetching waitlist:", e)
+    }
+  }
+
+  const fetchCredits = async () => {
+    try {
+      const res = await fetch("/api/enrollments/credits")
+      if (res.ok) {
+        const data = await res.json()
+        setCredits(data.credits || [])
+      }
+    } catch (e) {
+      console.error("Error fetching credits:", e)
+    }
+  }
+
+  const fetchStudents = async () => {
+    try {
+      const res = await fetch("/api/students")
+      if (res.ok) {
+        const data = await res.json()
+        setStudents((data.students || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          can_view_progress: !!s.can_view_progress,
+        })))
+      }
+    } catch (e) {
+      console.error("Error fetching students:", e)
+    }
+  }
+
+  const removeFromCart = async (enrollmentId: string) => {
+    try {
+      const res = await fetch(`/api/enrollments/cart/${enrollmentId}`, { method: "DELETE" })
+      if (res.ok) {
+        fetchCart()
+        toast.success("Removed from cart")
+      } else {
+        const err = await res.json()
+        toast.error(err.error || "Failed to remove")
+      }
+    } catch {
+      toast.error("Failed to remove")
+    }
+  }
+
+  const removeFromWaitlist = async (enrollmentId: string) => {
+    try {
+      const res = await fetch(`/api/enrollments/waitlist/${enrollmentId}`, { method: "DELETE" })
+      if (res.ok) {
+        fetchWaitlist()
+        toast.success("Removed from waitlist")
+      } else {
+        const err = await res.json()
+        toast.error(err.error || "Failed to remove")
+      }
+    } catch {
+      toast.error("Failed to remove")
     }
   }
 
@@ -343,33 +428,6 @@ export default function ProfilePage() {
     return undefined
   }
 
-  const handleSaveProfile = async () => {
-    if (!profile) return
-    
-    setIsSaving(true)
-    try {
-      const response = await fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: editName,
-        }),
-      })
-
-      if (response.ok) {
-        const updated = await response.json()
-        setProfile(updated)
-        setIsEditing(false)
-      }
-    } catch (error) {
-      console.error("Error updating profile:", error)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -423,9 +481,10 @@ export default function ProfilePage() {
     return null
   }
 
-  // Calculate stats from enrollments
-  const activeStudents = enrollments.filter(e => e.status === 'enrolled').length
-  const nextClass = enrollments
+  // Course-only enrollments (Portal shows these in Next class, My Courses, Course Summary, Schedule)
+  const courseEnrollments = enrollments.filter(e => e.instance?.is_course_type === true)
+  const activeStudents = courseEnrollments.filter(e => e.status === 'enrolled').length
+  const nextClass = courseEnrollments
     .filter(e => e.status === 'enrolled' && e.instance?.start_date)
     .sort((a, b) => {
       const dateA = new Date(a.instance!.start_date).getTime()
@@ -443,58 +502,21 @@ export default function ProfilePage() {
     return `${dayName}${time ? ` at ${time}` : ''}`
   }
 
-  const quickLinks = [
-    { 
-      title: 'My Enrollments', 
-      icon: <FileText className="w-6 h-6" />, 
-      desc: 'View and manage your course enrollments.',
-      onClick: () => router.push('/enrollments/orders')
-    },
-    { 
-      title: 'My Students', 
-      icon: <User className="w-6 h-6" />, 
-      desc: 'Manage student profiles and enrollment.',
-      onClick: () => router.push('/students')
-    },
-    { 
-      title: 'Waitlist', 
-      icon: <Clock className="w-6 h-6" />, 
-      desc: 'View your waitlist positions.',
-      onClick: () => router.push('/enrollments/waitlist')
-    },
-    { 
-      title: 'Credits', 
-      icon: <CreditCard className="w-6 h-6" />, 
-      desc: 'View your available credits.',
-      onClick: () => router.push('/enrollments/credits')
-    },
-    { 
-      title: 'Billing', 
-      icon: <CreditCard className="w-6 h-6" />, 
-      desc: 'Manage payments and view invoices.',
-      onClick: () => {
-        const paymentTab = document.querySelector('[value="payment"]') as HTMLElement
-        paymentTab?.click()
-      }
-    },
-    { 
-      title: 'Announcements', 
-      icon: <Bell className="w-6 h-6" />, 
-      desc: 'Stay updated with academy-wide news.',
-      onClick: () => {} // Can be linked to announcements page
-    },
-  ]
-
   const content = (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* Hero Section */}
       <section className="bg-[#0f172a] dark:bg-slate-950 py-20 text-white relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <span className="text-blue-400 font-bold uppercase tracking-widest text-xs">Family Dashboard</span>
-          <h1 className="text-5xl font-black mt-2 mb-6">Parent Portal</h1>
+          <span className="text-blue-400 font-bold uppercase tracking-widest text-xs">Account Center</span>
+          <h1 className="text-5xl font-black mt-2 mb-6">My Account</h1>
           <p className="text-slate-400 text-lg max-w-2xl">
-            Welcome back, {profile.name}! Access your student's progress, manage registrations, and stay connected with our community.
+            Welcome back, {profile.name}! Manage payments, enrollments, and view course summary here.
           </p>
+          <Button variant="link" className="px-0 text-blue-300 hover:text-white mt-2" asChild>
+            <Link href="/profile">
+              Edit profile & students on Profile page →
+            </Link>
+          </Button>
         </div>
         <div className="absolute right-0 top-0 w-1/3 h-full bg-blue-600/10 blur-[100px] rounded-full"></div>
       </section>
@@ -534,299 +556,259 @@ export default function ProfilePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-12">
           {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Quick Links */}
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-8">Dashboard Overview</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                {quickLinks.map((link, idx) => {
-                  const content = (
-                    <>
-                      <div className="w-12 h-12 bg-slate-50 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-900 dark:text-white group-hover:bg-blue-600 group-hover:text-white mb-4 transition-colors">
-                        {link.icon}
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{link.title}</h3>
-                      <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{link.desc}</p>
-                    </>
-                  )
-                  
-                  if ((link as any).href) {
-                    return (
-                      <Link
-                        key={idx}
-                        href={(link as any).href}
-                        className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl transition-all group cursor-pointer block"
-                      >
-                        {content}
-                      </Link>
-                    )
-                  }
-                  
-                  return (
-                    <div 
-                      key={idx} 
-                      onClick={link.onClick}
-                      className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl transition-all group cursor-pointer"
-                    >
-                      {content}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
             {/* Tabs Section */}
             <div>
-              <Tabs defaultValue="personal" className="space-y-6">
+              <Tabs defaultValue="enrollments" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                  <TabsTrigger value="personal" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Personal Info</TabsTrigger>
-                  <TabsTrigger value="enrollments" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">My Courses</TabsTrigger>
-                  <TabsTrigger value="analytics" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Analytics</TabsTrigger>
-                  <TabsTrigger value="payment" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Payment</TabsTrigger>
+                  <TabsTrigger value="enrollments" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Enrollments & Orders</TabsTrigger>
+                  <TabsTrigger value="courses" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Course Summary</TabsTrigger>
+                  <TabsTrigger value="payment" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Payment Methods</TabsTrigger>
+                  <TabsTrigger value="progress" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Student Progress</TabsTrigger>
                 </TabsList>
 
-                {/* Personal Information Tab */}
-                <TabsContent value="personal" className="space-y-6">
-                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Personal Information</CardTitle>
-                      <CardDescription>
-                        Update your personal details and account information
-                      </CardDescription>
-                    </div>
-                    {!isEditing && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsEditing(true)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Avatar */}
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src={session.user?.image || profile.image || undefined} />
-                      <AvatarFallback className="text-2xl">
-                        {profile.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Profile Picture</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Your profile picture is managed by your authentication provider
-                      </p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Name */}
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    {isEditing ? (
-                      <div className="flex gap-2">
-                        <Input
-                          id="name"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="flex-1"
-                        />
-                        <Button
-                          size="icon"
-                          onClick={handleSaveProfile}
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Save className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditing(false)
-                            setEditName(profile.name)
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-sm">{profile.name}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Email */}
-                  <div className="space-y-2">
-                    <Label>Email Address</Label>
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm">{profile.email}</p>
-                      {profile.email_verified ? (
-                        <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          Verified
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">
-                          Unverified
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Account Created */}
-                  <div className="space-y-2">
-                    <Label>Member Since</Label>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm">{formatDate(profile.created_at)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-                {/* Enrollments Tab */}
+                {/* Enrollments & Orders: Cart + Waitlist + Enrolled courses inline */}
                 <TabsContent value="enrollments" className="space-y-6">
-                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                <CardHeader>
-                  <CardTitle>My Courses</CardTitle>
-                  <CardDescription>
-                    View all your enrolled courses, cart items, and waitlist
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {enrollments.length === 0 ? (
-                    <div className="text-center py-12">
-                      <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground mb-4">No course enrollments yet</p>
-                      <Button asChild>
-                        <a href="/course-catalog">Browse Courses</a>
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {enrollments.map((enrollment) => {
-                        const courseName = enrollment.instance?.assignment?.course?.name || 'Course'
-                        const category = enrollment.instance?.assignment?.category?.display_name || enrollment.instance?.assignment?.category?.name || ''
-                        const series = enrollment.instance?.assignment?.series?.display_name || enrollment.instance?.assignment?.series?.name || ''
-                        const location = enrollment.instance?.assignment?.location?.name || enrollment.instance?.location?.name
-                        const startDate = enrollment.instance?.start_date
-                        const endDate = enrollment.instance?.end_date
-                        const startTime = enrollment.instance?.start_time
-                        const endTime = enrollment.instance?.end_time
-
-                        return (
-                          <Card key={enrollment.id} className="hover:shadow-md transition-shadow">
-                            <CardContent className="p-4">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1 space-y-2">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h3 className="font-semibold">{courseName}</h3>
-                                    <Badge variant={getStatusColor(enrollment.status)}>
-                                      {enrollment.status}
-                                    </Badge>
-                                    {enrollment.waitlist_position && (
-                                      <Badge variant="secondary">
-                                        Position #{enrollment.waitlist_position}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {(category || series) && (
-                                    <p className="text-sm text-muted-foreground">
-                                      {category && series ? `${category} > ${series}` : category || series}
-                                    </p>
-                                  )}
-                                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                                    {location && (
-                                      <div className="flex items-center gap-1.5">
-                                        <MapPin className="h-3.5 w-3.5" />
-                                        <span>{location}</span>
-                                      </div>
-                                    )}
-                                    {startDate && endDate && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Calendar className="h-3.5 w-3.5" />
-                                        <span>
-                                          {formatDate(startDate)} - {formatDate(endDate)}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {startTime && endTime && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Clock className="h-3.5 w-3.5" />
-                                        <span>
-                                          {formatTime(startTime)} - {formatTime(endTime)}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {enrollment.enrolled_at && (
-                                    <p className="text-xs text-muted-foreground">
-                                      Enrolled on {formatDate(enrollment.enrolled_at)}
-                                    </p>
-                                  )}
-                                  <div className="flex gap-2 mt-2">
-                                    <Button size="sm" variant="outline" asChild>
-                                      <Link href="/enrollments/orders">View All Orders</Link>
-                                    </Button>
-                                    {enrollment.status === 'cart' && (
-                                      <Button size="sm" variant="outline" asChild>
-                                        <Link href="/enrollments/cart">View Cart</Link>
-                                      </Button>
-                                    )}
-                                    {enrollment.status === 'waitlisted' && (
-                                      <Button size="sm" variant="outline" asChild>
-                                        <Link href="/enrollments/waitlist">View Waitlist</Link>
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )
-                      })}
-                    </div>
+                  {/* Cart inline */}
+                  {cartItems.length > 0 && (
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <CreditCard className="h-5 w-5" />
+                          Cart ({cartItems.length})
+                        </CardTitle>
+                        <CardDescription>Items in your cart</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {cartItems.map((item: any) => (
+                          <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                            <div>
+                              <p className="font-medium">{item.instance?.offering?.name || item.instance?.name || "Course"}</p>
+                              {item.student_name && <p className="text-xs text-muted-foreground">Student: {item.student_name}</p>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" onClick={() => removeFromCart(item.id)}>
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        <Button asChild size="sm">
+                          <Link href="/enrollments/cart">Go to cart & checkout</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
-            </TabsContent>
 
-                {/* Analytics Tab */}
-                <TabsContent value="analytics" className="space-y-6">
+                  {/* Waitlist inline */}
+                  {waitlistItems.length > 0 && (
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Clock className="h-5 w-5" />
+                          Waitlist ({waitlistItems.length})
+                        </CardTitle>
+                        <CardDescription>Your waitlist positions</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {waitlistItems.map((item: any) => (
+                          <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                            <div>
+                              <p className="font-medium">{item.instance?.offering?.name || item.instance?.name || "Course"}</p>
+                              {item.student_name && <p className="text-xs text-muted-foreground">Student: {item.student_name}</p>}
+                              {item.waitlist_position != null && (
+                                <p className="text-xs text-muted-foreground">Position #{item.waitlist_position}</p>
+                              )}
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => removeFromWaitlist(item.id)}>
+                              Leave waitlist
+                            </Button>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Enrolled / all enrollments */}
                   <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                <CardHeader>
-                  <CardTitle>Learning Analytics</CardTitle>
-                  <CardDescription>
-                    Track your learning progress and statistics
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <UserAnalytics />
-                </CardContent>
-              </Card>
-            </TabsContent>
+                    <CardHeader>
+                      <CardTitle>My Courses</CardTitle>
+                      <CardDescription>
+                        Enrolled courses and registrations
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {enrollments.length === 0 && cartItems.length === 0 && waitlistItems.length === 0 ? (
+                        <div className="text-center py-12">
+                          <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                          <p className="text-muted-foreground mb-4">No enrollments yet</p>
+                          <Button asChild>
+                            <Link href="/course-catalog">Browse Courses</Link>
+                          </Button>
+                        </div>
+                      ) : courseEnrollments.length === 0 ? (
+                        <div className="text-center py-6">
+                          <p className="text-muted-foreground text-sm mb-2">No enrolled courses</p>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href="/enrollments/orders">View all orders</Link>
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {courseEnrollments.map((enrollment) => {
+                            const courseName = enrollment.instance?.offering?.name || enrollment.instance?.assignment?.course?.name || 'Course'
+                            const category = enrollment.instance?.assignment?.category?.display_name || enrollment.instance?.assignment?.category?.name || ''
+                            const series = enrollment.instance?.assignment?.series?.display_name || enrollment.instance?.assignment?.series?.name || ''
+                            const location = enrollment.instance?.assignment?.location?.name || enrollment.instance?.location?.name
+                            const startDate = enrollment.instance?.start_date
+                            const endDate = enrollment.instance?.end_date
+                            const startTime = enrollment.instance?.start_time
+                            const endTime = enrollment.instance?.end_time
+
+                            return (
+                              <Card key={enrollment.id} className="hover:shadow-md transition-shadow">
+                                <CardContent className="p-4">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1 space-y-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="font-semibold">{courseName}</h3>
+                                        <Badge variant={getStatusColor(enrollment.status)}>
+                                          {enrollment.status}
+                                        </Badge>
+                                        {enrollment.waitlist_position != null && (
+                                          <Badge variant="secondary">Position #{enrollment.waitlist_position}</Badge>
+                                        )}
+                                      </div>
+                                      {(category || series) && (
+                                        <p className="text-sm text-muted-foreground">
+                                          {category && series ? `${category} > ${series}` : category || series}
+                                        </p>
+                                      )}
+                                      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                                        {location && (
+                                          <div className="flex items-center gap-1.5">
+                                            <MapPin className="h-3.5 w-3.5" />
+                                            <span>{location}</span>
+                                          </div>
+                                        )}
+                                        {startDate && endDate && (
+                                          <div className="flex items-center gap-1.5">
+                                            <Calendar className="h-3.5 w-3.5" />
+                                            <span>{formatDate(startDate)} - {formatDate(endDate)}</span>
+                                          </div>
+                                        )}
+                                        {startTime && endTime && (
+                                          <div className="flex items-center gap-1.5">
+                                            <Clock className="h-3.5 w-3.5" />
+                                            <span>{formatTime(startTime)} - {formatTime(endTime)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {enrollment.enrolled_at && (
+                                        <p className="text-xs text-muted-foreground">
+                                          Enrolled on {formatDate(enrollment.enrolled_at)}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )
+                          })}
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href="/enrollments/orders">View all orders</Link>
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Course Summary Tab: compact enrolled courses */}
+                <TabsContent value="courses" className="space-y-6">
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                    <CardHeader>
+                      <CardTitle>Course Summary</CardTitle>
+                      <CardDescription>
+                        Courses and instances you are enrolled in
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {courseEnrollments.filter(e => e.status === "enrolled").length === 0 ? (
+                        <div className="text-center py-12">
+                          <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                          <p className="text-muted-foreground mb-4">No enrolled courses</p>
+                          <Button asChild>
+                            <Link href="/course-catalog">Browse Courses</Link>
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {courseEnrollments
+                            .filter(e => e.status === "enrolled")
+                            .map((enrollment) => {
+                              const courseName = enrollment.instance?.offering?.name || enrollment.instance?.assignment?.course?.name || "Course"
+                              const category = enrollment.instance?.assignment?.category?.display_name || enrollment.instance?.assignment?.category?.name || ""
+                              const startDate = enrollment.instance?.start_date
+                              const endDate = enrollment.instance?.end_date
+                              const location = enrollment.instance?.assignment?.location?.name || enrollment.instance?.location?.name
+                              return (
+                                <div
+                                  key={enrollment.id}
+                                  className="flex flex-col p-4 rounded-lg border bg-muted/30 hover:bg-muted/50"
+                                >
+                                  <p className="font-medium">{courseName}</p>
+                                  {category && <p className="text-xs text-muted-foreground">{category}</p>}
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                    {startDate && endDate && (
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        {formatDate(startDate)} – {formatDate(endDate)}
+                                      </span>
+                                    )}
+                                    {location && (
+                                      <span className="flex items-center gap-1">
+                                        <MapPin className="h-3 w-3" />
+                                        {location}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Button variant="outline" size="sm" className="mt-3 w-fit" asChild>
+                                    <Link href="/enrollments/orders">View order</Link>
+                                  </Button>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
 
                 {/* Payment Methods Tab */}
                 <TabsContent value="payment" className="space-y-6">
+                  {/* Credits inline */}
+                  {credits.length > 0 && (
+                    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                      <CardHeader>
+                        <CardTitle>Available Credits</CardTitle>
+                        <CardDescription>Credits you can apply to future enrollments</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {credits.map((c: any) => (
+                            <div key={c.id} className="flex justify-between items-center p-3 rounded-lg border">
+                              <span className="text-sm">{c.description || "Credit"}</span>
+                              <span className="font-medium">${(c.available_amount ?? c.amount ?? 0).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <Button variant="outline" size="sm" asChild className="mt-3">
+                          <Link href="/enrollments/credits">View all credits</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -1051,12 +1033,95 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
                 </TabsContent>
+
+                {/* Student Progress Tab: only students with can_view_progress */}
+                <TabsContent value="progress" className="space-y-6">
+                  <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                    <CardHeader>
+                      <CardTitle>Student Progress</CardTitle>
+                      <CardDescription>
+                        View learning progress and reports for students you have permission to see
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        const studentsWithProgress = students.filter((s) => s.can_view_progress)
+                        if (studentsWithProgress.length === 0) {
+                          return (
+                            <div className="text-center py-12">
+                              <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                              <p className="text-muted-foreground mb-2">
+                                You don&apos;t have permission to view progress for any students yet.
+                              </p>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                When you add or edit a student on your Profile, you can enable &quot;View progress&quot; for that student.
+                              </p>
+                              <Button variant="outline" asChild>
+                                <Link href="/profile">Manage students on Profile</Link>
+                              </Button>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div className="space-y-4">
+                            {studentsWithProgress.map((student) => (
+                              <div
+                                key={student.id}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border bg-muted/30"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <User className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{student.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Progress and reports will appear here when available
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                  <Button variant="outline" size="sm" asChild>
+                                    <Link href={`/enrollments/orders?student=${encodeURIComponent(student.id)}`}>
+                                      View orders
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
               </Tabs>
             </div>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-8">
+            {/* Your Students */}
+            {students.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3 flex items-center">
+                  <User className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+                  Your Students
+                </h3>
+                <ul className="space-y-2 mb-3">
+                  {students.slice(0, 5).map((s) => (
+                    <li key={s.id} className="text-sm text-slate-700 dark:text-slate-300">
+                      {s.name}
+                    </li>
+                  ))}
+                  {students.length > 5 && <li className="text-xs text-muted-foreground">+{students.length - 5} more</li>}
+                </ul>
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <Link href="/profile">Manage on Profile</Link>
+                </Button>
+              </div>
+            )}
+
             {/* Schedule Card */}
             <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center">
@@ -1064,13 +1129,13 @@ export default function ProfilePage() {
                 This Week's Schedule
               </h3>
               <div className="space-y-4">
-                {enrollments
+                {courseEnrollments
                   .filter(e => e.status === 'enrolled' && e.instance?.start_date)
                   .slice(0, 2)
                   .map((enrollment) => {
                     const startDate = enrollment.instance?.start_date
                     const startTime = enrollment.instance?.start_time
-                    const courseName = enrollment.instance?.assignment?.course?.name || 'Course'
+                    const courseName = enrollment.instance?.offering?.name || enrollment.instance?.assignment?.course?.name || 'Course'
                     const location = enrollment.instance?.assignment?.location?.name || enrollment.instance?.location?.name || 'Location'
                     
                     if (!startDate) return null
@@ -1089,7 +1154,7 @@ export default function ProfilePage() {
                       </div>
                     )
                   })}
-                {enrollments.filter(e => e.status === 'enrolled' && e.instance?.start_date).length === 0 && (
+                {courseEnrollments.filter(e => e.status === 'enrolled' && e.instance?.start_date).length === 0 && (
                   <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
                     No scheduled classes this week
                   </p>

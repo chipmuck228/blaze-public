@@ -778,6 +778,12 @@ export default function AdminDashboardPage() {
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
+              <Link href="/admin/blaze/resources">
+                <FileText className="mr-2 h-4 w-4" />
+                Manage Resources
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
               <Link href="/admin/learning-paths">
                 <BookOpen className="mr-2 h-4 w-4" />
                 Manage Learning Paths

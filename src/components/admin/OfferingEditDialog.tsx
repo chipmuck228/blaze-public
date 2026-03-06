@@ -25,6 +25,7 @@ import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
+import { MarkdownEditField } from "@/components/ui/markdown-edit-field"
 import { toast } from "sonner"
 
 interface Offering {
@@ -1043,56 +1044,50 @@ export function OfferingEditDialog({
           <>
           {/* Target Audience */}
           {isFieldVisible('education.target_audience') && (
-          <div className="space-y-2">
-            <Label htmlFor="audience">Target Audience</Label>
-            <Textarea
-              id="audience"
-              value={formData.target_audience || ""}
-              onChange={(e) => {
-                if (isArchived) return
-                setFormData({ ...formData, target_audience: e.target.value })
-              }}
-              placeholder="e.g., Elementary school students interested in robotics"
-              rows={2}
-              disabled={isArchived}
-            />
-          </div>
+          <MarkdownEditField
+            id="audience"
+            label="Target Audience"
+            value={formData.target_audience || ""}
+            onChange={(v) => {
+              if (isArchived) return
+              setFormData({ ...formData, target_audience: v })
+            }}
+            placeholder="e.g., Elementary school students interested in robotics. Supports **Markdown**."
+            rows={3}
+            disabled={isArchived}
+          />
           )}
 
           {/* Learning Outcomes */}
           {isFieldVisible('education.learning_outcomes') && (
-          <div className="space-y-2">
-            <Label htmlFor="outcomes">Learning Outcomes</Label>
-            <Textarea
-              id="outcomes"
-              value={formData.learning_outcomes || ""}
-              onChange={(e) => {
-                if (isArchived) return
-                setFormData({ ...formData, learning_outcomes: e.target.value })
-              }}
-              placeholder="What students will learn"
-              rows={3}
-              disabled={isArchived}
-            />
-          </div>
+          <MarkdownEditField
+            id="outcomes"
+            label="Learning Outcomes"
+            value={formData.learning_outcomes || ""}
+            onChange={(v) => {
+              if (isArchived) return
+              setFormData({ ...formData, learning_outcomes: v })
+            }}
+            placeholder="What students will learn. Supports **Markdown** and lists."
+            rows={3}
+            disabled={isArchived}
+          />
           )}
 
           {/* Prerequisites */}
           {isFieldVisible('education.prerequisites') && (
-          <div className="space-y-2">
-            <Label htmlFor="prerequisites">Prerequisites</Label>
-            <Textarea
-              id="prerequisites"
-              value={formData.prerequisites || ""}
-              onChange={(e) => {
-                if (isArchived) return
-                setFormData({ ...formData, prerequisites: e.target.value })
-              }}
-              placeholder="e.g., No prior experience required"
-              rows={2}
-              disabled={isArchived}
-            />
-          </div>
+          <MarkdownEditField
+            id="prerequisites"
+            label="Prerequisites"
+            value={formData.prerequisites || ""}
+            onChange={(v) => {
+              if (isArchived) return
+              setFormData({ ...formData, prerequisites: v })
+            }}
+            placeholder="e.g., No prior experience required. Supports **Markdown**."
+            rows={3}
+            disabled={isArchived}
+          />
           )}
           </>)}
 

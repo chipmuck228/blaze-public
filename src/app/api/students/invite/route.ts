@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       .from('student_invitations')
       .select('id, expires_at')
       .eq('student_id', student_id)
-      .eq('parent_user_id', userId)
+      .eq('inviter_user_id', userId)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
       .limit(1)

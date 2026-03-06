@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
+import ReactMarkdown from "react-markdown"
+import DOMPurify from "dompurify"
 import {
   ArrowLeft,
   Calendar,
@@ -11,7 +13,6 @@ import {
   Clock,
   Users,
   Loader2,
-  CheckCircle2,
   BookOpen,
   Target,
   FileText,
@@ -19,6 +20,51 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InstanceRecommendations } from "@/components/category/InstanceRecommendations"
+
+/** Renders HTML (from WYSIWYG editor) or Markdown with consistent prose styling. */
+function RichTextContent({ content, className = "" }: { content: string; className?: string }) {
+  const trimmed = content.trim()
+  const isHtml = trimmed.startsWith("<") && trimmed.includes(">")
+
+  if (!trimmed) return null
+
+  if (isHtml) {
+    const sanitized = DOMPurify.sanitize(trimmed, {
+      ALLOWED_TAGS: ["p", "br", "strong", "em", "s", "u", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "span"],
+      ALLOWED_ATTR: ["href", "target", "rel", "class", "style"],
+    })
+    return (
+      <div
+        className={`text-slate-600 leading-relaxed prose prose-slate max-w-none ${className}`}
+        dangerouslySetInnerHTML={{ __html: sanitized }}
+      />
+    )
+  }
+
+  return (
+    <div className={`text-slate-600 leading-relaxed prose prose-slate max-w-none ${className}`}>
+      <ReactMarkdown
+        components={{
+          h1: ({ children }) => <h1 className="text-lg font-semibold mt-2 mb-1 first:mt-0 text-slate-900">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-semibold mt-2 mb-1 first:mt-0 text-slate-900">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-semibold mt-1.5 mb-0.5 first:mt-0 text-slate-900">{children}</h3>,
+          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-0.5">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-0.5">{children}</ol>,
+          li: ({ children }) => <li className="leading-snug">{children}</li>,
+          strong: ({ children }) => <strong className="font-semibold text-slate-800">{children}</strong>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#2563eb] underline">
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
 
 const OFFERING_TYPE_LABELS: Record<string, { overview: string; audience: string; outcomes: string; prerequisites: string }> = {
   course: { overview: "Program Overview", audience: "Target Audience", outcomes: "What You'll Learn", prerequisites: "Prerequisites" },
@@ -296,11 +342,7 @@ export function InstanceDetail() {
             <section className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
               <h2 className="text-2xl font-bold text-slate-900 mb-4">{typeLabels.overview}</h2>
               {description && (
-                <div className="text-slate-600 text-lg leading-relaxed prose prose-slate max-w-none">
-                  {typeof description === "string" && description.includes("\n")
-                    ? description.split("\n").map((p, i) => <p key={i} className="mb-4">{p}</p>)
-                    : <p>{description}</p>}
-                </div>
+                <RichTextContent content={typeof description === "string" ? description : String(description)} className="text-lg" />
               )}
             </section>
 
@@ -310,11 +352,7 @@ export function InstanceDetail() {
                   <Target className="w-6 h-6 text-blue-500" />
                   {typeLabels.audience}
                 </h2>
-                <div className="text-slate-600 leading-relaxed prose prose-slate max-w-none">
-                  {typeof targetAudience === "string" && targetAudience.includes("\n")
-                    ? targetAudience.split("\n").map((p, i) => <p key={i} className="mb-2">{p}</p>)
-                    : <p>{targetAudience}</p>}
-                </div>
+                <RichTextContent content={typeof targetAudience === "string" ? targetAudience : String(targetAudience)} />
               </section>
             )}
 
@@ -324,16 +362,7 @@ export function InstanceDetail() {
                   <BookOpen className="w-6 h-6 text-green-500" />
                   {typeLabels.outcomes}
                 </h2>
-                <div className="text-slate-600 leading-relaxed prose prose-slate max-w-none">
-                  {typeof learningOutcomes === "string" && learningOutcomes.includes("\n")
-                    ? learningOutcomes.split("\n").map((line, i) => (
-                        <div key={i} className="flex gap-3 mb-2">
-                          <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
-                          <span>{line.trim()}</span>
-                        </div>
-                      ))
-                    : <p>{learningOutcomes}</p>}
-                </div>
+                <RichTextContent content={typeof learningOutcomes === "string" ? learningOutcomes : String(learningOutcomes)} />
               </section>
             )}
 
@@ -343,11 +372,7 @@ export function InstanceDetail() {
                   <FileText className="w-6 h-6 text-amber-500" />
                   {typeLabels.prerequisites}
                 </h2>
-                <div className="text-slate-600 leading-relaxed">
-                  {typeof prerequisites === "string" && prerequisites.includes("\n")
-                    ? prerequisites.split("\n").map((p, i) => <p key={i} className="mb-2">{p}</p>)
-                    : <p>{prerequisites}</p>}
-                </div>
+                <RichTextContent content={typeof prerequisites === "string" ? prerequisites : String(prerequisites)} />
               </section>
             )}
 

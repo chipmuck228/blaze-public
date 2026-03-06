@@ -46,11 +46,15 @@ interface Offering {
   base_price?: number
   currency?: string
   category_id: string
+  type_config_data?: Record<string, any>
   offering_type?: {
     id: string
     code: string
     name: string
     instance_schema?: {
+      fields?: Record<string, any>
+    }
+    offering_schema?: {
       fields?: Record<string, any>
     }
   }
@@ -138,6 +142,13 @@ export function InstanceCreateDialog({
     is_active: true,
   })
 
+  /** Offering portal_config (C-end display: is_course_type, show_meal_service, show_care_service); synced from selectedOffering.type_config_data when offering changes; editable and saved back to offering on submit */
+  const [offeringPortalConfig, setOfferingPortalConfig] = useState<{
+    is_course_type?: boolean
+    show_meal_service?: boolean
+    show_care_service?: boolean
+  } | null>(null)
+
   // Initialize form data when editingInstance changes
   useEffect(() => {
     if (open && editingInstance) {
@@ -181,12 +192,42 @@ export function InstanceCreateDialog({
     }
   }, [open, formData.program_id, programs])
 
-  // Fetch offering details when offering_id changes
+  // Fetch offering details when offering_id changes (create mode), or when dialog opens in edit mode so we have type_config_data and offering_schema
   useEffect(() => {
     if (open && formData.offering_id && !isEditMode) {
       fetchOfferingDetails()
     }
   }, [open, formData.offering_id, isEditMode])
+
+  useEffect(() => {
+    if (open && isEditMode && editingInstance?.offering_id) {
+      fetch(`/api/admin/offering/v2/${editingInstance.offering_id}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((offering: Offering | null) => {
+          if (offering) setSelectedOffering(offering)
+        })
+        .catch(() => {})
+    }
+  }, [open, isEditMode, editingInstance?.offering_id])
+
+  // Sync offeringPortalConfig from selectedOffering.type_config_data.portal_config when offering changes
+  useEffect(() => {
+    const portalSchema = selectedOffering?.offering_type?.offering_schema?.fields?.portal_config
+    if (!portalSchema || portalSchema.type !== 'object' || !portalSchema.properties) {
+      setOfferingPortalConfig(null)
+      return
+    }
+    const defaultObj = (typeof portalSchema.default === 'object' && portalSchema.default !== null)
+      ? portalSchema.default
+      : { is_course_type: true, show_meal_service: false, show_care_service: false }
+    const fromOffering = selectedOffering?.type_config_data?.portal_config
+    const merged = { ...defaultObj, ...(typeof fromOffering === 'object' && fromOffering !== null ? fromOffering : {}) }
+    setOfferingPortalConfig({
+      is_course_type: !!merged.is_course_type,
+      show_meal_service: !!merged.show_meal_service,
+      show_care_service: !!merged.show_care_service,
+    })
+  }, [selectedOffering])
 
   // Initialize default values from instance_schema when offering changes
   useEffect(() => {
@@ -330,6 +371,25 @@ export function InstanceCreateDialog({
     setIsSubmitting(true)
 
     try {
+      // If we showed and have portal_config for the selected offering, save it to the offering first
+      if (selectedOffering?.id && offeringPortalConfig !== null) {
+        const offeringPayload = {
+          type_config_data: {
+            ...(selectedOffering.type_config_data || {}),
+            portal_config: offeringPortalConfig,
+          },
+        }
+        const offeringRes = await fetch(`/api/admin/offering/v2/${selectedOffering.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(offeringPayload),
+        })
+        if (!offeringRes.ok) {
+          const errData = await offeringRes.json().catch(() => ({}))
+          throw new Error(errData.error || "Failed to update offering C-end config")
+        }
+      }
+
       const payloadSchema = selectedOffering?.offering_type?.instance_schema?.fields
       // Schema-driven: send start_date/end_date only when defined in schema
       const payload: any = {
@@ -739,6 +799,47 @@ export function InstanceCreateDialog({
               </div>
             </CardContent>
           </Card>
+
+          {/* Offering C-end config (portal_config): from offering_schema.fields.portal_config; only when selected offering has this object field */}
+          {selectedOffering?.offering_type?.offering_schema?.fields?.portal_config &&
+            selectedOffering.offering_type.offering_schema.fields.portal_config.type === 'object' &&
+            selectedOffering.offering_type.offering_schema.fields.portal_config.properties &&
+            offeringPortalConfig !== null && (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-medium">
+                    {selectedOffering.offering_type.offering_schema.fields.portal_config.label || 'C 端展示行为'}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {selectedOffering.offering_type.offering_schema.fields.portal_config.description ||
+                      'Portal 课程类标识 + Instance 详情页是否推荐 Meal/Care 服务'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0 rounded-md border border-slate-200 bg-slate-50/50 p-3">
+                  {Object.entries(selectedOffering.offering_type.offering_schema.fields.portal_config.properties).map(
+                    ([propKey, propConfig]: [string, any]) => {
+                      if (propConfig.type !== 'boolean') return null
+                      const propValue = (offeringPortalConfig as any)[propKey] ?? propConfig.default ?? false
+                      return (
+                        <div key={propKey} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={!!propValue}
+                            onCheckedChange={(checked) =>
+                              setOfferingPortalConfig((prev) =>
+                                prev ? { ...prev, [propKey]: !!checked } : null
+                              )
+                            }
+                          />
+                          <Label className="text-sm cursor-pointer">
+                            {propConfig.label || propKey}
+                          </Label>
+                        </div>
+                      )
+                    }
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
           {/* 日期块：仅当 instance_schema 中定义了 start_date 或 end_date 时显示 */}
           {(() => {

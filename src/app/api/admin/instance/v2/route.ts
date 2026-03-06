@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. 验证 Offering 存在且状态为 published
+    // 2. 验证 Offering 存在且状态为 published（并取 type_config_data 用于 is_course_type）
     const { data: offering, error: offeringError } = await supabaseAdmin
       .from("v2_offering")
       .select(`
@@ -190,6 +190,7 @@ export async function POST(request: Request) {
         status,
         category_id,
         offering_type_id,
+        type_config_data,
         offering_type:v2_offering_type(
           id,
           code,
@@ -355,6 +356,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // 7.1 is_course_type：从 v2_offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
+    const isCourseType = !!(offering as any)?.type_config_data?.portal_config?.is_course_type
+
     // 8. 创建 Instance（使用合并后的 instance_data_ext）
     const { data: instance, error: instanceError } = await supabaseAdmin
       .from("v2_instance")
@@ -379,6 +383,7 @@ export async function POST(request: Request) {
         status,
         notes: notes || null,
         is_active,
+        is_course_type: isCourseType,
       })
       .select(`
         *,

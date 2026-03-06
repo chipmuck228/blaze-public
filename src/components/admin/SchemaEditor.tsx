@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Code, LayoutGrid, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const FIELD_TYPES = ['text', 'number', 'boolean', 'select', 'multiselect', 'array', 'date', 'time'] as const
+const FIELD_TYPES = ['text', 'number', 'boolean', 'select', 'multiselect', 'array', 'date', 'time', 'object'] as const
 const DISPLAY_SCOPES = ['admin', 'web', 'both'] as const
 
 export type SchemaFields = Record<string, Record<string, unknown>>
@@ -262,10 +262,27 @@ function FieldCard({
   onMoveDown?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [objectDefaultJson, setObjectDefaultJson] = useState('')
+  const [objectPropertiesJson, setObjectPropertiesJson] = useState('')
   const type = (def.type as string) ?? 'text'
   const label = (def.label as string) ?? fieldKey
   const required = !!def.required
   const displayScope = (def.display_scope as string) ?? 'admin'
+
+  useEffect(() => {
+    if (type === 'object' && expanded) {
+      setObjectDefaultJson(
+        def.default !== undefined && def.default !== null && typeof def.default === 'object'
+          ? JSON.stringify(def.default, null, 2)
+          : ''
+      )
+      setObjectPropertiesJson(
+        def.properties !== undefined && def.properties !== null && typeof def.properties === 'object'
+          ? JSON.stringify(def.properties, null, 2)
+          : '{}'
+      )
+    }
+  }, [type, expanded, def.default, def.properties])
 
   const update = (partial: Record<string, unknown>) => {
     onUpdate({ def: { ...def, ...partial } })
@@ -423,6 +440,96 @@ function FieldCard({
                   className="h-8 text-sm"
                 />
               </div>
+            )}
+            {type === 'object' && (
+              <>
+                <div className="col-span-full space-y-1">
+                  <Label className="text-xs">Default (JSON object)</Label>
+                  <Textarea
+                    value={objectDefaultJson}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setObjectDefaultJson(v)
+                      const t = v.trim()
+                      if (!t) {
+                        update({ default: undefined })
+                        return
+                      }
+                      try {
+                        const parsed = JSON.parse(t)
+                        if (typeof parsed === 'object' && parsed !== null) update({ default: parsed })
+                      } catch {
+                        // allow invalid JSON while typing
+                      }
+                    }}
+                    onBlur={() => {
+                      const t = objectDefaultJson.trim()
+                      if (!t) {
+                        update({ default: undefined })
+                        return
+                      }
+                      try {
+                        const parsed = JSON.parse(t)
+                        if (typeof parsed === 'object' && parsed !== null) {
+                          update({ default: parsed })
+                          setObjectDefaultJson(JSON.stringify(parsed, null, 2))
+                        }
+                      } catch {
+                        if (def.default !== undefined && def.default !== null && typeof def.default === 'object') {
+                          setObjectDefaultJson(JSON.stringify(def.default, null, 2))
+                        }
+                      }
+                    }}
+                    placeholder='{"key": "value"}'
+                    className="font-mono text-xs min-h-[80px] resize-y"
+                    rows={4}
+                  />
+                </div>
+                <div className="col-span-full space-y-1">
+                  <Label className="text-xs">Properties (JSON object of field defs)</Label>
+                  <Textarea
+                    value={objectPropertiesJson}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setObjectPropertiesJson(v)
+                      const t = v.trim()
+                      if (!t) {
+                        update({ properties: undefined })
+                        return
+                      }
+                      try {
+                        const parsed = JSON.parse(t)
+                        if (typeof parsed === 'object' && parsed !== null) update({ properties: parsed })
+                      } catch {
+                        // allow invalid JSON while typing
+                      }
+                    }}
+                    onBlur={() => {
+                      const t = objectPropertiesJson.trim()
+                      if (!t) {
+                        update({ properties: {} })
+                        setObjectPropertiesJson('{}')
+                        return
+                      }
+                      try {
+                        const parsed = JSON.parse(t)
+                        if (typeof parsed === 'object' && parsed !== null) {
+                          update({ properties: parsed })
+                          setObjectPropertiesJson(JSON.stringify(parsed, null, 2))
+                        }
+                      } catch {
+                        if (def.properties !== undefined && def.properties !== null && typeof def.properties === 'object') {
+                          setObjectPropertiesJson(JSON.stringify(def.properties, null, 2))
+                        }
+                      }
+                    }}
+                    placeholder='{"propKey": {"type": "boolean", "label": "Label"}}'
+                    className="font-mono text-xs min-h-[120px] resize-y"
+                    rows={6}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Nested field definitions, e.g. portal_config with is_course_type, show_meal_service, show_care_service.</p>
+                </div>
+              </>
             )}
           </div>
         </CardContent>

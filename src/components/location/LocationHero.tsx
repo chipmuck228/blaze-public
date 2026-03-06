@@ -17,7 +17,12 @@ export interface LocationHeroProgram {
 
 interface LocationHeroProps {
   heroTitle: string
+  heroSubtitle?: string | null
   heroDescription: string
+  heroBackgroundUrl?: string | null
+  heroCtaText: string
+  heroCtaLink: string
+  heroCtaExternal?: boolean
   displayName: string
   primaryAddress: string
   normalizedCode: string
@@ -26,7 +31,12 @@ interface LocationHeroProps {
 
 export function LocationHero({
   heroTitle,
+  heroSubtitle,
   heroDescription,
+  heroBackgroundUrl,
+  heroCtaText,
+  heroCtaLink,
+  heroCtaExternal = false,
   displayName,
   primaryAddress,
   normalizedCode,
@@ -46,10 +56,21 @@ export function LocationHero({
 
   return (
     <section className="relative min-h-[100vh] lg:min-h-[60vh] flex flex-col lg:flex-row bg-[#0f172a] overflow-hidden pt-20 items-center justify-center">
-      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-600 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-600 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4"></div>
-      </div>
+      {/* Background: image from config (poster_url or hero.backgroundImage) or default gradient */}
+      {heroBackgroundUrl ? (
+        <>
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${heroBackgroundUrl})` }}
+          />
+          <div className="absolute inset-0 z-0 bg-[#0f172a]/80" aria-hidden />
+        </>
+      ) : (
+        <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
+          <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-600 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2"></div>
+          <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-600 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4"></div>
+        </div>
+      )}
 
       {/* Left: Location Information */}
       <div className="relative z-10 w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
@@ -57,6 +78,11 @@ export function LocationHero({
           <h1 className="text-5xl lg:text-7xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
             {heroTitle}
           </h1>
+          {heroSubtitle && (
+            <p className="text-xl text-slate-200 font-medium mb-4 leading-relaxed">
+              {heroSubtitle}
+            </p>
+          )}
           <p className="text-lg text-slate-300 mb-8 leading-relaxed">
             {heroDescription}
           </p>
@@ -85,13 +111,25 @@ export function LocationHero({
           )}
 
           <div className="flex flex-wrap gap-4">
-            <Link
-              href={`/programs?location=${encodeURIComponent(normalizedCode)}`}
-              className="bg-[#2563eb] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-blue-600 transition-all flex items-center shadow-xl hover:shadow-2xl hover:-translate-y-1"
-            >
-              View Programs
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Link>
+            {heroCtaExternal ? (
+              <a
+                href={heroCtaLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#2563eb] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-blue-600 transition-all flex items-center shadow-xl hover:shadow-2xl hover:-translate-y-1"
+              >
+                {heroCtaText}
+                <ExternalLink className="ml-2 w-5 h-5" />
+              </a>
+            ) : (
+              <Link
+                href={heroCtaLink}
+                className="bg-[#2563eb] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-blue-600 transition-all flex items-center shadow-xl hover:shadow-2xl hover:-translate-y-1"
+              >
+                {heroCtaText}
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Link>
+            )}
           </div>
         </div>
       </div>

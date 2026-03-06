@@ -35,14 +35,28 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { MarkdownEditField } from "@/components/ui/markdown-edit-field"
+import { RichTextEditor } from "@/components/admin/RichTextEditor"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
+import { marked } from "marked"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
 
+/** Convert stored value to HTML for the WYSIWYG editor. If value looks like HTML, return as-is; else treat as Markdown and convert. */
+function richTextValueForEditor(raw: unknown): string {
+  if (raw == null) return ""
+  const s = typeof raw === "string" ? raw.trim() : String(raw).trim()
+  if (!s) return ""
+  if (s.startsWith("<") && s.includes(">")) return s
+  try {
+    return marked.parse(s) as string
+  } catch {
+    return s
+  }
+}
+
 type SchemaFieldConfig = {
-  type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date' | 'time'
+  type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date' | 'time' | 'object'
   label?: string
   required?: boolean
   default?: any
@@ -54,6 +68,8 @@ type SchemaFieldConfig = {
   multiline?: boolean
   options?: string[]
   items?: { type: string }
+  /** For type 'object': nested fields rendered as a group (e.g. portal_config.properties) */
+  properties?: Record<string, SchemaFieldConfig>
   display_scope?: 'admin' | 'web' | 'both'
   condition?: {
     field: string
@@ -842,16 +858,21 @@ export default function BlazeOfferingsManagementPage() {
                         <CardDescription className="text-xs">Admin-only note for this offering. Not shown on C-end; C-end content (e.g. description, price, audience) is configured in the Configuration tab from offering_schema.</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3 pt-0">
-                        <MarkdownEditField
-                          id="description"
-                          label="Description (admin only)"
-                          value={formData.description || ""}
-                          onChange={(v) => setFormData({ ...formData, description: v })}
-                          placeholder="Internal note or reminder for admins about this offering."
-                          rows={3}
-                          disabled={isSubmitting}
-                          hint="For admin use only; not displayed on the public site."
-                        />
+                        <div className="space-y-1.5">
+                          <Label htmlFor="description" className="text-xs">Description (admin only)</Label>
+                          <p className="text-xs text-muted-foreground">For admin use only; not displayed on the public site. Max 100 characters.</p>
+                          <Textarea
+                            id="description"
+                            value={formData.description || ""}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value.slice(0, 100) })}
+                            placeholder="Internal note or reminder for admins about this offering."
+                            rows={2}
+                            maxLength={100}
+                            disabled={isSubmitting}
+                            className="text-sm resize-none"
+                          />
+                          <p className="text-xs text-muted-foreground text-right">{(formData.description || "").length}/100</p>
+                        </div>
                         <div className="space-y-1.5">
                           <PosterUploadField
                             id="poster_file"
@@ -921,14 +942,28 @@ export default function BlazeOfferingsManagementPage() {
                             if (cond.in && Array.isArray(cond.in) && !cond.in.includes(conditionValue)) return null
                           }
                           const fieldValue = typeConfigData[fieldName] ?? fieldConfig.default ?? ''
+                          const isMultilineText = fieldConfig.type === 'text' && fieldConfig.multiline
+                          const useMarkdownEditor = isMultilineText
 
                           return (
                             <div key={fieldName} className="space-y-1.5">
-                              <Label htmlFor={`config_${fieldName}`} className="text-xs">
-                                {fieldConfig.label || fieldName}
-                                {fieldConfig.required && <span className="text-red-500 ml-0.5">*</span>}
-                              </Label>
-                              {fieldConfig.type === 'text' && (
+                              {!useMarkdownEditor && fieldConfig.type !== 'object' && (
+                                <Label htmlFor={`config_${fieldName}`} className="text-xs">
+                                  {fieldConfig.label || fieldName}
+                                  {fieldConfig.required && <span className="text-red-500 ml-0.5">*</span>}
+                                </Label>
+                              )}
+                              {useMarkdownEditor ? (
+                                <RichTextEditor
+                                  label={`${fieldConfig.label || fieldName}${fieldConfig.required ? ' *' : ''}`}
+                                  hint={fieldConfig.description}
+                                  value={richTextValueForEditor(fieldValue)}
+                                  onChange={(v) => setTypeConfigData({ ...typeConfigData, [fieldName]: v })}
+                                  placeholder={fieldConfig.placeholder ?? "Use the toolbar for bold, lists, links, etc."}
+                                  minHeight={180}
+                                  disabled={isSubmitting}
+                                />
+                              ) : fieldConfig.type === 'text' && (
                                 fieldConfig.multiline ? (
                                   <Textarea id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} rows={2} className="text-sm resize-none min-h-[52px]" required={fieldConfig.required} />
                                 ) : (
@@ -996,7 +1031,96 @@ export default function BlazeOfferingsManagementPage() {
                               {fieldConfig.type === 'time' && (
                                 <Input id={`config_${fieldName}`} type="time" value={fieldValue || ''} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
-                              {fieldConfig.description && <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>}
+                              {fieldConfig.type === 'object' && fieldConfig.properties && (
+                                <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/50 p-3">
+                                  <p className="text-xs font-medium text-slate-600">{fieldConfig.label || fieldName}</p>
+                                  {fieldConfig.description && <p className="text-xs text-muted-foreground -mt-1">{fieldConfig.description}</p>}
+                                  {(() => {
+                                    const objValue = typeof fieldValue === 'object' && fieldValue !== null
+                                      ? { ...(fieldConfig.default ?? {}), ...fieldValue }
+                                      : (fieldConfig.default ?? {})
+                                    const setObj = (next: Record<string, any>) => setTypeConfigData({ ...typeConfigData, [fieldName]: next })
+                                    return (
+                                      <div className="space-y-3">
+                                        {Object.entries(fieldConfig.properties).map(([propKey, propConfig]) => {
+                                          const propValue = objValue[propKey] ?? propConfig.default ?? (propConfig.type === 'boolean' ? false : '')
+                                          return (
+                                            <div key={propKey} className="space-y-1">
+                                              {propConfig.type === 'boolean' && (
+                                                <div className="flex items-center gap-2">
+                                                  <input
+                                                    id={`config_${fieldName}_${propKey}`}
+                                                    type="checkbox"
+                                                    checked={!!propValue}
+                                                    onChange={(e) => setObj({ ...objValue, [propKey]: e.target.checked })}
+                                                    className="h-4 w-4 rounded border-input"
+                                                  />
+                                                  <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-sm cursor-pointer">
+                                                    {propConfig.label || propKey}
+                                                  </Label>
+                                                </div>
+                                              )}
+                                              {propConfig.type === 'text' && (
+                                                <>
+                                                  <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
+                                                  <Input
+                                                    id={`config_${fieldName}_${propKey}`}
+                                                    value={propValue}
+                                                    onChange={(e) => setObj({ ...objValue, [propKey]: e.target.value })}
+                                                    placeholder={propConfig.placeholder}
+                                                    className="h-9 text-sm mt-0.5"
+                                                  />
+                                                </>
+                                              )}
+                                              {propConfig.type === 'number' && (
+                                                <>
+                                                  <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
+                                                  <Input
+                                                    id={`config_${fieldName}_${propKey}`}
+                                                    type="number"
+                                                    value={propValue}
+                                                    onChange={(e) => setObj({ ...objValue, [propKey]: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                                    placeholder={propConfig.placeholder}
+                                                    min={propConfig.min}
+                                                    max={propConfig.max}
+                                                    step={propConfig.step}
+                                                    className="h-9 text-sm mt-0.5"
+                                                  />
+                                                </>
+                                              )}
+                                              {propConfig.type === 'select' && propConfig.options && (
+                                                <>
+                                                  <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
+                                                  <Select value={propValue ?? ''} onValueChange={(value) => setObj({ ...objValue, [propKey]: value })}>
+                                                    <SelectTrigger id={`config_${fieldName}_${propKey}`} className="h-9 mt-0.5">
+                                                      <SelectValue placeholder={propConfig.placeholder || 'Select...'} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                      {propConfig.options.map((opt) => (
+                                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </>
+                                              )}
+                                              {!['boolean', 'text', 'number', 'select'].includes(propConfig.type) && (
+                                                <div className="flex items-center gap-2">
+                                                  <Label className="text-xs text-muted-foreground">{propConfig.label || propKey}</Label>
+                                                  <span className="text-xs text-muted-foreground">(type: {propConfig.type} — not rendered)</span>
+                                                </div>
+                                              )}
+                                              {propConfig.description && (
+                                                <p className="text-xs text-muted-foreground pl-5">{propConfig.description}</p>
+                                              )}
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )
+                                  })()}
+                                </div>
+                              )}
+                              {!useMarkdownEditor && fieldConfig.description && fieldConfig.type !== 'object' && <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>}
                             </div>
                           )
                         })}

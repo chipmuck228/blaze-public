@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, Settings, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink } from "lucide-react";
+import { Menu, LogOut, User, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
   // Navbar 统一深蓝色（与白底搭配）
@@ -650,7 +650,19 @@ interface RouteProps {
                         </div>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator className="bg-slate-200" />
-                      {/* C端暂时隐藏：Portal / Profile / Enrollments / Billing */}
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href="/profile" className="flex items-center">
+                          <User className="mr-2 h-4 w-4" />
+                          <span>Profile</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href="/portal" className="flex items-center">
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          <span>My Account</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-slate-200" />
                       <DropdownMenuItem
                         className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-slate-100"
                         onClick={handleSignOut}
@@ -970,7 +982,18 @@ interface RouteProps {
                         </p>
                       </div>
                     </div>
-                    {/* C端暂时隐藏：Profile / Settings / Shopping Cart */}
+                    <Button variant="outline" className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100" asChild>
+                      <Link href="/profile" onClick={() => setIsOpen(false)}>
+                        <User className="mr-2 h-4 w-4" />
+                        Profile
+                      </Link>
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100" asChild>
+                      <Link href="/portal" onClick={() => setIsOpen(false)}>
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        My Account
+                      </Link>
+                    </Button>
                     <Button
                       variant="outline"
                       className="w-full justify-start bg-white border-slate-200 text-red-600 hover:text-red-700 hover:bg-slate-100"

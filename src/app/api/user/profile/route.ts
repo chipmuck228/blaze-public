@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { getUserById, updateUser } from "@/lib/db"
+import { isValidUSPhone, formatUSPhoneForStorage } from "@/lib/phone"
 
 export async function GET() {
   try {
@@ -27,6 +28,8 @@ export async function GET() {
       name: user.name,
       email: user.email,
       email_verified: user.email_verified,
+      phone: user.phone ?? "",
+      image: user.image ?? null,
       created_at: user.created_at,
     })
   } catch (error: any) {
@@ -50,7 +53,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { name } = body
+    const { name, phone, image } = body
 
     if (!name || typeof name !== "string") {
       return NextResponse.json(
@@ -59,13 +62,28 @@ export async function PATCH(request: Request) {
       )
     }
 
-    const updatedUser = await updateUser(session.user.id, { name })
+    if (phone !== undefined && phone !== null && phone !== "") {
+      if (!isValidUSPhone(phone)) {
+        return NextResponse.json(
+          { error: "Invalid US phone number. Use 10 digits, e.g. (425) 555-0123" },
+          { status: 400 }
+        )
+      }
+    }
+
+    const updates: { name: string; phone?: string | null; image?: string | null } = { name }
+    if (phone !== undefined) updates.phone = phone === "" ? null : formatUSPhoneForStorage(phone)
+    if (image !== undefined) updates.image = image === "" ? null : image
+
+    const updatedUser = await updateUser(session.user.id, updates)
 
     return NextResponse.json({
       id: updatedUser.id,
       name: updatedUser.name,
       email: updatedUser.email,
       email_verified: updatedUser.email_verified,
+      phone: updatedUser.phone ?? "",
+      image: updatedUser.image ?? null,
       created_at: updatedUser.created_at,
     })
   } catch (error: any) {

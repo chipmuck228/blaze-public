@@ -12,6 +12,7 @@ import { Advantages } from "@/components/Advantages"
 import { Testimonials } from "@/components/Testimonials"
 import { Newsletter } from "@/components/Newsletter"
 import { AIChatButton } from "@/components/location/AIChatButton"
+import { LocationCta } from "@/components/location/LocationCta"
 import type { LocationHeroProgram } from "@/components/location/LocationHero"
 
 interface LocationPageProps {
@@ -19,8 +20,22 @@ interface LocationPageProps {
 }
 
 type BrandingConfig = {
-  hero?: { title?: string; description?: string }
+  hero?: {
+    title?: string
+    subtitle?: string
+    description?: string
+    backgroundImage?: string
+    ctaText?: string
+    ctaLink?: string
+  }
   contact?: { address?: { street?: string; city?: string; state?: string; zip?: string } }
+}
+
+type MarketingCtaItem = { text?: string; link?: string; style?: string }
+type MarketingConfig = {
+  seo?: { title?: string; description?: string; keywords?: string; ogImage?: string; ogTitle?: string; ogDescription?: string; canonicalUrl?: string }
+  slogan?: { main?: string; subtitle?: string; tagline?: string }
+  cta?: { primary?: MarketingCtaItem; secondary?: MarketingCtaItem }
 }
 
 type V2Franchise = {
@@ -28,6 +43,8 @@ type V2Franchise = {
   code: string
   name: string | null
   branding_config?: BrandingConfig | null
+  marketing_config?: MarketingConfig | null
+  poster_url?: string | null
 }
 
 type V2Campus = {
@@ -40,8 +57,11 @@ type V2Campus = {
   zip_code?: string | null
 }
 
-/** 页面标题统一为 [location] Robotics Academy；locationLabel 建议用 code 格式化的名称（如 Bellevue），避免 DB 中 franchise.name 为旧文案（如 Blaze Robotics Academy - San Jose） */
-function getHeroTitle(_franchise: V2Franchise, locationLabel: string): string {
+/** 优先使用 branding_config.hero.title，否则 [location] Robotics Academy */
+function getHeroTitle(franchise: V2Franchise, locationLabel: string): string {
+  if (franchise.branding_config?.hero?.title?.trim()) {
+    return franchise.branding_config.hero.title.trim()
+  }
   const loc = locationLabel?.trim()
   return loc ? `${loc} Robotics Academy` : "Robotics Academy"
 }
@@ -52,6 +72,25 @@ function getHeroDescription(franchise: V2Franchise): string {
   }
   const locationName = franchise.name || franchise.code || "area"
   return `Local robotics, coding, and engineering programs for students in the ${locationName} area.`
+}
+
+function getHeroSubtitle(franchise: V2Franchise): string | null {
+  const s = franchise.branding_config?.hero?.subtitle?.trim()
+  return s || null
+}
+
+function getHeroBackgroundUrl(franchise: V2Franchise): string | null {
+  const url = franchise.branding_config?.hero?.backgroundImage?.trim() || franchise.poster_url?.trim()
+  return url || null
+}
+
+function getHeroCta(franchise: V2Franchise, normalizedCode: string): { text: string; link: string; external: boolean } {
+  const text = franchise.branding_config?.hero?.ctaText?.trim()
+  const link = franchise.branding_config?.hero?.ctaLink?.trim()
+  const defaultLink = `/programs?location=${encodeURIComponent(normalizedCode)}`
+  const href = link || defaultLink
+  const external = href.startsWith("http://") || href.startsWith("https://")
+  return { text: text || "View Programs", link: href, external }
 }
 
 function getPrimaryAddress(
@@ -96,18 +135,42 @@ export async function generateMetadata({ params }: LocationPageProps) {
   const { code } = await params
   const normalizedCode = decodeURIComponent(code).toLowerCase()
   const locationLabel = formatLocationLabel(normalizedCode)
-  const title = locationLabel ? `${locationLabel} Robotics Academy` : "Robotics Academy"
-  return { title }
+  const defaultTitle = locationLabel ? `${locationLabel} Robotics Academy` : "Robotics Academy"
+
+  const { data: franchise } = await supabaseAdmin
+    .from("v2_franchise")
+    .select("marketing_config")
+    .eq("code", normalizedCode)
+    .eq("is_active", true)
+    .single()
+
+  const marketing = (franchise as { marketing_config?: MarketingConfig } | null)?.marketing_config
+  const title = marketing?.seo?.title?.trim() || defaultTitle
+  const description = marketing?.seo?.description?.trim() || undefined
+  const openGraph = marketing?.seo?.ogTitle || marketing?.seo?.ogDescription || marketing?.seo?.ogImage
+    ? {
+        title: marketing.seo.ogTitle?.trim() || title,
+        description: marketing.seo.ogDescription?.trim() || description,
+        images: marketing.seo.ogImage ? [marketing.seo.ogImage] : undefined,
+      }
+    : undefined
+
+  return {
+    title,
+    description,
+    openGraph,
+    alternates: marketing?.seo?.canonicalUrl ? { canonical: marketing.seo.canonicalUrl } : undefined,
+  }
 }
 
 export default async function GenericLocationPage({ params }: LocationPageProps) {
   const { code } = await params
   const normalizedCode = decodeURIComponent(code).toLowerCase()
 
-  // v2_franchise
+  // v2_franchise（含 branding_config、marketing_config、poster_url 供 Hero/CTA/SEO）
   const { data: franchise, error: franchiseError } = await supabaseAdmin
     .from("v2_franchise")
-    .select("id, code, name, branding_config")
+    .select("id, code, name, branding_config, marketing_config, poster_url")
     .eq("code", normalizedCode)
     .eq("is_active", true)
     .single()
@@ -224,8 +287,16 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     normalizedCode
   const locationLabel = formatLocationLabel(normalizedCode) || displayName
   const heroTitle = getHeroTitle(v2Franchise, locationLabel)
+  const heroSubtitle = getHeroSubtitle(v2Franchise)
   const heroDescription = getHeroDescription(v2Franchise)
+  const heroBackgroundUrl = getHeroBackgroundUrl(v2Franchise)
+  const heroCta = getHeroCta(v2Franchise, normalizedCode)
   const primaryAddress = getPrimaryAddress(v2Franchise, firstCampus)
+
+  const marketingCta = v2Franchise.marketing_config?.cta
+  const hasCta =
+    (marketingCta?.primary?.text || marketingCta?.primary?.link) ||
+    (marketingCta?.secondary?.text || marketingCta?.secondary?.link)
 
   return (
     <>
@@ -233,7 +304,12 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
       <main className="min-h-screen bg-background">
         <LocationHero
           heroTitle={heroTitle}
+          heroSubtitle={heroSubtitle}
           heroDescription={heroDescription}
+          heroBackgroundUrl={heroBackgroundUrl}
+          heroCtaText={heroCta.text}
+          heroCtaLink={heroCta.link}
+          heroCtaExternal={heroCta.external}
           displayName={displayName}
           primaryAddress={primaryAddress}
           normalizedCode={normalizedCode}
@@ -253,6 +329,13 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
             locationName={displayName}
           />
         </section>
+
+        {hasCta && (
+          <LocationCta
+            cta={marketingCta!}
+            slogan={v2Franchise.marketing_config?.slogan}
+          />
+        )}
 
         <RoboticsJourney />
         <Advantages />

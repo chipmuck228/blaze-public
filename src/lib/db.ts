@@ -37,6 +37,8 @@ export interface User {
   id: string
   name: string
   email: string
+  image?: string | null
+  phone?: string | null
   password_hash?: string
   email_verified: boolean
   email_verification_token?: string
@@ -587,12 +589,14 @@ export async function resendInvitation(userId: string): Promise<{
   }
 }
 
-// 更新用户（管理员功能）
+// 更新用户（管理员功能 + 用户本人更新 profile）
 export async function updateUser(userId: string, updates: {
   name?: string
   email?: string
   email_verified?: boolean
   role?: string
+  phone?: string | null
+  image?: string | null
 }) {
   const { data, error } = await supabaseAdmin
     .from('users')
