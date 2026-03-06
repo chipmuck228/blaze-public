@@ -41,6 +41,7 @@ import { marked } from "marked"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 /** Convert stored value to HTML for the WYSIWYG editor. If value looks like HTML, return as-is; else treat as Markdown and convert. */
 function richTextValueForEditor(raw: unknown): string {
@@ -53,6 +54,35 @@ function richTextValueForEditor(raw: unknown): string {
   } catch {
     return s
   }
+}
+
+/** Radix Select does not allow empty string as SelectItem value; use this sentinel and map to/from "" when saving. */
+const SELECT_EMPTY_SENTINEL = "__none__"
+
+/** Inflate flat type_config_data into nested shape when schema uses object groups (e.g. course pricing/content). */
+function inflateTypeConfigData(
+  schemaFields: Record<string, SchemaFieldConfig> | undefined,
+  data: Record<string, any> | null | undefined
+): Record<string, any> {
+  if (!data || typeof data !== 'object') return {}
+  if (!schemaFields || typeof schemaFields !== 'object') return { ...data }
+  const out = { ...data }
+  for (const [fieldName, fieldConfig] of Object.entries(schemaFields)) {
+    if (fieldConfig.type === 'object' && fieldConfig.properties) {
+      const existing = out[fieldName]
+      if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
+        const obj: Record<string, any> = {}
+        const def = fieldConfig.default && typeof fieldConfig.default === 'object' ? fieldConfig.default : {}
+        for (const propKey of Object.keys(fieldConfig.properties)) {
+          if (data[propKey] !== undefined) obj[propKey] = data[propKey]
+          else if (def[propKey] !== undefined) obj[propKey] = def[propKey]
+        }
+        out[fieldName] = obj
+        for (const propKey of Object.keys(fieldConfig.properties)) delete out[propKey]
+      }
+    }
+  }
+  return out
 }
 
 type SchemaFieldConfig = {
@@ -122,6 +152,8 @@ interface V2OfferingType {
   color?: string | null
   is_active: boolean
   offering_schema?: { fields?: Record<string, SchemaFieldConfig> }
+  /** Type-level default for type_config_data.portal_service_role (schema-driven, flattened to instances) */
+  portal_service_role?: string | null
 }
 
 export default function BlazeOfferingsManagementPage() {
@@ -249,15 +281,33 @@ export default function BlazeOfferingsManagementPage() {
       const type = offeringTypes.find(t => t.id === formData.offering_type_id)
       if (type) {
         setSelectedOfferingType(type)
-        // 初始化 type_config_data 的默认值
+        // 初始化 type_config_data 的默认值（含 portal_service_role：type 级默认覆盖 schema default）
         if (type.offering_schema?.fields) {
           const defaults: Record<string, any> = {}
           Object.entries(type.offering_schema.fields).forEach(([fieldName, fieldConfig]) => {
-            if (fieldConfig.default !== undefined) {
-              defaults[fieldName] = fieldConfig.default
+            if (fieldName === "portal_service_role" && (type as V2OfferingType).portal_service_role != null && (type as V2OfferingType).portal_service_role !== "") {
+              defaults[fieldName] = (type as V2OfferingType).portal_service_role
+            } else if (fieldConfig.default !== undefined) {
+              if (fieldConfig.type === 'object' && typeof fieldConfig.default === 'object' && fieldConfig.default !== null && !Array.isArray(fieldConfig.default)) {
+                defaults[fieldName] = { ...(fieldConfig.default as Record<string, any>) }
+              } else {
+                defaults[fieldName] = fieldConfig.default
+              }
             }
           })
-          setTypeConfigData(prev => ({ ...defaults, ...prev }))
+          setTypeConfigData(prev => {
+            const next = { ...defaults }
+            for (const key of Object.keys(prev)) {
+              const def = defaults[key]
+              const pv = prev[key]
+              if (def !== undefined && typeof def === 'object' && def !== null && !Array.isArray(def) && typeof pv === 'object' && pv !== null && !Array.isArray(pv)) {
+                next[key] = { ...def, ...pv }
+              } else if (pv !== undefined) {
+                next[key] = pv
+              }
+            }
+            return next
+          })
         } else {
           setTypeConfigData({})
         }
@@ -364,13 +414,15 @@ export default function BlazeOfferingsManagementPage() {
         const fullOffering = await response.json()
         const fromConfig = fullOffering.type_config_data ?? fullOffering.type_config ?? {}
         const legacy = {
-          ...(fullOffering.base_price != null && fromConfig.base_price === undefined ? { base_price: fullOffering.base_price } : {}),
-          ...(fullOffering.currency && fromConfig.currency === undefined ? { currency: fullOffering.currency } : {}),
-          ...(fullOffering.target_audience != null && fromConfig.target_audience === undefined ? { target_audience: fullOffering.target_audience } : {}),
-          ...(fullOffering.learning_outcomes != null && fromConfig.learning_outcomes === undefined ? { learning_outcomes: fullOffering.learning_outcomes } : {}),
-          ...(fullOffering.prerequisites != null && fromConfig.prerequisites === undefined ? { prerequisites: fullOffering.prerequisites } : {}),
+          ...(fullOffering.base_price != null && fromConfig.base_price === undefined && fromConfig.pricing?.base_price === undefined ? { base_price: fullOffering.base_price } : {}),
+          ...(fullOffering.currency && fromConfig.currency === undefined && fromConfig.pricing?.currency === undefined ? { currency: fullOffering.currency } : {}),
+          ...(fullOffering.target_audience != null && fromConfig.target_audience === undefined && fromConfig.content?.target_audience === undefined ? { target_audience: fullOffering.target_audience } : {}),
+          ...(fullOffering.learning_outcomes != null && fromConfig.learning_outcomes === undefined && fromConfig.content?.learning_outcomes === undefined ? { learning_outcomes: fullOffering.learning_outcomes } : {}),
+          ...(fullOffering.prerequisites != null && fromConfig.prerequisites === undefined && fromConfig.content?.prerequisites === undefined ? { prerequisites: fullOffering.prerequisites } : {}),
         }
-        setTypeConfigData({ ...legacy, ...fromConfig })
+        const schemaFields = fullOffering.offering_type?.offering_schema?.fields
+        const merged = { ...legacy, ...fromConfig }
+        setTypeConfigData(inflateTypeConfigData(schemaFields, merged))
         // 设置 selectedOfferingType（包含 offering_schema）
         if (fullOffering.offering_type) {
           const type = offeringTypes.find(t => t.id === fullOffering.offering_type.id)
@@ -924,11 +976,11 @@ export default function BlazeOfferingsManagementPage() {
                       <p>Please configure it in <a href="/admin/blaze/offering-types" className="text-primary underline">Offering Type management</a> first, then edit this type of offering.</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <p className="text-xs text-muted-foreground">
                         Type-specific fields for <strong>{selectedOfferingType.name}</strong> (from offering_schema)
                       </p>
-                      <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {Object.entries(selectedOfferingType.offering_schema.fields)
                           .filter(([, fieldConfig]) => {
                             const scope = fieldConfig.display_scope ?? 'admin'
@@ -944,9 +996,26 @@ export default function BlazeOfferingsManagementPage() {
                           const fieldValue = typeConfigData[fieldName] ?? fieldConfig.default ?? ''
                           const isMultilineText = fieldConfig.type === 'text' && fieldConfig.multiline
                           const useMarkdownEditor = isMultilineText
+                          const isObjectField = fieldConfig.type === 'object'
+                          const spanFullWidth = isObjectField && (fieldName === 'content' || fieldName === 'content_cn')
 
                           return (
-                            <div key={fieldName} className="space-y-1.5">
+                            <div
+                              key={fieldName}
+                              className={cn(
+                                "space-y-1.5",
+                                spanFullWidth && "md:col-span-2"
+                              )}
+                            >
+                              {isObjectField ? (
+                                <Card className="overflow-hidden">
+                                  <CardHeader className="py-3 px-4">
+                                    <CardTitle className="text-sm font-medium">{fieldConfig.label || fieldName}</CardTitle>
+                                    {fieldConfig.description && (
+                                      <CardDescription className="text-xs mt-0.5">{fieldConfig.description}</CardDescription>
+                                    )}
+                                  </CardHeader>
+                                  <CardContent className="pt-0 px-4 pb-4 space-y-3">
                               {!useMarkdownEditor && fieldConfig.type !== 'object' && (
                                 <Label htmlFor={`config_${fieldName}`} className="text-xs">
                                   {fieldConfig.label || fieldName}
@@ -964,11 +1033,7 @@ export default function BlazeOfferingsManagementPage() {
                                   disabled={isSubmitting}
                                 />
                               ) : fieldConfig.type === 'text' && (
-                                fieldConfig.multiline ? (
-                                  <Textarea id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} rows={2} className="text-sm resize-none min-h-[52px]" required={fieldConfig.required} />
-                                ) : (
-                                  <Input id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} required={fieldConfig.required} className="h-9 text-sm" />
-                                )
+                                <Input id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
                               {fieldConfig.type === 'number' && (
                                 <Input id={`config_${fieldName}`} type="number" value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder={fieldConfig.placeholder} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step} required={fieldConfig.required} className="h-9 text-sm" />
@@ -980,14 +1045,24 @@ export default function BlazeOfferingsManagementPage() {
                                 </div>
                               )}
                               {fieldConfig.type === 'select' && fieldConfig.options && (
-                                <Select value={fieldValue || ''} onValueChange={(value) => setTypeConfigData({ ...typeConfigData, [fieldName]: value })} required={fieldConfig.required}>
+                                <Select
+                                  value={fieldValue === "" || fieldValue == null ? SELECT_EMPTY_SENTINEL : String(fieldValue)}
+                                  onValueChange={(value) => setTypeConfigData({ ...typeConfigData, [fieldName]: value === SELECT_EMPTY_SENTINEL ? "" : value })}
+                                  required={fieldConfig.required}
+                                >
                                   <SelectTrigger id={`config_${fieldName}`} className="h-9">
                                     <SelectValue placeholder={fieldConfig.placeholder || 'Select...'} />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {fieldConfig.options.map((option) => (
-                                      <SelectItem key={option} value={option}>{option}</SelectItem>
-                                    ))}
+                                    {fieldConfig.options.map((option) => {
+                                      const isEmpty = option === ""
+                                      const itemValue = isEmpty ? SELECT_EMPTY_SENTINEL : option
+                                      return (
+                                        <SelectItem key={itemValue} value={itemValue}>
+                                          {isEmpty ? "—" : option}
+                                        </SelectItem>
+                                      )
+                                    })}
                                   </SelectContent>
                                 </Select>
                               )}
@@ -1031,10 +1106,6 @@ export default function BlazeOfferingsManagementPage() {
                               {fieldConfig.type === 'time' && (
                                 <Input id={`config_${fieldName}`} type="time" value={fieldValue || ''} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
-                              {fieldConfig.type === 'object' && fieldConfig.properties && (
-                                <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/50 p-3">
-                                  <p className="text-xs font-medium text-slate-600">{fieldConfig.label || fieldName}</p>
-                                  {fieldConfig.description && <p className="text-xs text-muted-foreground -mt-1">{fieldConfig.description}</p>}
                                   {(() => {
                                     const objValue = typeof fieldValue === 'object' && fieldValue !== null
                                       ? { ...(fieldConfig.default ?? {}), ...fieldValue }
@@ -1042,7 +1113,13 @@ export default function BlazeOfferingsManagementPage() {
                                     const setObj = (next: Record<string, any>) => setTypeConfigData({ ...typeConfigData, [fieldName]: next })
                                     return (
                                       <div className="space-y-3">
-                                        {Object.entries(fieldConfig.properties).map(([propKey, propConfig]) => {
+                                        {Object.entries(fieldConfig.properties ?? {}).map(([propKey, propConfig]) => {
+                                          const propCond = propConfig.condition
+                                          if (propCond) {
+                                            const conditionValue = objValue[propCond.field]
+                                            if (propCond.equals !== undefined && conditionValue !== propCond.equals) return null
+                                            if (propCond.in && Array.isArray(propCond.in) && !propCond.in.includes(conditionValue)) return null
+                                          }
                                           const propValue = objValue[propKey] ?? propConfig.default ?? (propConfig.type === 'boolean' ? false : '')
                                           return (
                                             <div key={propKey} className="space-y-1">
@@ -1061,16 +1138,28 @@ export default function BlazeOfferingsManagementPage() {
                                                 </div>
                                               )}
                                               {propConfig.type === 'text' && (
-                                                <>
-                                                  <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
-                                                  <Input
-                                                    id={`config_${fieldName}_${propKey}`}
-                                                    value={propValue}
-                                                    onChange={(e) => setObj({ ...objValue, [propKey]: e.target.value })}
-                                                    placeholder={propConfig.placeholder}
-                                                    className="h-9 text-sm mt-0.5"
+                                                propConfig.multiline ? (
+                                                  <RichTextEditor
+                                                    label={propConfig.label || propKey}
+                                                    hint={propConfig.description}
+                                                    value={richTextValueForEditor(propValue)}
+                                                    onChange={(v) => setObj({ ...objValue, [propKey]: v })}
+                                                    placeholder={propConfig.placeholder ?? "Use the toolbar for bold, lists, links, etc."}
+                                                    minHeight={180}
+                                                    disabled={isSubmitting}
                                                   />
-                                                </>
+                                                ) : (
+                                                  <>
+                                                    <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
+                                                    <Input
+                                                      id={`config_${fieldName}_${propKey}`}
+                                                      value={propValue}
+                                                      onChange={(e) => setObj({ ...objValue, [propKey]: e.target.value })}
+                                                      placeholder={propConfig.placeholder}
+                                                      className="h-9 text-sm mt-0.5"
+                                                    />
+                                                  </>
+                                                )
                                               )}
                                               {propConfig.type === 'number' && (
                                                 <>
@@ -1091,19 +1180,117 @@ export default function BlazeOfferingsManagementPage() {
                                               {propConfig.type === 'select' && propConfig.options && (
                                                 <>
                                                   <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
-                                                  <Select value={propValue ?? ''} onValueChange={(value) => setObj({ ...objValue, [propKey]: value })}>
+                                                  <Select
+                                                    value={propValue === "" || propValue == null ? SELECT_EMPTY_SENTINEL : String(propValue)}
+                                                    onValueChange={(value) => setObj({ ...objValue, [propKey]: value === SELECT_EMPTY_SENTINEL ? "" : value })}
+                                                  >
                                                     <SelectTrigger id={`config_${fieldName}_${propKey}`} className="h-9 mt-0.5">
                                                       <SelectValue placeholder={propConfig.placeholder || 'Select...'} />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                      {propConfig.options.map((opt) => (
-                                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                                      ))}
+                                                      {propConfig.options.map((opt) => {
+                                                        const isEmpty = opt === ""
+                                                        const itemValue = isEmpty ? SELECT_EMPTY_SENTINEL : opt
+                                                        return (
+                                                          <SelectItem key={itemValue} value={itemValue}>
+                                                            {isEmpty ? "—" : opt}
+                                                          </SelectItem>
+                                                        )
+                                                      })}
                                                     </SelectContent>
                                                   </Select>
                                                 </>
                                               )}
-                                              {!['boolean', 'text', 'number', 'select'].includes(propConfig.type) && (
+                                              {propConfig.type === 'array' && propConfig.items?.type === 'string' && (
+                                                <div className="space-y-1.5">
+                                                  <Label className="text-xs">{propConfig.label || propKey}</Label>
+                                                  {(Array.isArray(propValue) ? propValue : []).map((item, index) => (
+                                                    <div key={index} className="flex items-center gap-2">
+                                                      <Input
+                                                        value={item}
+                                                        onChange={(e) => {
+                                                          const arr = [...(Array.isArray(propValue) ? propValue : [])]
+                                                          arr[index] = e.target.value
+                                                          setObj({ ...objValue, [propKey]: arr })
+                                                        }}
+                                                        placeholder={`Item ${index + 1}`}
+                                                        className="h-9 text-sm flex-1"
+                                                      />
+                                                      <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 shrink-0"
+                                                        onClick={() => {
+                                                          const arr = [...(Array.isArray(propValue) ? propValue : [])]
+                                                          arr.splice(index, 1)
+                                                          setObj({ ...objValue, [propKey]: arr })
+                                                        }}
+                                                      >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                      </Button>
+                                                    </div>
+                                                  ))}
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-xs"
+                                                    onClick={() => setObj({ ...objValue, [propKey]: [...(Array.isArray(propValue) ? propValue : []), ''] })}
+                                                  >
+                                                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                                                    Add
+                                                  </Button>
+                                                </div>
+                                              )}
+                                              {propConfig.type === 'array' && propConfig.items?.type === 'number' && (
+                                                <div className="space-y-1.5">
+                                                  <Label className="text-xs">{propConfig.label || propKey}</Label>
+                                                  {(Array.isArray(propValue) ? propValue : []).map((item, index) => (
+                                                    <div key={index} className="flex items-center gap-2">
+                                                      <Input
+                                                        type="number"
+                                                        value={typeof item === 'number' ? item : ''}
+                                                        onChange={(e) => {
+                                                          const arr = [...(Array.isArray(propValue) ? propValue : [])]
+                                                          const v = e.target.value
+                                                          arr[index] = v === '' ? undefined : parseFloat(v)
+                                                          setObj({ ...objValue, [propKey]: arr })
+                                                        }}
+                                                        placeholder={`Item ${index + 1}`}
+                                                        min={(propConfig.items as { min?: number })?.min}
+                                                        max={(propConfig.items as { max?: number })?.max}
+                                                        step={(propConfig.items as { step?: number })?.step ?? 0.01}
+                                                        className="h-9 text-sm flex-1"
+                                                      />
+                                                      <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 shrink-0"
+                                                        onClick={() => {
+                                                          const arr = [...(Array.isArray(propValue) ? propValue : [])]
+                                                          arr.splice(index, 1)
+                                                          setObj({ ...objValue, [propKey]: arr })
+                                                        }}
+                                                      >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                      </Button>
+                                                    </div>
+                                                  ))}
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-xs"
+                                                    onClick={() => setObj({ ...objValue, [propKey]: [...(Array.isArray(propValue) ? propValue : []), 0] })}
+                                                  >
+                                                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                                                    Add
+                                                  </Button>
+                                                </div>
+                                              )}
+                                              {!['boolean', 'text', 'number', 'select'].includes(propConfig.type) && !(propConfig.type === 'array' && (propConfig.items?.type === 'string' || propConfig.items?.type === 'number')) && (
                                                 <div className="flex items-center gap-2">
                                                   <Label className="text-xs text-muted-foreground">{propConfig.label || propKey}</Label>
                                                   <span className="text-xs text-muted-foreground">(type: {propConfig.type} — not rendered)</span>
@@ -1118,8 +1305,9 @@ export default function BlazeOfferingsManagementPage() {
                                       </div>
                                     )
                                   })()}
-                                </div>
-                              )}
+                                  </CardContent>
+                                </Card>
+                              ) : null}
                               {!useMarkdownEditor && fieldConfig.description && fieldConfig.type !== 'object' && <p className="text-xs text-muted-foreground">{fieldConfig.description}</p>}
                             </div>
                           )

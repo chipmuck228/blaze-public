@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. 验证 Offering 存在且状态为 published（并取 type_config_data 用于 is_course_type）
+    // 2. 验证 Offering 存在且状态为 published（并取 type_config_data、offering_type.portal_service_role 用于 is_course_type / portal_service_role）
     const { data: offering, error: offeringError } = await supabaseAdmin
       .from("v2_offering")
       .select(`
@@ -195,7 +195,8 @@ export async function POST(request: Request) {
           id,
           code,
           name,
-          instance_schema
+          instance_schema,
+          portal_service_role
         )
       `)
       .eq("id", offering_id)
@@ -223,32 +224,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // 3.1 按 instance_schema 校验 start_date / end_date 必填，以及日期范围
     const schemaSource = Array.isArray(offering.offering_type) ? offering.offering_type[0] : offering.offering_type
     const instanceSchemaFields = (schemaSource as any)?.instance_schema?.fields
-    if (instanceSchemaFields) {
-      if (instanceSchemaFields.start_date?.required && (start_date === undefined || start_date === null || start_date === "")) {
-        return NextResponse.json(
-          { error: (instanceSchemaFields.start_date.label || "Start date") + " is required" },
-          { status: 400 }
-        )
-      }
-      if (instanceSchemaFields.end_date?.required && (end_date === undefined || end_date === null || end_date === "")) {
-        return NextResponse.json(
-          { error: (instanceSchemaFields.end_date.label || "End date") + " is required" },
-          { status: 400 }
-        )
-      }
-    }
-    if (start_date && end_date && new Date(start_date) > new Date(end_date)) {
-      return NextResponse.json(
-        { error: "start_date must be less than or equal to end_date" },
-        { status: 400 }
-      )
-    }
 
-    // 4. 合并到 instance_data_ext（Phase A 双写：平铺字段也写入 instance_data_ext，便于后续只读 JSONB）
-    // 顺序：category config_base → 请求中的平铺业务字段 → 请求中的 instance_data_ext（后者覆盖）
+    // 4. 合并到 instance_data_ext（请求平铺字段 + instance_data_ext，后者覆盖）
     const flatFieldsForExt: Record<string, unknown> = {}
     if (start_date !== undefined) flatFieldsForExt.start_date = start_date
     if (end_date !== undefined) flatFieldsForExt.end_date = end_date
@@ -262,51 +241,103 @@ export async function POST(request: Request) {
       ...categoryConfigBase,
       ...flatFieldsForExt,
       ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
+    } as Record<string, any>
+
+    // 4.1 从 instance_data_ext 的 object 组（schedule, capacity_price）推导行级字段，用于写入 v2_instance 表
+    let finalStartDate = start_date
+    let finalEndDate = end_date
+    let finalStartTime = start_time
+    let finalEndTime = end_time
+    let finalDaysOfWeek = days_of_week
+    let finalMaxStudents = max_students
+    let finalPriceOverride = price_override
+    if (mergedInstanceDataExt.schedule && typeof mergedInstanceDataExt.schedule === "object") {
+      const s = mergedInstanceDataExt.schedule
+      if (finalStartDate === undefined) finalStartDate = s.start_date
+      if (finalEndDate === undefined) finalEndDate = s.end_date
+      if (finalStartTime === undefined) finalStartTime = s.start_time
+      if (finalEndTime === undefined) finalEndTime = s.end_time
+      if (finalDaysOfWeek === undefined) finalDaysOfWeek = s.days_of_week
+    }
+    if (mergedInstanceDataExt.capacity_price && typeof mergedInstanceDataExt.capacity_price === "object") {
+      const c = mergedInstanceDataExt.capacity_price
+      if (finalMaxStudents === undefined) finalMaxStudents = c.max_students
+      if (finalPriceOverride === undefined) finalPriceOverride = c.price_override
     }
 
-    // 5. 验证 instance_data_ext 是否符合 instance_schema（如果提供了 schema）
+    // 3.1 按 instance_schema 校验 start_date / end_date 必填（含 object schedule 内 required）
+    if (instanceSchemaFields) {
+      const scheduleObj = instanceSchemaFields.schedule?.type === "object" ? instanceSchemaFields.schedule : null
+      const startRequired = instanceSchemaFields.start_date?.required || scheduleObj?.properties?.start_date?.required
+      const endRequired = instanceSchemaFields.end_date?.required || scheduleObj?.properties?.end_date?.required
+      const startVal = finalStartDate ?? mergedInstanceDataExt.schedule?.start_date
+      const endVal = finalEndDate ?? mergedInstanceDataExt.schedule?.end_date
+      if (startRequired && (startVal === undefined || startVal === null || startVal === "")) {
+        return NextResponse.json(
+          { error: (scheduleObj?.properties?.start_date?.label || instanceSchemaFields.start_date?.label || "Start date") + " is required" },
+          { status: 400 }
+        )
+      }
+      if (endRequired && (endVal === undefined || endVal === null || endVal === "")) {
+        return NextResponse.json(
+          { error: (scheduleObj?.properties?.end_date?.label || instanceSchemaFields.end_date?.label || "End date") + " is required" },
+          { status: 400 }
+        )
+      }
+    }
+    if (finalStartDate && finalEndDate && new Date(finalStartDate) > new Date(finalEndDate)) {
+      return NextResponse.json(
+        { error: "start_date must be less than or equal to end_date" },
+        { status: 400 }
+      )
+    }
+
+    // 5. 验证 instance_data_ext 是否符合 instance_schema（含 type=object 的嵌套校验）
     if (schemaSource?.instance_schema && typeof schemaSource.instance_schema === "object") {
       const schema = schemaSource.instance_schema as { fields?: Record<string, any> }
       if (schema.fields) {
         const errors: string[] = []
-        
-        // 验证必填字段（使用合并后的数据）
-        for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
-          if (fieldConfig.required && (mergedInstanceDataExt[fieldName] === undefined || mergedInstanceDataExt[fieldName] === null || mergedInstanceDataExt[fieldName] === "")) {
-            errors.push(`${fieldConfig.label || fieldName} is required`)
+        const validateField = (val: any, fieldConfig: any, fieldLabel: string) => {
+          if (fieldConfig.required && (val === undefined || val === null || val === "")) {
+            errors.push(`${fieldLabel} is required`)
+            return
           }
-          
-          // 验证字段类型和范围（使用合并后的数据）
-          if (mergedInstanceDataExt[fieldName] !== undefined && mergedInstanceDataExt[fieldName] !== null) {
-            if (fieldConfig.type === "number") {
-              const value = Number(mergedInstanceDataExt[fieldName])
-              if (isNaN(value)) {
-                errors.push(`${fieldConfig.label || fieldName} must be a number`)
-              } else {
-                if (fieldConfig.min !== undefined && value < fieldConfig.min) {
-                  errors.push(`${fieldConfig.label || fieldName} must be at least ${fieldConfig.min}`)
-                }
-                if (fieldConfig.max !== undefined && value > fieldConfig.max) {
-                  errors.push(`${fieldConfig.label || fieldName} must be at most ${fieldConfig.max}`)
-                }
-              }
+          if (val === undefined || val === null) return
+          if (fieldConfig.type === "number") {
+            const value = Number(val)
+            if (isNaN(value)) errors.push(`${fieldLabel} must be a number`)
+            else {
+              if (fieldConfig.min !== undefined && value < fieldConfig.min) errors.push(`${fieldLabel} must be at least ${fieldConfig.min}`)
+              if (fieldConfig.max !== undefined && value > fieldConfig.max) errors.push(`${fieldLabel} must be at most ${fieldConfig.max}`)
             }
-            
-            if (fieldConfig.type === "select" && fieldConfig.options && !fieldConfig.options.includes(mergedInstanceDataExt[fieldName])) {
-              errors.push(`${fieldConfig.label || fieldName} must be one of: ${fieldConfig.options.join(", ")}`)
-            }
-            
-            if (fieldConfig.type === "multiselect" && fieldConfig.options) {
-              const values = Array.isArray(mergedInstanceDataExt[fieldName]) ? mergedInstanceDataExt[fieldName] : [mergedInstanceDataExt[fieldName]]
-              const optSet = new Set(fieldConfig.options.map((o: any) => String(o)))
-              const invalidValues = values.filter((v: any) => !optSet.has(String(v)))
-              if (invalidValues.length > 0) {
-                errors.push(`${fieldConfig.label || fieldName} contains invalid values: ${invalidValues.join(", ")}`)
-              }
-            }
+          }
+          if (fieldConfig.type === "select" && fieldConfig.options && !fieldConfig.options.includes(val)) {
+            errors.push(`${fieldLabel} must be one of: ${fieldConfig.options.join(", ")}`)
+          }
+          if (fieldConfig.type === "multiselect" && fieldConfig.options) {
+            const values = Array.isArray(val) ? val : [val]
+            const optSet = new Set(fieldConfig.options.map((o: any) => String(o)))
+            const invalid = values.filter((v: any) => !optSet.has(String(v)))
+            if (invalid.length > 0) errors.push(`${fieldLabel} contains invalid values: ${invalid.join(", ")}`)
           }
         }
-        
+        for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
+          const fieldLabel = fieldConfig.label || fieldName
+          if (fieldConfig.type === "object" && fieldConfig.properties) {
+            const obj = mergedInstanceDataExt[fieldName]
+            if (fieldConfig.required && (obj === undefined || obj === null || typeof obj !== "object")) {
+              errors.push(`${fieldLabel} is required`)
+              continue
+            }
+            if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+              for (const [propKey, propConfig] of Object.entries(fieldConfig.properties as Record<string, any>)) {
+                validateField(obj[propKey], propConfig, propConfig?.label || propKey)
+              }
+            }
+          } else {
+            validateField(mergedInstanceDataExt[fieldName], fieldConfig, fieldLabel)
+          }
+        }
         if (errors.length > 0) {
           return NextResponse.json(
             { error: errors.join(", ") },
@@ -340,15 +371,15 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. 验证容量
-    if (max_students !== null && max_students !== undefined) {
-      if (max_students < 1) {
+    // 7. 验证容量（使用推导后的 max_students）
+    if (finalMaxStudents !== null && finalMaxStudents !== undefined) {
+      if (finalMaxStudents < 1) {
         return NextResponse.json(
           { error: "max_students must be at least 1" },
           { status: 400 }
         )
       }
-      if (current_students > max_students) {
+      if (current_students > finalMaxStudents) {
         return NextResponse.json(
           { error: "current_students cannot exceed max_students" },
           { status: 400 }
@@ -358,22 +389,34 @@ export async function POST(request: Request) {
 
     // 7.1 is_course_type：从 v2_offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
     const isCourseType = !!(offering as any)?.type_config_data?.portal_config?.is_course_type
+    // 7.2 portal_service_role：从 type_config_data 平铺，缺省时用 v2_offering_type.portal_service_role（设计文档 INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3）
+    const rawRole = (offering as any)?.type_config_data?.portal_service_role
+    const typeRole = (() => {
+      const ot = Array.isArray((offering as any)?.offering_type) ? (offering as any).offering_type[0] : (offering as any)?.offering_type
+      return (ot as any)?.portal_service_role
+    })()
+    const portalServiceRole =
+      rawRole === "meal_service" || rawRole === "care_service"
+        ? rawRole
+        : typeRole === "meal_service" || typeRole === "care_service"
+          ? typeRole
+          : null
 
-    // 8. 创建 Instance（使用合并后的 instance_data_ext）
+    // 8. 创建 Instance（行级字段用从 instance_data_ext 推导后的值）
     const { data: instance, error: instanceError } = await supabaseAdmin
       .from("v2_instance")
       .insert({
         program_id,
         offering_id,
         campus_id: campus_id || null,
-        price_override: price_override || null,
-        start_date: start_date ?? null,
-        end_date: end_date ?? null,
-        start_time: start_time || null,
-        end_time: end_time || null,
+        price_override: finalPriceOverride ?? price_override ?? null,
+        start_date: finalStartDate ?? null,
+        end_date: finalEndDate ?? null,
+        start_time: finalStartTime ?? null,
+        end_time: finalEndTime ?? null,
         session_count: session_count || null,
-        days_of_week: days_of_week || null,
-        max_students: max_students || null,
+        days_of_week: finalDaysOfWeek ?? null,
+        max_students: finalMaxStudents ?? max_students ?? null,
         current_students,
         instance_data_ext: mergedInstanceDataExt,
         icalendar_rrule: icalendar_rrule || null,
@@ -384,6 +427,7 @@ export async function POST(request: Request) {
         notes: notes || null,
         is_active,
         is_course_type: isCourseType,
+        portal_service_role: portalServiceRole,
       })
       .select(`
         *,

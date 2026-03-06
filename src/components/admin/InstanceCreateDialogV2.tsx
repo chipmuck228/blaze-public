@@ -105,6 +105,59 @@ const COMMON_FIELD_MAPPING: Record<string, string> = {
 const EXTENDED_FIELD_ORDER = ['age_min', 'age_max', 'camp_shirt_provided', 'meal_provided', 'after_care_available', 'special_needs']
 // 这三个布尔字段在 Create Instance 中单行水平排列，且排在「特殊需求」前
 const HORIZONTAL_BOOLEAN_ROW_FIELDS = new Set<string>(['camp_shirt_provided', 'meal_provided', 'after_care_available'])
+// Object groups whose data lives in formData (start_date, end_date, ...) not in instance_data_ext; we sync to instance_data_ext on submit
+const INSTANCE_OBJECT_GROUPS_FROM_FORMDATA = new Set<string>(['schedule', 'capacity_price'])
+
+/** Inflate flat instance_data_ext into nested shape when schema uses object groups (e.g. course schedule, age_range). */
+function inflateInstanceDataExt(
+  schemaFields: Record<string, { type?: string; properties?: Record<string, any>; default?: any }> | undefined,
+  data: Record<string, any> | null | undefined
+): Record<string, any> {
+  if (!data || typeof data !== 'object') return {}
+  if (!schemaFields || typeof schemaFields !== 'object') return { ...data }
+  const out = { ...data }
+  for (const [fieldName, fieldConfig] of Object.entries(schemaFields)) {
+    if (fieldConfig.type === 'object' && fieldConfig.properties) {
+      const existing = out[fieldName]
+      if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
+        const obj: Record<string, any> = {}
+        const def = fieldConfig.default && typeof fieldConfig.default === 'object' ? fieldConfig.default : {}
+        for (const propKey of Object.keys(fieldConfig.properties)) {
+          if (data[propKey] !== undefined) obj[propKey] = data[propKey]
+          else if (def[propKey] !== undefined) obj[propKey] = def[propKey]
+        }
+        out[fieldName] = obj
+        for (const propKey of Object.keys(fieldConfig.properties)) delete out[propKey]
+      }
+    }
+  }
+  return out
+}
+
+/** Build nested instance_data_ext for payload: schedule/capacity_price from formData, rest from formData.instance_data_ext. */
+function buildNestedInstanceDataExtForPayload(
+  formData: { start_date?: string; end_date?: string; start_time?: string; end_time?: string; days_of_week?: number[]; max_students?: string; price_override?: string; instance_data_ext?: Record<string, any> },
+  schemaFields: Record<string, { type?: string; properties?: Record<string, any> }> | undefined
+): Record<string, any> {
+  const out = { ...(formData.instance_data_ext || {}) }
+  if (!schemaFields) return out
+  if (schemaFields.schedule?.type === 'object' && schemaFields.schedule.properties) {
+    out.schedule = {
+      start_date: formData.start_date || null,
+      end_date: formData.end_date || null,
+      start_time: formData.start_time || null,
+      end_time: formData.end_time || null,
+      days_of_week: Array.isArray(formData.days_of_week) && formData.days_of_week.length > 0 ? formData.days_of_week : null,
+    }
+  }
+  if (schemaFields.capacity_price?.type === 'object' && schemaFields.capacity_price.properties) {
+    out.capacity_price = {
+      max_students: formData.max_students ? parseInt(formData.max_students, 10) : null,
+      price_override: formData.price_override ? parseFloat(formData.price_override) : null,
+    }
+  }
+  return out
+}
 
 export function InstanceCreateDialog({
   open,
@@ -142,32 +195,30 @@ export function InstanceCreateDialog({
     is_active: true,
   })
 
-  /** Offering portal_config (C-end display: is_course_type, show_meal_service, show_care_service); synced from selectedOffering.type_config_data when offering changes; editable and saved back to offering on submit */
-  const [offeringPortalConfig, setOfferingPortalConfig] = useState<{
-    is_course_type?: boolean
-    show_meal_service?: boolean
-    show_care_service?: boolean
-  } | null>(null)
-
-  // Initialize form data when editingInstance changes
+  // Initialize form data when editingInstance changes; inflate flat instance_data_ext to nested when schema has object groups
   useEffect(() => {
     if (open && editingInstance) {
+      const schema = editingInstance.offering?.offering_type?.instance_schema?.fields
+      const rawExt = editingInstance.instance_data_ext || {}
+      const inflatedExt = schema ? inflateInstanceDataExt(schema, rawExt) : rawExt
+      const schedule = inflatedExt.schedule
+      const capacityPrice = inflatedExt.capacity_price
       setFormData({
         program_id: editingInstance.program_id || programId || "",
         offering_id: editingInstance.offering_id || "",
         campus_id: editingInstance.campus_id || "",
-        price_override: editingInstance.price_override?.toString() || "",
-        start_date: editingInstance.start_date || "",
-        end_date: editingInstance.end_date || "",
-        start_time: editingInstance.start_time || "",
-        end_time: editingInstance.end_time || "",
-        session_count: editingInstance.session_count?.toString() || "",
-        days_of_week: editingInstance.days_of_week || [],
-        max_students: editingInstance.max_students?.toString() || "",
-        current_students: editingInstance.current_students?.toString() || "0",
-        instance_data_ext: editingInstance.instance_data_ext || {},
-        status: editingInstance.status || "scheduled",
-        notes: editingInstance.notes || "",
+        price_override: (capacityPrice?.price_override ?? editingInstance.price_override)?.toString() ?? "",
+        start_date: schedule?.start_date ?? editingInstance.start_date ?? "",
+        end_date: schedule?.end_date ?? editingInstance.end_date ?? "",
+        start_time: schedule?.start_time ?? editingInstance.start_time ?? "",
+        end_time: schedule?.end_time ?? editingInstance.end_time ?? "",
+        session_count: editingInstance.session_count?.toString() ?? "",
+        days_of_week: Array.isArray(schedule?.days_of_week) ? schedule.days_of_week : (editingInstance.days_of_week ?? []),
+        max_students: (capacityPrice?.max_students ?? editingInstance.max_students)?.toString() ?? "",
+        current_students: editingInstance.current_students?.toString() ?? "0",
+        instance_data_ext: inflatedExt,
+        status: editingInstance.status ?? "scheduled",
+        notes: editingInstance.notes ?? "",
         is_active: editingInstance.is_active !== undefined ? editingInstance.is_active : true,
       })
       setSelectedOffering(editingInstance.offering)
@@ -209,25 +260,6 @@ export function InstanceCreateDialog({
         .catch(() => {})
     }
   }, [open, isEditMode, editingInstance?.offering_id])
-
-  // Sync offeringPortalConfig from selectedOffering.type_config_data.portal_config when offering changes
-  useEffect(() => {
-    const portalSchema = selectedOffering?.offering_type?.offering_schema?.fields?.portal_config
-    if (!portalSchema || portalSchema.type !== 'object' || !portalSchema.properties) {
-      setOfferingPortalConfig(null)
-      return
-    }
-    const defaultObj = (typeof portalSchema.default === 'object' && portalSchema.default !== null)
-      ? portalSchema.default
-      : { is_course_type: true, show_meal_service: false, show_care_service: false }
-    const fromOffering = selectedOffering?.type_config_data?.portal_config
-    const merged = { ...defaultObj, ...(typeof fromOffering === 'object' && fromOffering !== null ? fromOffering : {}) }
-    setOfferingPortalConfig({
-      is_course_type: !!merged.is_course_type,
-      show_meal_service: !!merged.show_meal_service,
-      show_care_service: !!merged.show_care_service,
-    })
-  }, [selectedOffering])
 
   // Initialize default values from instance_schema when offering changes
   useEffect(() => {
@@ -357,8 +389,11 @@ export function InstanceCreateDialog({
     const validationErrors: string[] = []
     if (!formData.program_id) validationErrors.push("Program is required")
     if (!formData.offering_id) validationErrors.push("Offering is required")
-    if (schema?.start_date?.required && !formData.start_date) validationErrors.push((schema.start_date.label || "Start date") + " is required")
-    if (schema?.end_date?.required && !formData.end_date) validationErrors.push((schema.end_date.label || "End date") + " is required")
+    const scheduleObj = schema?.schedule?.type === 'object' ? schema.schedule : null
+    const startDateRequired = schema?.start_date?.required || scheduleObj?.properties?.start_date?.required
+    const endDateRequired = schema?.end_date?.required || scheduleObj?.properties?.end_date?.required
+    if (startDateRequired && !formData.start_date) validationErrors.push((scheduleObj?.properties?.start_date?.label || schema?.start_date?.label || "Start date") + " is required")
+    if (endDateRequired && !formData.end_date) validationErrors.push((scheduleObj?.properties?.end_date?.label || schema?.end_date?.label || "End date") + " is required")
     if (formData.start_date && formData.end_date && new Date(formData.start_date) > new Date(formData.end_date)) {
       validationErrors.push("Start date must be before end date")
     }
@@ -371,41 +406,24 @@ export function InstanceCreateDialog({
     setIsSubmitting(true)
 
     try {
-      // If we showed and have portal_config for the selected offering, save it to the offering first
-      if (selectedOffering?.id && offeringPortalConfig !== null) {
-        const offeringPayload = {
-          type_config_data: {
-            ...(selectedOffering.type_config_data || {}),
-            portal_config: offeringPortalConfig,
-          },
-        }
-        const offeringRes = await fetch(`/api/admin/offering/v2/${selectedOffering.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(offeringPayload),
-        })
-        if (!offeringRes.ok) {
-          const errData = await offeringRes.json().catch(() => ({}))
-          throw new Error(errData.error || "Failed to update offering C-end config")
-        }
-      }
-
       const payloadSchema = selectedOffering?.offering_type?.instance_schema?.fields
-      // Schema-driven: send start_date/end_date only when defined in schema
+      // Build nested instance_data_ext when schema has object groups (schedule, capacity_price from formData; rest from formData.instance_data_ext)
+      const instanceDataExtForPayload = buildNestedInstanceDataExtForPayload(formData, payloadSchema)
+      // Schema-driven: send start_date/end_date etc. for API backward compat (API may flatten from instance_data_ext when present)
       const payload: any = {
         program_id: formData.program_id,
         offering_id: formData.offering_id,
         campus_id: formData.campus_id || null,
         price_override: formData.price_override ? parseFloat(formData.price_override) : null,
-        start_date: payloadSchema?.start_date ? (formData.start_date || null) : null,
-        end_date: payloadSchema?.end_date ? (formData.end_date || null) : null,
+        start_date: payloadSchema?.start_date || instanceDataExtForPayload?.schedule?.start_date ? (formData.start_date || instanceDataExtForPayload?.schedule?.start_date || null) : null,
+        end_date: payloadSchema?.end_date || instanceDataExtForPayload?.schedule?.end_date ? (formData.end_date || instanceDataExtForPayload?.schedule?.end_date || null) : null,
         start_time: formData.start_time || null,
         end_time: formData.end_time || null,
         session_count: formData.session_count ? parseInt(formData.session_count) : null,
         days_of_week: formData.days_of_week.length > 0 ? formData.days_of_week : null,
         max_students: formData.max_students ? parseInt(formData.max_students) : null,
         current_students: parseInt(formData.current_students) || 0,
-        instance_data_ext: formData.instance_data_ext,
+        instance_data_ext: instanceDataExtForPayload,
         status: formData.status,
         notes: formData.notes || null,
         is_active: formData.is_active,
@@ -457,21 +475,26 @@ export function InstanceCreateDialog({
     }
   }
 
-  // 渲染单个字段（可复用函数）
+  // 渲染单个字段（可复用函数）；objValue 用于嵌套 object 内条件判断
   const renderField = (
     fieldName: string,
     fieldConfig: any,
     value: any,
     onChange: (value: any) => void,
-    isCommonField: boolean = false
+    isCommonField: boolean = false,
+    objValue?: Record<string, any>
   ): ReactElement | null => {
-    // 检查条件显示
+    // 检查条件显示（支持 offering.xxx 从当前选中的 offering 取值）
     if (fieldConfig.condition) {
       const conditionField = fieldConfig.condition.field
-      // 条件字段可能在 formData 中（公共字段，包括 start_date/end_date）或 instance_data_ext 中（扩展字段）
       let conditionValue: any
-      if (isCommonField) {
-        // 公共字段：检查是否在 COMMON_FIELD_MAPPING 中，或者是否是 start_date/end_date
+      if (conditionField.startsWith('offering.')) {
+        const key = conditionField.slice(9)
+        const tc = selectedOffering?.type_config_data as Record<string, unknown> | undefined
+        conditionValue = tc?.[key] ?? (selectedOffering != null ? (selectedOffering as unknown as Record<string, unknown>)[key] : undefined)
+      } else if (objValue !== undefined) {
+        conditionValue = objValue[conditionField]
+      } else if (isCommonField) {
         if (COMMON_FIELD_MAPPING[conditionField] || conditionField === 'start_date' || conditionField === 'end_date') {
           conditionValue = formData[conditionField as keyof typeof formData]
         } else {
@@ -480,17 +503,11 @@ export function InstanceCreateDialog({
       } else {
         conditionValue = formData.instance_data_ext[conditionField]
       }
-      
-      // 支持多种条件类型
       if (fieldConfig.condition.equals !== undefined) {
-        if (conditionValue !== fieldConfig.condition.equals) {
-          return null // 跳过不满足条件的字段
-        }
+        if (conditionValue !== fieldConfig.condition.equals) return null
       } else if (fieldConfig.condition.exists !== undefined) {
         const exists = conditionValue !== undefined && conditionValue !== null && conditionValue !== ''
-        if (fieldConfig.condition.exists !== exists) {
-          return null // 跳过不满足条件的字段
-        }
+        if (fieldConfig.condition.exists !== exists) return null
       }
     }
 
@@ -507,7 +524,8 @@ export function InstanceCreateDialog({
     ) : null
 
     switch (fieldConfig.type) {
-      case 'text':
+      case 'text': {
+        const maxLen = fieldConfig.maxLength != null ? Number(fieldConfig.maxLength) : undefined
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
@@ -518,6 +536,7 @@ export function InstanceCreateDialog({
                 placeholder={fieldConfig.placeholder}
                 className="text-sm resize-none min-h-[52px]"
                 rows={2}
+                maxLength={maxLen}
               />
             ) : (
               <Input
@@ -525,11 +544,13 @@ export function InstanceCreateDialog({
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={fieldConfig.placeholder}
                 className="h-9 text-sm"
+                maxLength={maxLen}
               />
             )}
             {descEl}
           </div>
         )
+      }
 
       case 'time':
         return (
@@ -575,7 +596,10 @@ export function InstanceCreateDialog({
           </div>
         )
 
-      case 'multiselect':
+      case 'multiselect': {
+        const valueArr = Array.isArray(value) ? value : []
+        const norm = (v: any) => String(v)
+        const optionSet = new Set(valueArr.map(norm))
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
@@ -583,10 +607,9 @@ export function InstanceCreateDialog({
               {fieldConfig.options?.map((option: string) => (
                 <div key={option} className="flex items-center gap-2">
                   <Checkbox
-                    checked={(Array.isArray(value) ? value : []).includes(option)}
+                    checked={optionSet.has(option)}
                     onCheckedChange={(checked) => {
-                      const currentValues = Array.isArray(value) ? value : []
-                      const newValues = checked ? [...currentValues, option] : currentValues.filter((v: string) => v !== option)
+                      const newValues = checked ? [...valueArr, option] : valueArr.filter((v: any) => norm(v) !== option)
                       onChange(newValues)
                     }}
                   />
@@ -597,6 +620,7 @@ export function InstanceCreateDialog({
             {descEl}
           </div>
         )
+      }
 
       case 'array':
         if (fieldConfig.items?.type === 'string') {
@@ -636,7 +660,7 @@ export function InstanceCreateDialog({
     }
   }
 
-  // 渲染扩展字段（完全由 schema 驱动）；营服/餐食/课后托管排在特殊需求前且水平排列
+  // 渲染扩展字段（完全由 schema 驱动）；支持 type=object 以 Card 展示（schedule/capacity_price 数据来自 formData，其余来自 instance_data_ext）
   const renderExtendedFields = () => {
     if (!selectedOffering?.offering_type?.instance_schema?.fields) return null
 
@@ -644,11 +668,14 @@ export function InstanceCreateDialog({
     const commonFieldNames = new Set(Object.values(COMMON_FIELD_MAPPING))
     commonFieldNames.add('start_date')
     commonFieldNames.add('end_date')
+    const objectGroupOrder = ['schedule', 'capacity_price', 'age_range', 'audience', 'class_info', 'camp_services', 'event_info', 'workshop_info', 'service_info', 'card_value', 'recipient_delivery', 'greeting', 'additional']
 
     const extendedNames = (Object.keys(schema) as string[]).filter((name) => !commonFieldNames.has(name))
     const orderIndex = (name: string) => {
+      const objIdx = objectGroupOrder.indexOf(name)
+      if (objIdx >= 0) return objIdx
       const i = EXTENDED_FIELD_ORDER.indexOf(name)
-      return i >= 0 ? i : EXTENDED_FIELD_ORDER.length
+      return i >= 0 ? objectGroupOrder.length + i : objectGroupOrder.length + EXTENDED_FIELD_ORDER.length
     }
     extendedNames.sort((a, b) => orderIndex(a) - orderIndex(b))
 
@@ -657,6 +684,78 @@ export function InstanceCreateDialog({
     while (i < extendedNames.length) {
       const name = extendedNames[i]
       const fieldConfig = schema[name]
+      if (!fieldConfig) { i++; continue }
+
+      if (fieldConfig.type === 'object' && fieldConfig.properties) {
+        const fromFormData = INSTANCE_OBJECT_GROUPS_FROM_FORMDATA.has(name)
+        const objValue: Record<string, any> = fromFormData
+          ? (name === 'schedule'
+            ? {
+                start_date: formData.start_date ?? '',
+                end_date: formData.end_date ?? '',
+                start_time: formData.start_time ?? '',
+                end_time: formData.end_time ?? '',
+                days_of_week: formData.days_of_week ?? [],
+              }
+            : {
+                max_students: formData.max_students ?? '',
+                price_override: formData.price_override ?? '',
+              })
+          : { ...(fieldConfig.default ?? {}), ...(formData.instance_data_ext[name] ?? {}) }
+        const setObj = (next: Record<string, any>) => {
+          if (fromFormData) {
+            if (name === 'schedule') {
+              const dow = Array.isArray(next.days_of_week)
+                ? next.days_of_week.map((v: any) => (typeof v === 'string' ? parseInt(v, 10) : v)).filter((v: any) => !isNaN(v))
+                : formData.days_of_week
+              setFormData({
+                ...formData,
+                start_date: next.start_date ?? formData.start_date,
+                end_date: next.end_date ?? formData.end_date,
+                start_time: next.start_time ?? formData.start_time,
+                end_time: next.end_time ?? formData.end_time,
+                days_of_week: dow,
+              })
+            } else {
+              setFormData({
+                ...formData,
+                max_students: next.max_students?.toString() ?? formData.max_students,
+                price_override: next.price_override?.toString() ?? formData.price_override,
+              })
+            }
+          } else {
+            setFormData({
+              ...formData,
+              instance_data_ext: { ...formData.instance_data_ext, [name]: next },
+            })
+          }
+        }
+        const propNodes: ReactElement[] = []
+        for (const [propKey, propConfig] of Object.entries(fieldConfig.properties as Record<string, any>)) {
+          const propValue = objValue[propKey] ?? propConfig?.default ?? (propConfig?.type === 'boolean' ? false : (propConfig?.type === 'multiselect' ? [] : ''))
+          const propOnChange = (v: any) => setObj({ ...objValue, [propKey]: v })
+          const el = renderField(propKey, propConfig, propValue, propOnChange, false, objValue)
+          if (el) propNodes.push(el)
+        }
+        if (propNodes.length > 0) {
+          nodes.push(
+            <Card key={name} className="overflow-hidden">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm font-medium">{fieldConfig.label || name}</CardTitle>
+                {fieldConfig.description && <CardDescription className="text-xs">{fieldConfig.description}</CardDescription>}
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {propNodes.map((node, idx) => <div key={idx}>{node}</div>)}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        }
+        i++
+        continue
+      }
+
       const value = formData.instance_data_ext[name] ?? fieldConfig?.default ?? ''
       const onChange = (newValue: unknown) => {
         setFormData({
@@ -695,15 +794,9 @@ export function InstanceCreateDialog({
     }
 
     return nodes.length > 0 ? (
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm font-medium">Additional configuration</CardTitle>
-          <CardDescription className="text-xs">Type-specific fields from schema</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 pt-0">
-          {nodes}
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {nodes}
+      </div>
     ) : null
   }
 
@@ -800,52 +893,12 @@ export function InstanceCreateDialog({
             </CardContent>
           </Card>
 
-          {/* Offering C-end config (portal_config): from offering_schema.fields.portal_config; only when selected offering has this object field */}
-          {selectedOffering?.offering_type?.offering_schema?.fields?.portal_config &&
-            selectedOffering.offering_type.offering_schema.fields.portal_config.type === 'object' &&
-            selectedOffering.offering_type.offering_schema.fields.portal_config.properties &&
-            offeringPortalConfig !== null && (
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm font-medium">
-                    {selectedOffering.offering_type.offering_schema.fields.portal_config.label || 'C 端展示行为'}
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    {selectedOffering.offering_type.offering_schema.fields.portal_config.description ||
-                      'Portal 课程类标识 + Instance 详情页是否推荐 Meal/Care 服务'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-0 rounded-md border border-slate-200 bg-slate-50/50 p-3">
-                  {Object.entries(selectedOffering.offering_type.offering_schema.fields.portal_config.properties).map(
-                    ([propKey, propConfig]: [string, any]) => {
-                      if (propConfig.type !== 'boolean') return null
-                      const propValue = (offeringPortalConfig as any)[propKey] ?? propConfig.default ?? false
-                      return (
-                        <div key={propKey} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={!!propValue}
-                            onCheckedChange={(checked) =>
-                              setOfferingPortalConfig((prev) =>
-                                prev ? { ...prev, [propKey]: !!checked } : null
-                              )
-                            }
-                          />
-                          <Label className="text-sm cursor-pointer">
-                            {propConfig.label || propKey}
-                          </Label>
-                        </div>
-                      )
-                    }
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-          {/* 日期块：仅当 instance_schema 中定义了 start_date 或 end_date 时显示 */}
+          {/* 日期块：仅当 instance_schema 中定义了 start_date 或 end_date 且未用 object schedule 时显示 */}
           {(() => {
             const schema = selectedOffering?.offering_type?.instance_schema?.fields
-            const hasStartDate = !!schema?.start_date
-            const hasEndDate = !!schema?.end_date
+            const scheduleAsObject = schema?.schedule?.type === 'object'
+            const hasStartDate = !scheduleAsObject && !!schema?.start_date
+            const hasEndDate = !scheduleAsObject && !!schema?.end_date
             if (!hasStartDate && !hasEndDate) return null
 
             const dateFields: ReactElement[] = []
@@ -877,29 +930,31 @@ export function InstanceCreateDialog({
             )
           })()}
 
-          {/* Common Fields + Campus: time, capacity, price, status, notes, campus */}
+          {/* Common Fields + Campus: time, capacity, price, status, notes, campus (omit fields that live inside schema object groups) */}
           {(() => {
             const schema = selectedOffering?.offering_type?.instance_schema?.fields
+            const scheduleAsObject = schema?.schedule?.type === 'object'
+            const capacityPriceAsObject = schema?.capacity_price?.type === 'object'
             const commonFields: ReactElement[] = []
-            if (schema?.start_time) {
+            if (!scheduleAsObject && schema?.start_time) {
               const c = schema.start_time
               const v = formData.start_time || c.default || ''
               const f = renderField('start_time', c, v, (x) => setFormData({ ...formData, start_time: x }), true)
               if (f) commonFields.push(f)
             }
-            if (schema?.end_time) {
+            if (!scheduleAsObject && schema?.end_time) {
               const c = schema.end_time
               const v = formData.end_time || c.default || ''
               const f = renderField('end_time', c, v, (x) => setFormData({ ...formData, end_time: x }), true)
               if (f) commonFields.push(f)
             }
-            if (schema?.max_students) {
+            if (!capacityPriceAsObject && schema?.max_students) {
               const c = schema.max_students
               const v = formData.max_students || c.default || ''
               const f = renderField('max_students', c, v, (x) => setFormData({ ...formData, max_students: x?.toString() || '' }), true)
               if (f) commonFields.push(f)
             }
-            if (schema?.price_override) {
+            if (!capacityPriceAsObject && schema?.price_override) {
               const c = schema.price_override
               const v = formData.price_override || c.default || ''
               const f = renderField('price_override', c, v, (x) => setFormData({ ...formData, price_override: x?.toString() || '' }), true)
@@ -911,7 +966,7 @@ export function InstanceCreateDialog({
               const f = renderField('session_count', c, v, (x) => setFormData({ ...formData, session_count: x?.toString() || '' }), true)
               if (f) commonFields.push(f)
             }
-            if (schema?.days_of_week) {
+            if (!scheduleAsObject && schema?.days_of_week) {
               const c = schema.days_of_week
               const cur = Array.isArray(formData.days_of_week) ? formData.days_of_week : []
               const disp = c.type === 'multiselect' ? cur.map(v => v.toString()) : cur

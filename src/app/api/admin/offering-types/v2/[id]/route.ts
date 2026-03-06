@@ -61,6 +61,7 @@ export async function PUT(
       is_active,
       offering_schema,
       instance_schema,
+      portal_service_role,
     } = body
 
     // 获取现有的 offering type
@@ -102,6 +103,11 @@ export async function PUT(
       }
     }
 
+    const validRole =
+      portal_service_role === 'meal_service' || portal_service_role === 'care_service'
+        ? portal_service_role
+        : null
+
     // 更新 offering type
     const updateData: any = {}
     if (code !== undefined) updateData.code = code
@@ -113,6 +119,7 @@ export async function PUT(
     if (is_active !== undefined) updateData.is_active = is_active
     if (offering_schema !== undefined) updateData.offering_schema = offering_schema
     if (instance_schema !== undefined) updateData.instance_schema = instance_schema
+    if (portal_service_role !== undefined) updateData.portal_service_role = validRole
 
     const { data: offeringType, error: updateError } = await supabaseAdmin
       .from("v2_offering_type")

@@ -64,6 +64,7 @@ const operationItems = [
   { id: "offering-type", title: "Offering Type", icon: Shapes },
   { id: "schema-reference", title: "Schema Reference", icon: Code },
   { id: "schema-by-type", title: "Schema by Offering Type", icon: Shapes },
+  { id: "portal-config", title: "Portal config & service role (C-end)", icon: Settings },
   { id: "category", title: "Category", icon: FolderTree },
   { id: "offering", title: "Offering", icon: Package },
   { id: "franchise", title: "Franchise & Subscription", icon: MapPin },
@@ -527,6 +528,11 @@ export default function AdminGuidePage() {
                         <td className="p-3"><code>{'"items": { "type": "string" }'}</code></td>
                       </tr>
                       <tr className="border-b">
+                        <td className="p-3"><code>object</code></td>
+                        <td className="p-3">Nested group of fields; stored as a JSON object</td>
+                        <td className="p-3"><code>{'"properties": { "sub_field": { "type": "text" } }'}</code></td>
+                      </tr>
+                      <tr className="border-b">
                         <td className="p-3"><code>date</code></td>
                         <td className="p-3">Date picker</td>
                         <td className="p-3"><code>&quot;type&quot;: &quot;date&quot;</code></td>
@@ -541,6 +547,29 @@ export default function AdminGuidePage() {
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
                   <strong>Markdown (rich text):</strong> When <code>type</code> is <code>text</code> and <code>multiline: true</code>, and the field name is <code>target_audience</code>, <code>learning_outcomes</code>, or <code>prerequisites</code>, the admin shows an Edit/Preview Markdown editor and the frontend renders Markdown. See &quot;Markdown editing&quot; in the Offering section above.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">type: object (nested group)</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  A field with <code>type: &quot;object&quot;</code> represents a nested group of fields. The stored value is a JSON object; each key is a sub-field name and the value is whatever the sub-field type defines. Use <code>properties</code> to define the nested schema: keys are property names, values are field definitions (with <code>type</code>, <code>label</code>, <code>default</code>, etc.). Nested properties support the same types as top-level fields (text, number, boolean, select, etc.); <code>text</code> with <code>multiline: true</code> uses the same Markdown/rich-text editor as prerequisites.
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"portal_config": {
+  "type": "object",
+  "label": "C-end display options",
+  "display_scope": "admin",
+  "default": { "is_course_type": true, "show_meal_service": false },
+  "properties": {
+    "is_course_type": { "type": "boolean", "label": "Count as course in Portal", "default": true },
+    "show_meal_service": { "type": "boolean", "label": "Show Meal Service block", "default": false },
+    "notes": { "type": "text", "label": "Internal notes", "multiline": true }
+  }
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  In the admin Configuration tab, object fields render as a bordered group with one control per property (checkbox, input, select, or rich-text editor for multiline text). The whole object is stored in <code>type_config_data</code> or <code>instance_data_ext</code> under the field name (e.g. <code>type_config_data.portal_config</code>).
                 </p>
               </div>
 
@@ -613,6 +642,11 @@ export default function AdminGuidePage() {
                         <td className="p-3"><code>items</code></td>
                         <td className="p-3">For array: schema of each item</td>
                         <td className="p-3"><code>{'"items": { "type": "string" }'}</code></td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-3"><code>properties</code></td>
+                        <td className="p-3">For object: nested field definitions (name → field config)</td>
+                        <td className="p-3"><code>{'"properties": { "x": { "type": "boolean" } }'}</code></td>
                       </tr>
                       <tr className="border-b">
                         <td className="p-3"><code>condition</code></td>
@@ -784,6 +818,102 @@ export default function AdminGuidePage() {
               <p className="text-sm text-muted-foreground border-t pt-4">
                 Full schema definitions, including all field properties (placeholder, description, display_scope), are in <strong>docs/design/Database_redesign_document_v2.md</strong>. The tables <code>v2_offering.type_config_data</code> and <code>v2_instance.instance_data_ext</code> store the actual values; they are validated against the Offering Type&apos;s <code>offering_schema</code> and <code>instance_schema</code>.
               </p>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="portal-config" id="portal-config" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                  <AccordionTrigger className="hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Settings className="h-4 w-4" />
+                      Portal config &amp; service role (C-end)
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-6">
+              <p className="text-sm text-muted-foreground">
+                Two schema-driven settings control C-end behavior: <strong>portal_config</strong> (whether an offering&apos;s instance detail page shows Meal/Care blocks and whether the instance counts as &quot;course&quot; in Portal) and <strong>portal_service_role</strong> (whether this offering&apos;s instances are listed as Meal Service or Care Service in those blocks). Both live in <code>offering_schema.fields</code> and are stored in <code>v2_offering.type_config_data</code>; <code>portal_service_role</code> is also flattened to <code>v2_instance.portal_service_role</code>.
+              </p>
+
+              <div>
+                <h3 className="font-semibold mb-2">1. portal_config (C-end display)</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Add a field <code>portal_config</code> of type <code>object</code> with <code>properties</code>: <code>is_course_type</code>, <code>show_meal_service</code>, <code>show_care_service</code>. Stored in <code>type_config_data.portal_config</code>. Used when creating/editing an instance to set <code>v2_instance.is_course_type</code>; C-end uses the booleans to show or hide Meal/Care blocks on the instance detail page.
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"portal_config": {
+  "type": "object",
+  "label": "C 端展示行为",
+  "required": false,
+  "display_scope": "admin",
+  "default": { "is_course_type": true, "show_meal_service": false, "show_care_service": false },
+  "properties": {
+    "is_course_type": { "type": "boolean", "label": "在 C 端 Portal 中视为课程类", "default": true },
+    "show_meal_service": { "type": "boolean", "label": "Instance 详情页推荐/展示 Meal Service", "default": false },
+    "show_care_service": { "type": "boolean", "label": "Instance 详情页推荐/展示 Care Service", "default": false }
+  }
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>Recommended defaults by type:</strong> camp → show_meal_service true; workshop, competition → show_meal_service + show_care_service true; course, free_trial → both false; care_service, lunch_service → is_course_type false, both false.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">2. portal_service_role (Meal/Care listing)</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Add a field <code>portal_service_role</code> of type <code>select</code> with <code>options: ["", "meal_service", "care_service"]</code>. Stored in <code>type_config_data.portal_service_role</code> and flattened to <code>v2_instance.portal_service_role</code>. C-end filters instances by this column to show &quot;Meal Service&quot; / &quot;Care Service&quot; lists on course-type instance detail pages. You can also set <strong>Offering Type</strong> → &quot;Instance 详情页角色&quot; (v2_offering_type.portal_service_role) so new offerings of that type get this value by default even if the schema field is not in the form.
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"portal_service_role": {
+  "type": "select",
+  "label": "Instance 详情页服务角色",
+  "options": ["", "meal_service", "care_service"],
+  "display_scope": "admin",
+  "default": "care_service"
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Use <code>default: "meal_service"</code> for lunch_service type; <code>default: "care_service"</code> for care_service type. Empty string means no role (not listed in Meal/Care blocks).
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Schema examples by offering type</h3>
+                <div className="overflow-x-auto rounded-md border text-sm">
+                  <table className="w-full text-muted-foreground">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 font-medium">Type (code)</th>
+                        <th className="text-left p-3 font-medium">portal_config.default</th>
+                        <th className="text-left p-3 font-medium">portal_service_role</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b"><td className="p-3">camp</td><td className="p-3">is_course_type: true, show_meal_service: true, show_care_service: false</td><td className="p-3">— (omit or default &quot;&quot;)</td></tr>
+                      <tr className="border-b"><td className="p-3">workshop</td><td className="p-3">is_course_type: true, show_meal_service: true, show_care_service: true</td><td className="p-3">—</td></tr>
+                      <tr className="border-b"><td className="p-3">competition</td><td className="p-3">is_course_type: true, show_meal_service: true, show_care_service: true</td><td className="p-3">—</td></tr>
+                      <tr className="border-b"><td className="p-3">course, free_trial</td><td className="p-3">is_course_type: true, show_meal_service: false, show_care_service: false</td><td className="p-3">—</td></tr>
+                      <tr className="border-b"><td className="p-3">gift_card, care_service, lunch_service</td><td className="p-3">is_course_type: false, show_meal_service: false, show_care_service: false</td><td className="p-3">lunch_service → default &quot;meal_service&quot;; care_service → default &quot;care_service&quot;</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">How these configs are used in Create/Edit flows</h3>
+                <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                  <li><strong>Create Offering:</strong> When you pick an Offering Type, the form pre-fills <code>type_config_data</code> from the type&apos;s schema defaults. If the type has <code>portal_config</code> in schema, you get the default object (e.g. show_meal_service/show_care_service). If the type has <code>portal_service_role</code> in schema, the default can come from the type&apos;s &quot;Instance 详情页角色&quot; or from the field&apos;s <code>default</code>. You can change any of these in the Configuration tab before saving.</li>
+                  <li><strong>Edit Offering:</strong> The Configuration tab shows all fields from the type&apos;s <code>offering_schema</code>, including <code>portal_config</code> (object with checkboxes) and <code>portal_service_role</code> (select). Saving updates <code>v2_offering.type_config_data</code>. If <code>portal_config.is_course_type</code> or <code>portal_service_role</code> is present in the saved payload, the backend syncs <code>is_course_type</code> and <code>portal_service_role</code> to all <code>v2_instance</code> rows for that offering.</li>
+                  <li><strong>Create Instance:</strong> When you create an instance for an offering, the backend reads that offering&apos;s <code>type_config_data.portal_config.is_course_type</code> and <code>type_config_data.portal_service_role</code> (or, if missing, the offering type&apos;s <code>portal_service_role</code> column). It sets <code>v2_instance.is_course_type</code> and <code>v2_instance.portal_service_role</code> on the new row accordingly.</li>
+                  <li><strong>Edit Instance:</strong> When you update an instance, the backend again reads the linked offering&apos;s <code>type_config_data</code> (and type&apos;s <code>portal_service_role</code> as fallback) and rewrites <code>is_course_type</code> and <code>portal_service_role</code> on that instance so they stay in sync with the offering.</li>
+                </ul>
+                <p className="text-sm text-muted-foreground mt-3">
+                  Summary: <code>portal_config</code> and <code>portal_service_role</code> are edited only on the <strong>Offering</strong> (or defaulted from Offering Type). Instance create/edit and Offering edit then propagate them to <code>v2_instance</code> so the C-end can filter and display correctly without joining to the offering every time.
+                </p>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg text-sm">
+                <p><strong>Design doc:</strong> <code>docs/design/INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN.md</code> and <code>docs/design/PORTAL_OFFERING_TYPE_DESIGN.md</code>.</p>
+              </div>
                   </AccordionContent>
                 </AccordionItem>
 

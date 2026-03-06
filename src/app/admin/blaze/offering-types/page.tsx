@@ -15,7 +15,21 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Edit, Trash2, Plus, Loader2, RefreshCcw, Save, X } from "lucide-react"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Search, Edit, Trash2, Plus, Loader2, RefreshCcw, Save, X, AlertTriangle } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { SchemaEditor } from "@/components/admin/SchemaEditor"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +44,8 @@ interface V2OfferingType {
   instance_schema: Record<string, unknown>
   display_order: number
   is_active: boolean
+  /** Instance detail page role: meal_service, care_service, or null (design: INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN) */
+  portal_service_role?: string | null
   created_at: string
   updated_at: string
 }
@@ -43,6 +59,13 @@ function jsonToMarkdownBlock(obj: Record<string, unknown>): string {
   }
 }
 
+const PORTAL_SERVICE_ROLE_NONE = "__none__"
+const PORTAL_SERVICE_ROLE_OPTIONS = [
+  { value: PORTAL_SERVICE_ROLE_NONE, label: "None" },
+  { value: "meal_service", label: "Meal Service" },
+  { value: "care_service", label: "Care Service" },
+]
+
 const emptyFormData = {
   code: "",
   name: "",
@@ -53,6 +76,7 @@ const emptyFormData = {
   instance_schema: {} as Record<string, unknown>,
   display_order: 0,
   is_active: true,
+  portal_service_role: "" as string,
 }
 
 export default function BlazeOfferingTypesManagementPage() {
@@ -61,6 +85,7 @@ export default function BlazeOfferingTypesManagementPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [openTypeIds, setOpenTypeIds] = useState<string[]>([])
 
   // Inline edit: "new" = add form, type.id = edit that type, null = no edit
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -87,6 +112,11 @@ export default function BlazeOfferingTypesManagementPage() {
       setFilteredTypes(offeringTypes)
     }
   }, [searchQuery, offeringTypes])
+
+  useEffect(() => {
+    if (!editingId || editingId === "new") return
+    setOpenTypeIds((prev) => (prev.includes(editingId) ? prev : [...prev, editingId]))
+  }, [editingId])
 
   const fetchOfferingTypes = async () => {
     try {
@@ -116,6 +146,7 @@ export default function BlazeOfferingTypesManagementPage() {
       instance_schema: type.instance_schema || {},
       display_order: type.display_order,
       is_active: type.is_active,
+      portal_service_role: type.portal_service_role ?? "",
     })
     setOfferingSchemaJson(JSON.stringify(type.offering_schema || {}, null, 2))
     setInstanceSchemaJson(JSON.stringify(type.instance_schema || {}, null, 2))
@@ -161,6 +192,7 @@ export default function BlazeOfferingTypesManagementPage() {
         is_active: formData.is_active,
         offering_schema: offeringSchema,
         instance_schema: instanceSchema,
+        portal_service_role: formData.portal_service_role && formData.portal_service_role !== PORTAL_SERVICE_ROLE_NONE ? formData.portal_service_role : null,
       }
 
       if (editingId === "new") {
@@ -227,6 +259,14 @@ export default function BlazeOfferingTypesManagementPage() {
           Manage offering types (product type configurations). Edit, save, or delete directly on each card.
         </p>
       </div>
+
+      <Alert className="mb-6 border-amber-500/60 bg-amber-500/10 text-amber-900 dark:text-amber-200 dark:bg-amber-500/15 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Schema changes affect application behaviour</AlertTitle>
+        <AlertDescription>
+          Changes to offering schema or instance schema can break existing features and data handling. Please review impact before saving and consider testing in a non-production environment.
+        </AlertDescription>
+      </Alert>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -305,7 +345,7 @@ export default function BlazeOfferingTypesManagementPage() {
                     className="resize-none"
                   />
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="new_is_active"
@@ -313,6 +353,25 @@ export default function BlazeOfferingTypesManagementPage() {
                       onCheckedChange={(c) => setFormData({ ...formData, is_active: c === true })}
                     />
                     <Label htmlFor="new_is_active" className="cursor-pointer">Active</Label>
+                  </div>
+                  <div className="space-y-2 min-w-[200px]">
+                    <Label>Instance detail page role</Label>
+                    <Select
+                      value={formData.portal_service_role || PORTAL_SERVICE_ROLE_NONE}
+                      onValueChange={(v) => setFormData({ ...formData, portal_service_role: v === PORTAL_SERVICE_ROLE_NONE ? "" : v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PORTAL_SERVICE_ROLE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Used on C-end instance detail for Meal/Care blocks. Independent of code.</p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -353,184 +412,224 @@ export default function BlazeOfferingTypesManagementPage() {
             </Card>
           )}
 
-          {filteredTypes.map((type) => (
-            <Card
-              key={type.id}
-              className={cn(
-                "flex flex-col",
-                editingId === type.id && "ring-2 ring-primary"
-              )}
-            >
-              {editingId === type.id ? (
-                <>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Edit: {type.name}</CardTitle>
-                    <CardDescription>Code: <code className="font-mono">{type.code}</code> (cannot change)</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4 flex-1 overflow-hidden flex flex-col min-h-0">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Display name *</Label>
-                        <Input
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Order</Label>
-                        <Input
-                          type="number"
-                          value={formData.display_order}
-                          onChange={(e) =>
-                            setFormData({ ...formData, display_order: parseInt(e.target.value, 10) || 0 })
-                          }
-                        />
+          <Accordion type="multiple" value={openTypeIds} onValueChange={setOpenTypeIds} className="w-full">
+            {filteredTypes.map((type) => (
+              <AccordionItem key={type.id} value={type.id} className="border rounded-lg">
+                <AccordionTrigger className="px-6 hover:no-underline">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="secondary" className="text-sm font-medium truncate max-w-[200px]">
+                          {type.name}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground font-mono truncate">
+                          {type.code}
+                        </span>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Description</Label>
-                      <Textarea
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={2}
-                        className="resize-none"
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`active-${type.id}`}
-                        checked={formData.is_active}
-                        onCheckedChange={(c) => setFormData({ ...formData, is_active: c === true })}
-                      />
-                      <Label htmlFor={`active-${type.id}`} className="cursor-pointer">Active</Label>
-                    </div>
-                    <div className="space-y-2 min-h-0 flex flex-col">
-                      <Label>Offering schema</Label>
-                      <div className="min-h-[180px]">
-                        <SchemaEditor
-                          value={offeringSchemaJson}
-                          onChange={setOfferingSchemaJson}
-                          minHeight="180px"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2 min-h-0 flex flex-col">
-                      <Label>Instance schema</Label>
-                      <div className="min-h-[180px]">
-                        <SchemaEditor
-                          value={instanceSchemaJson}
-                          onChange={setInstanceSchemaJson}
-                          minHeight="180px"
-                        />
-                      </div>
-                    </div>
-                    {submitError && (
-                      <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{submitError}</p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-3 pt-4 border-t flex-shrink-0">
-                      <Button
-                        onClick={handleSave}
-                        disabled={isSubmitting || !formData.name}
-                        size="default"
-                        className="rounded-lg gap-2 min-w-[100px]"
-                      >
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        Save
-                      </Button>
-                      <Button variant="outline" size="default" onClick={cancelEdit} disabled={isSubmitting} className="rounded-lg gap-2">
-                        <X className="h-4 w-4" />
-                        Cancel
-                      </Button>
-                      <span className="inline-block w-px h-6 bg-border mx-1" aria-hidden />
-                      <Button
-                        variant="ghost"
-                        size="default"
-                        onClick={() => handleDelete(type.id)}
-                        disabled={isSubmitting}
-                        title="Delete"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg gap-2"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </CardContent>
-                </>
-              ) : (
-                <>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <CardTitle className="text-lg">{type.name}</CardTitle>
-                        <CardDescription className="font-mono text-xs mt-0.5">{type.code}</CardDescription>
-                      </div>
+                    <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
+                      {type.portal_service_role === "meal_service" && (
+                        <Badge variant="outline" className="text-xs">Meal Service</Badge>
+                      )}
+                      {type.portal_service_role === "care_service" && (
+                        <Badge variant="outline" className="text-xs">Care Service</Badge>
+                      )}
                       <Badge variant={type.is_active ? "default" : "secondary"}>
                         {type.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-2 mt-3">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => startEdit(type)}
-                        className="rounded-lg gap-1.5 h-8 px-3 shadow-sm"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg gap-1.5 h-8 px-3"
-                        onClick={() => handleDelete(type.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-0">
-                    {type.description && (
-                      <p className="text-sm text-muted-foreground">{type.description}</p>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-2 sm:px-4">
+                  <Card
+                    className={cn(
+                      "flex flex-col border-0 shadow-none",
+                      editingId === type.id && "ring-2 ring-primary"
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      Created {formatDate(type.created_at)}
-                    </p>
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">Offering schema (type_config_data)</p>
-                      <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
-                        <ReactMarkdown
-                          components={{
-                            pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
-                            code: ({ className, children }) => (
-                              <code className={cn(className, "text-[11px]")}>{children}</code>
-                            ),
-                          }}
-                        >
-                          {jsonToMarkdownBlock((type.offering_schema || {}) as Record<string, unknown>)}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">Instance schema (instance_data_ext)</p>
-                      <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
-                        <ReactMarkdown
-                          components={{
-                            pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
-                            code: ({ className, children }) => (
-                              <code className={cn(className, "text-[11px]")}>{children}</code>
-                            ),
-                          }}
-                        >
-                          {jsonToMarkdownBlock((type.instance_schema || {}) as Record<string, unknown>)}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                  </CardContent>
-                </>
-              )}
-            </Card>
-          ))}
+                  >
+                    {editingId === type.id ? (
+                      <>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-lg">Edit: {type.name}</CardTitle>
+                          <CardDescription>Code: <code className="font-mono">{type.code}</code> (cannot change)</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 flex-1 overflow-hidden flex flex-col min-h-0">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Display name *</Label>
+                              <Input
+                                value={formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Order</Label>
+                              <Input
+                                type="number"
+                                value={formData.display_order}
+                                onChange={(e) =>
+                                  setFormData({ ...formData, display_order: parseInt(e.target.value, 10) || 0 })
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2 max-w-xs">
+                            <Label>Instance detail page role</Label>
+                            <Select
+                              value={formData.portal_service_role || PORTAL_SERVICE_ROLE_NONE}
+                              onValueChange={(v) => setFormData({ ...formData, portal_service_role: v === PORTAL_SERVICE_ROLE_NONE ? "" : v })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="None" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PORTAL_SERVICE_ROLE_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">Meal Service / Care Service on C-end instance detail (independent of code).</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Description</Label>
+                            <Textarea
+                              value={formData.description}
+                              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                              rows={2}
+                              className="resize-none"
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`active-${type.id}`}
+                              checked={formData.is_active}
+                              onCheckedChange={(c) => setFormData({ ...formData, is_active: c === true })}
+                            />
+                            <Label htmlFor={`active-${type.id}`} className="cursor-pointer">Active</Label>
+                          </div>
+                          <div className="space-y-2 min-h-0 flex flex-col">
+                            <Label>Offering schema</Label>
+                            <div className="min-h-[180px]">
+                              <SchemaEditor
+                                value={offeringSchemaJson}
+                                onChange={setOfferingSchemaJson}
+                                minHeight="180px"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2 min-h-0 flex flex-col">
+                            <Label>Instance schema</Label>
+                            <div className="min-h-[180px]">
+                              <SchemaEditor
+                                value={instanceSchemaJson}
+                                onChange={setInstanceSchemaJson}
+                                minHeight="180px"
+                              />
+                            </div>
+                          </div>
+                          {submitError && (
+                            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{submitError}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-3 pt-4 border-t flex-shrink-0">
+                            <Button
+                              onClick={handleSave}
+                              disabled={isSubmitting || !formData.name}
+                              size="default"
+                              className="rounded-lg gap-2 min-w-[100px]"
+                            >
+                              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              Save
+                            </Button>
+                            <Button variant="outline" size="default" onClick={cancelEdit} disabled={isSubmitting} className="rounded-lg gap-2">
+                              <X className="h-4 w-4" />
+                              Cancel
+                            </Button>
+                            <span className="inline-block w-px h-6 bg-border mx-1" aria-hidden />
+                            <Button
+                              variant="ghost"
+                              size="default"
+                              onClick={() => handleDelete(type.id)}
+                              disabled={isSubmitting}
+                              title="Delete"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg gap-2"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </>
+                    ) : (
+                      <>
+                        <CardHeader className="pb-2 pt-0">
+                          <div className="flex items-center gap-2 mt-1">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => startEdit(type)}
+                              className="rounded-lg gap-1.5 h-8 px-3 shadow-sm"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg gap-1.5 h-8 px-3"
+                              onClick={() => handleDelete(type.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-0">
+                          {type.description && (
+                            <p className="text-sm text-muted-foreground">{type.description}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Created {formatDate(type.created_at)}
+                          </p>
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">Offering schema (type_config_data)</p>
+                            <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
+                              <ReactMarkdown
+                                components={{
+                                  pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
+                                  code: ({ className, children }) => (
+                                    <code className={cn(className, "text-[11px]")}>{children}</code>
+                                  ),
+                                }}
+                              >
+                                {jsonToMarkdownBlock((type.offering_schema || {}) as Record<string, unknown>)}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">Instance schema (instance_data_ext)</p>
+                            <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
+                              <ReactMarkdown
+                                components={{
+                                  pre: ({ children }) => <pre className="m-0 whitespace-pre-wrap break-words">{children}</pre>,
+                                  code: ({ className, children }) => (
+                                    <code className={cn(className, "text-[11px]")}>{children}</code>
+                                  ),
+                                }}
+                              >
+                                {jsonToMarkdownBlock((type.instance_schema || {}) as Record<string, unknown>)}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </>
+                    )}
+                  </Card>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       )}
 

@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       is_active,
       offering_schema,
       instance_schema,
+      portal_service_role,
     } = body
 
     if (!code || !name) {
@@ -89,6 +90,8 @@ export async function POST(request: Request) {
       )
     }
 
+    const validRole = portal_service_role === 'meal_service' || portal_service_role === 'care_service' ? portal_service_role : null
+
     // 创建 offering type
     const { data: offeringType, error: createError } = await supabaseAdmin
       .from("v2_offering_type")
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
         is_active: is_active !== undefined ? is_active : true,
         offering_schema: offering_schema || {},
         instance_schema: instance_schema || {},
+        portal_service_role: validRole,
       })
       .select()
       .single()

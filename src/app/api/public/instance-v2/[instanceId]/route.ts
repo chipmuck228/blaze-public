@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { filterInstanceDataExtByDisplayScope } from "@/lib/instance-schema"
 
-/**
- * Filter object keys by schema field display_scope (web or both) for C-end.
- */
-function filterByDisplayScope(
+/** Filter offering type_config_data by schema display_scope (web or both) for C-end. Top-level only. */
+function filterOfferingConfigByDisplayScope(
   schema: { fields?: Record<string, { display_scope?: string }> } | null,
   data: Record<string, unknown> | null
 ): Record<string, unknown> {
   if (!data || typeof data !== "object") return {}
-  if (!schema?.fields || typeof schema.fields !== "object") return data
+  if (!schema?.fields || typeof schema.fields !== "object") return data as Record<string, unknown>
   const allowed = new Set(
     Object.entries(schema.fields)
       .filter(([, config]) => {
@@ -129,21 +128,27 @@ export async function GET(
     const offeringSchema = offeringType?.offering_schema ?? null
 
     const extData = (row as any).instance_data_ext ?? {}
+    const schedule = extData.schedule && typeof extData.schedule === "object" ? (extData.schedule as Record<string, unknown>) : null
+    const capacityPrice = extData.capacity_price && typeof extData.capacity_price === "object" ? (extData.capacity_price as Record<string, unknown>) : null
     const typeConfigData = offering.type_config_data ?? {}
-    const maxStudents = (row as any).max_students ?? extData.max_students ?? 0
+    const portalConfigForPayload =
+      typeConfigData && typeof typeConfigData === "object" && typeConfigData !== null && "portal_config" in typeConfigData
+        ? (typeConfigData as Record<string, unknown>).portal_config
+        : undefined
+    const maxStudents = (row as any).max_students ?? extData.max_students ?? capacityPrice?.max_students ?? 0
     const currentStudents = (row as any).current_students ?? 0
 
     const payload = {
       id: (row as any).id,
-      start_date: (row as any).start_date ?? extData.start_date ?? null,
-      end_date: (row as any).end_date ?? extData.end_date ?? null,
-      start_time: (row as any).start_time ?? extData.start_time ?? null,
-      end_time: (row as any).end_time ?? extData.end_time ?? null,
+      start_date: (row as any).start_date ?? extData.start_date ?? schedule?.start_date ?? null,
+      end_date: (row as any).end_date ?? extData.end_date ?? schedule?.end_date ?? null,
+      start_time: (row as any).start_time ?? extData.start_time ?? schedule?.start_time ?? null,
+      end_time: (row as any).end_time ?? extData.end_time ?? schedule?.end_time ?? null,
       max_students: maxStudents || null,
       current_students: currentStudents,
       status: (row as any).status,
-      price_override: (row as any).price_override ?? null,
-      instance_data_ext: filterByDisplayScope(instanceSchema, extData),
+      price_override: (row as any).price_override ?? extData.price_override ?? capacityPrice?.price_override ?? null,
+      instance_data_ext: filterInstanceDataExtByDisplayScope(instanceSchema, extData),
       location: campus
         ? {
             id: campus.id,
@@ -166,9 +171,11 @@ export async function GET(
         name: offering.name,
         slug: offering.slug ?? undefined,
         poster_url: offering.poster_url ?? undefined,
-        type_config_data: filterByDisplayScope(offeringSchema, typeConfigData),
+        type_config_data: filterOfferingConfigByDisplayScope(offeringSchema, typeConfigData),
+        /** Always include portal_config for C-end detail page (show_meal_service / show_care_service). Design: INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN */
+        portal_config: portalConfigForPayload,
         offering_type: offeringType
-          ? { id: offeringType.id, code: offeringType.code, name: offeringType.name }
+          ? { id: offeringType.id, code: offeringType.code, name: offeringType.name, instance_schema: offeringType.instance_schema ?? undefined, offering_schema: offeringType.offering_schema ?? undefined }
           : undefined,
         base_price: offering.base_price ?? typeConfigData.base_price ?? undefined,
         currency: typeConfigData.currency ?? "USD",

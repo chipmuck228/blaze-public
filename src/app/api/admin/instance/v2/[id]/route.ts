@@ -86,7 +86,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 获取当前 instance 及 offering.type_config_data（用于 is_course_type）
+    // 获取当前 instance 及 offering.type_config_data、offering_type.portal_service_role（用于 is_course_type / portal_service_role）
     const { data: currentInstance, error: fetchError } = await supabaseAdmin
       .from("v2_instance")
       .select(`
@@ -95,7 +95,7 @@ export async function PUT(
           id,
           offering_type_id,
           type_config_data,
-          offering_type:v2_offering_type(instance_schema)
+          offering_type:v2_offering_type(instance_schema, portal_service_role)
         )
       `)
       .eq("id", id)
@@ -127,32 +127,74 @@ export async function PUT(
       is_active,
     } = body
 
-    // 验证日期范围
-    const finalStartDate = start_date || currentInstance.start_date
-    const finalEndDate = end_date || currentInstance.end_date
-    if (new Date(finalStartDate) > new Date(finalEndDate)) {
+    const nextDataExt = {
+      ...(currentInstance.instance_data_ext || {}),
+      ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
+    } as Record<string, any>
+    // 从 instance_data_ext 的 schedule / capacity_price 推导行级字段
+    let finalStartDate = start_date ?? nextDataExt.schedule?.start_date ?? currentInstance.start_date
+    let finalEndDate = end_date ?? nextDataExt.schedule?.end_date ?? currentInstance.end_date
+    let finalStartTime = start_time ?? nextDataExt.schedule?.start_time ?? currentInstance.start_time
+    let finalEndTime = end_time ?? nextDataExt.schedule?.end_time ?? currentInstance.end_time
+    let finalDaysOfWeek = days_of_week ?? nextDataExt.schedule?.days_of_week ?? currentInstance.days_of_week
+    let finalMaxStudents = max_students ?? nextDataExt.capacity_price?.max_students ?? currentInstance.max_students
+    let finalPriceOverride = price_override ?? nextDataExt.capacity_price?.price_override ?? currentInstance.price_override
+
+    if (finalStartDate && finalEndDate && new Date(finalStartDate) > new Date(finalEndDate)) {
       return NextResponse.json(
         { error: "start_date must be less than or equal to end_date" },
         { status: 400 }
       )
     }
 
-    // 验证 instance_data_ext（如果提供了更新）
-    const offeringType = Array.isArray(currentInstance.offering?.offering_type) 
-      ? currentInstance.offering.offering_type[0] 
+    const offeringType = Array.isArray(currentInstance.offering?.offering_type)
+      ? currentInstance.offering.offering_type[0]
       : currentInstance.offering?.offering_type
-    if (instance_data_ext !== undefined && offeringType?.instance_schema) {
+    if (offeringType?.instance_schema && typeof offeringType.instance_schema === "object") {
       const schema = offeringType.instance_schema as { fields?: Record<string, any> }
       if (schema.fields) {
         const errors: string[] = []
-        const finalDataExt = { ...currentInstance.instance_data_ext, ...instance_data_ext }
-        
-        for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
-          if (fieldConfig.required && (finalDataExt[fieldName] === undefined || finalDataExt[fieldName] === null || finalDataExt[fieldName] === "")) {
-            errors.push(`${fieldConfig.label || fieldName} is required`)
+        const validateField = (val: any, fieldConfig: any, fieldLabel: string) => {
+          if (fieldConfig.required && (val === undefined || val === null || val === "")) {
+            errors.push(`${fieldLabel} is required`)
+            return
+          }
+          if (val === undefined || val === null) return
+          if (fieldConfig.type === "number") {
+            const value = Number(val)
+            if (isNaN(value)) errors.push(`${fieldLabel} must be a number`)
+            else {
+              if (fieldConfig.min !== undefined && value < fieldConfig.min) errors.push(`${fieldLabel} must be at least ${fieldConfig.min}`)
+              if (fieldConfig.max !== undefined && value > fieldConfig.max) errors.push(`${fieldLabel} must be at most ${fieldConfig.max}`)
+            }
+          }
+          if (fieldConfig.type === "select" && fieldConfig.options && !fieldConfig.options.includes(val)) {
+            errors.push(`${fieldLabel} must be one of: ${fieldConfig.options.join(", ")}`)
+          }
+          if (fieldConfig.type === "multiselect" && fieldConfig.options) {
+            const values = Array.isArray(val) ? val : [val]
+            const optSet = new Set(fieldConfig.options.map((o: any) => String(o)))
+            const invalid = values.filter((v: any) => !optSet.has(String(v)))
+            if (invalid.length > 0) errors.push(`${fieldLabel} contains invalid values: ${invalid.join(", ")}`)
           }
         }
-        
+        for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
+          const fieldLabel = fieldConfig.label || fieldName
+          if (fieldConfig.type === "object" && fieldConfig.properties) {
+            const obj = nextDataExt[fieldName]
+            if (fieldConfig.required && (obj === undefined || obj === null || typeof obj !== "object")) {
+              errors.push(`${fieldLabel} is required`)
+              continue
+            }
+            if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+              for (const [propKey, propConfig] of Object.entries(fieldConfig.properties as Record<string, any>)) {
+                validateField(obj[propKey], propConfig, propConfig?.label || propKey)
+              }
+            }
+          } else {
+            validateField(nextDataExt[fieldName], fieldConfig, fieldLabel)
+          }
+        }
         if (errors.length > 0) {
           return NextResponse.json(
             { error: errors.join(", ") },
@@ -162,46 +204,39 @@ export async function PUT(
       }
     }
 
-    // 验证容量
-    const finalMaxStudents = max_students !== undefined ? max_students : currentInstance.max_students
     const finalCurrentStudents = current_students !== undefined ? current_students : currentInstance.current_students
-    if (finalMaxStudents !== null && finalCurrentStudents > finalMaxStudents) {
+    if (finalMaxStudents != null && finalCurrentStudents > finalMaxStudents) {
       return NextResponse.json(
         { error: "current_students cannot exceed max_students" },
         { status: 400 }
       )
     }
 
-    // 构建更新数据（Phase A 双写：平铺字段同时写入 instance_data_ext）
     const updateData: any = {}
     if (campus_id !== undefined) updateData.campus_id = campus_id
-    if (price_override !== undefined) updateData.price_override = price_override
-    if (start_date !== undefined) updateData.start_date = start_date
-    if (end_date !== undefined) updateData.end_date = end_date
-    if (start_time !== undefined) updateData.start_time = start_time
-    if (end_time !== undefined) updateData.end_time = end_time
-    if (session_count !== undefined) updateData.session_count = session_count
-    if (days_of_week !== undefined) updateData.days_of_week = days_of_week
-    if (max_students !== undefined) updateData.max_students = max_students
     if (current_students !== undefined) updateData.current_students = current_students
-    const extFromFlat: Record<string, unknown> = {}
-    if (start_date !== undefined) extFromFlat.start_date = start_date
-    if (end_date !== undefined) extFromFlat.end_date = end_date
-    if (start_time !== undefined) extFromFlat.start_time = start_time
-    if (end_time !== undefined) extFromFlat.end_time = end_time
-    if (session_count !== undefined) extFromFlat.session_count = session_count
-    if (days_of_week !== undefined) extFromFlat.days_of_week = days_of_week
-    if (max_students !== undefined) extFromFlat.max_students = max_students
-    if (notes !== undefined) extFromFlat.notes = notes
-    const nextDataExt = {
-      ...(currentInstance.instance_data_ext || {}),
-      ...extFromFlat,
-      ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
-    }
+    if (session_count !== undefined) updateData.session_count = session_count
     updateData.instance_data_ext = nextDataExt
+    updateData.start_date = finalStartDate
+    updateData.end_date = finalEndDate
+    updateData.start_time = finalStartTime
+    updateData.end_time = finalEndTime
+    updateData.days_of_week = finalDaysOfWeek
+    updateData.max_students = finalMaxStudents
+    updateData.price_override = finalPriceOverride
     // is_course_type：从 offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
     const offeringData = Array.isArray(currentInstance.offering) ? currentInstance.offering[0] : currentInstance.offering
     updateData.is_course_type = !!(offeringData as any)?.type_config_data?.portal_config?.is_course_type
+    // portal_service_role：从 type_config_data 平铺，缺省时用 offering_type.portal_service_role（设计文档 INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3）
+    const rawRole = (offeringData as any)?.type_config_data?.portal_service_role
+    const ot = Array.isArray((offeringData as any)?.offering_type) ? (offeringData as any).offering_type[0] : (offeringData as any)?.offering_type
+    const typeRole = (ot as any)?.portal_service_role
+    updateData.portal_service_role =
+      rawRole === "meal_service" || rawRole === "care_service"
+        ? rawRole
+        : typeRole === "meal_service" || typeRole === "care_service"
+          ? typeRole
+          : null
     if (icalendar_rrule !== undefined) updateData.icalendar_rrule = icalendar_rrule
     if (icalendar_exdates !== undefined) updateData.icalendar_exdates = icalendar_exdates
     if (icalendar_rdates !== undefined) updateData.icalendar_rdates = icalendar_rdates

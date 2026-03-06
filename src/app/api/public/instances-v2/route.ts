@@ -2,10 +2,11 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
- * GET /api/public/instances-v2?category=xxx&location=yyy
- * Returns enrollable instances from v2_instance / v2_program / v2_offering.
+ * GET /api/public/instances-v2?category=xxx&location=yyy&portal_service_role=meal_service|care_service
+ * Returns enrollable instances from v2_instance only (instance_v2 已废弃，不再使用).
  * - category: optional v2_category id; when omitted, returns instances from all categories.
  * - location: optional franchise code; when omitted, returns all franchises.
+ * - portal_service_role: optional 'meal_service' | 'care_service'; when set, returns only instances with that role (for detail page Meal/Care blocks). Design: INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN.
  * Shape: { franchises: [ { id, code, name, programs: [ { ..., instances: [...] } ] } ] }
  */
 export async function GET(request: Request) {
@@ -13,8 +14,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const categoryId = searchParams.get("category")?.trim() || null
     const locationCode = searchParams.get("location")?.trim() || searchParams.get("franchise")?.trim() || null
+    const portalServiceRoleParam = searchParams.get("portal_service_role")?.trim() || null
+    const portalServiceRole =
+      portalServiceRoleParam === "meal_service" || portalServiceRoleParam === "care_service"
+        ? portalServiceRoleParam
+        : null
 
-    console.log("[Public instances-v2] Request params:", { categoryId, locationCode })
+    console.log("[Public instances-v2] Request params:", { categoryId, locationCode, portalServiceRole })
 
     let franchiseId: string | null = null
     if (locationCode) {
@@ -47,6 +53,7 @@ export async function GET(request: Request) {
         end_time,
         max_students,
         is_course_type,
+        portal_service_role,
         instance_data_ext,
         program:v2_program!inner(
           id,
@@ -94,6 +101,9 @@ export async function GET(request: Request) {
     if (franchiseId) {
       query = query.eq("program.franchise_id", franchiseId)
     }
+    if (portalServiceRole) {
+      query = query.eq("portal_service_role", portalServiceRole)
+    }
 
     const { data: rows, error } = await query
 
@@ -108,10 +118,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // C-end: only show course-type instances (design: PORTAL_OFFERING_TYPE_DESIGN)
-    let list = ((rows || []) as any[]).filter((row: any) => row?.is_course_type === true)
-    const getStart = (row: any) => row?.start_date ?? row?.instance_data_ext?.start_date ?? ""
-    const getStartTime = (row: any) => row?.start_time ?? row?.instance_data_ext?.start_time ?? ""
+    // C-end: when portal_service_role filter is set, return those instances; otherwise only show course-type instances (design: PORTAL_OFFERING_TYPE_DESIGN, INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN)
+    let list = (rows || []) as any[]
+    if (portalServiceRole) {
+      list = list.filter((row: any) => row?.portal_service_role === portalServiceRole)
+    } else {
+      list = list.filter((row: any) => row?.is_course_type === true)
+    }
+    const getStart = (row: any) => {
+      const ext = row?.instance_data_ext
+      const s = ext?.schedule
+      return row?.start_date ?? ext?.start_date ?? (s && typeof s === "object" ? s.start_date : undefined) ?? ""
+    }
+    const getStartTime = (row: any) => {
+      const ext = row?.instance_data_ext
+      const s = ext?.schedule
+      return row?.start_time ?? ext?.start_time ?? (s && typeof s === "object" ? s.start_time : undefined) ?? ""
+    }
     list = list.sort((a, b) => {
       const sa = getStart(a)
       const sb = getStart(b)
@@ -121,7 +144,7 @@ export async function GET(request: Request) {
 
     if (list.length === 0) {
       const { count: instanceCount } = await supabaseAdmin.from("v2_instance").select("*", { count: "exact", head: true })
-      console.log("[Public instances-v2] No rows returned. Diagnostic: v2_instance total count:", instanceCount, "filter: categoryId=", categoryId, "franchiseId=", franchiseId)
+      console.log("[Public instances-v2] No rows returned. Diagnostic (v2_instance only): total count=", instanceCount, "filter: categoryId=", categoryId, "franchiseId=", franchiseId, "portal_service_role=", portalServiceRole)
     }
 
     const franchiseMap = new Map<
@@ -179,16 +202,19 @@ export async function GET(request: Request) {
       }
       const programData = franchiseData.programs.get(programKey)!
       const extData = row.instance_data_ext ?? {}
-      const maxStudents = row.max_students ?? extData.max_students ?? 0
+      const schedule = extData.schedule && typeof extData.schedule === "object" ? extData.schedule : null
+      const capacityPrice = extData.capacity_price && typeof extData.capacity_price === "object" ? extData.capacity_price : null
+      const audience = extData.audience && typeof extData.audience === "object" ? extData.audience : null
+      const maxStudents = row.max_students ?? extData.max_students ?? capacityPrice?.max_students ?? 0
       const currentStudents = row.current_students ?? 0
-      const targetGrades = extData.target_grades
+      const targetGrades = audience?.target_grades ?? extData.target_grades
       const gradeLevel = Array.isArray(targetGrades) && targetGrades.length > 0 ? targetGrades[0] : null
       programData.instances.push({
         id: row.id,
-        start_date: row.start_date ?? extData.start_date ?? null,
-        end_date: row.end_date ?? extData.end_date ?? null,
-        start_time: row.start_time ?? extData.start_time ?? null,
-        end_time: row.end_time ?? extData.end_time ?? null,
+        start_date: row.start_date ?? extData.start_date ?? schedule?.start_date ?? null,
+        end_date: row.end_date ?? extData.end_date ?? schedule?.end_date ?? null,
+        start_time: row.start_time ?? extData.start_time ?? schedule?.start_time ?? null,
+        end_time: row.end_time ?? extData.end_time ?? schedule?.end_time ?? null,
         max_students: maxStudents || null,
         current_students: currentStudents,
         status: row.status,

@@ -45,6 +45,7 @@ import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Ca
 import { toast } from "sonner"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
+import { iterateInstanceSchemaFieldsForDisplay } from "@/lib/instance-schema"
 
 interface BlazeProgram {
   id: string
@@ -601,26 +602,21 @@ export default function BlazeProgramsManagementPage() {
     }
   }
 
-  // Render schema-driven instance_data_ext fields for the View modal (display_scope admin or both)
+  // Render schema-driven instance_data_ext fields for the View modal (supports object groups; display_scope admin or both)
   const renderInstanceSchemaFields = (instance: any) => {
-    const schema = instance?.offering?.offering_type?.instance_schema?.fields as Record<string, { type?: string; label?: string; options?: string[] }> | undefined
+    const schema = instance?.offering?.offering_type?.instance_schema?.fields
     const ext = (instance?.instance_data_ext || {}) as Record<string, unknown>
     if (!schema || typeof schema !== "object") return null
-    const entries = Object.entries(schema).filter(([_, config]) => {
-      if (!config) return false
-      const scope = (config as any).display_scope
-      return scope === "admin" || scope === "both" || scope === undefined
-    })
+    const entries = Array.from(
+      iterateInstanceSchemaFieldsForDisplay(schema, ext, { displayScope: "both", flatten: true })
+    ).filter((e) => e.value !== undefined && e.value !== null && e.value !== "")
     if (entries.length === 0) return null
     return (
       <div className="space-y-4 mt-6">
         <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Additional details</h3>
         <div className="space-y-3">
-          {entries.map(([key, config]) => {
-            const label = (config as any).label || key
-            const value = ext[key]
-            const display = formatSchemaValue(value, config as any)
-            if (display === "—" && (config as any).required !== true) return null
+          {entries.map(({ key, label, value, type: fieldType, options: fieldOptions }) => {
+            const display = formatSchemaValue(value, { type: fieldType ?? (typeof value === "number" ? "number" : Array.isArray(value) ? "multiselect" : "text"), options: fieldOptions })
             return (
               <div key={key} className="flex justify-between items-center py-3 border-b border-slate-50">
                 <span className="text-sm text-slate-500">{label}</span>

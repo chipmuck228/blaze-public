@@ -2,6 +2,28 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
+/** Flatten nested type_config_data (e.g. pricing.base_price, content.description) for v2_offering table columns. */
+function flattenTypeConfigDataForTable(config: Record<string, unknown> | null | undefined): {
+  base_price?: number | null
+  currency?: string | null
+  description?: string | null
+  target_audience?: string | null
+  learning_outcomes?: string | null
+  prerequisites?: string | null
+} {
+  if (!config || typeof config !== 'object') return {}
+  const p = config.pricing as Record<string, unknown> | undefined
+  const c = config.content as Record<string, unknown> | undefined
+  return {
+    base_price: (p?.base_price != null ? Number(p.base_price) : config.base_price != null ? Number(config.base_price) : null) ?? undefined,
+    currency: (p?.currency != null ? String(p.currency) : config.currency != null ? String(config.currency) : null) ?? undefined,
+    description: (c?.description != null ? String(c.description) : config.description != null ? String(config.description) : null) ?? undefined,
+    target_audience: (c?.target_audience != null ? String(c.target_audience) : config.target_audience != null ? String(config.target_audience) : null) ?? undefined,
+    learning_outcomes: (c?.learning_outcomes != null ? String(c.learning_outcomes) : config.learning_outcomes != null ? String(config.learning_outcomes) : null) ?? undefined,
+    prerequisites: (c?.prerequisites != null ? String(c.prerequisites) : config.prerequisites != null ? String(config.prerequisites) : null) ?? undefined,
+  }
+}
+
 // 获取所有 offerings (使用 v2_offering 表)
 export async function GET(request: Request) {
   try {
@@ -190,7 +212,8 @@ export async function POST(request: Request) {
       ...categoryConfigBase,
       ...userConfigData,
     }
-    
+    const flattened = flattenTypeConfigDataForTable(configData as Record<string, unknown>)
+
     // 基础验证：如果 offering_schema 存在且有 fields，验证必需字段
     if (offeringType.offering_schema && typeof offeringType.offering_schema === 'object') {
       const schema = offeringType.offering_schema as any
@@ -252,12 +275,12 @@ export async function POST(request: Request) {
       .insert({
         name,
         slug: slug ? String(slug).trim().toLowerCase() : null,
-        description: description || null,
-        target_audience: target_audience || null,
-        learning_outcomes: learning_outcomes || null,
-        prerequisites: prerequisites || null,
-        base_price: base_price || null,
-        currency: currency || 'USD',
+        description: description ?? flattened.description ?? null,
+        target_audience: target_audience ?? flattened.target_audience ?? null,
+        learning_outcomes: learning_outcomes ?? flattened.learning_outcomes ?? null,
+        prerequisites: prerequisites ?? flattened.prerequisites ?? null,
+        base_price: base_price ?? flattened.base_price ?? null,
+        currency: currency ?? flattened.currency ?? 'USD',
         poster_url: poster_url || null,
         category_id,
         offering_type_id,

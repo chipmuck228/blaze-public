@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useState, useEffect, type ReactNode } from "react"
+import { useParams, usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
@@ -17,9 +17,15 @@ import {
   Target,
   FileText,
   DollarSign,
+  Check,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import { InstanceRecommendations } from "@/components/category/InstanceRecommendations"
+import { MealCareServiceBlock } from "@/components/category/MealCareServiceBlock"
+import { flattenInstanceDataExtForDisplay, iterateInstanceSchemaFieldsForDisplay } from "@/lib/instance-schema"
 
 /** Renders HTML (from WYSIWYG editor) or Markdown with consistent prose styling. */
 function RichTextContent({ content, className = "" }: { content: string; className?: string }) {
@@ -67,7 +73,7 @@ function RichTextContent({ content, className = "" }: { content: string; classNa
 }
 
 const OFFERING_TYPE_LABELS: Record<string, { overview: string; audience: string; outcomes: string; prerequisites: string }> = {
-  course: { overview: "Program Overview", audience: "Target Audience", outcomes: "What You'll Learn", prerequisites: "Prerequisites" },
+  course: { overview: "Course Overview", audience: "Target Audience", outcomes: "What You'll Learn", prerequisites: "Prerequisites" },
   camp: { overview: "Camp Overview", audience: "Who It's For", outcomes: "Camp Highlights", prerequisites: "Requirements" },
   workshop: { overview: "Workshop Overview", audience: "Who It's For", outcomes: "What You'll Gain", prerequisites: "Prerequisites" },
   free_trial: { overview: "Trial Overview", audience: "Who It's For", outcomes: "What to Expect", prerequisites: "Requirements" },
@@ -101,7 +107,9 @@ export interface InstanceDetailData {
     slug?: string
     poster_url?: string
     type_config_data: Record<string, unknown>
-    offering_type?: { id: string; code: string; name: string }
+    /** C-end detail: show Meal/Care blocks (INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN) */
+    portal_config?: { show_meal_service?: boolean; show_care_service?: boolean }
+    offering_type?: { id: string; code: string; name: string; instance_schema?: { fields?: Record<string, unknown> }; offering_schema?: { fields?: Record<string, unknown> } }
     base_price?: number
     currency?: string
   }
@@ -130,6 +138,7 @@ function formatTime(timeStr: string | null): string {
 
 export function InstanceDetail() {
   const params = useParams()
+  const pathname = usePathname()
   const router = useRouter()
   const instanceId = typeof params?.instanceId === "string" ? params.instanceId : ""
   const categorySlug = typeof params?.categorySlug === "string" ? params.categorySlug : ""
@@ -143,6 +152,14 @@ export function InstanceDetail() {
       document.title = `${data.offering.name} | Blaze Robotics`
     }
   }, [data?.offering?.name])
+
+  // Keep location in URL so Navbar can show it (pathname starts with /category/ and Navbar reads ?location or ?franchise)
+  useEffect(() => {
+    if (typeof window === "undefined" || !data?.program?.franchise?.code) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("location") || params.get("franchise")) return
+    router.replace(`${pathname}?location=${encodeURIComponent(data.program.franchise.code)}`)
+  }, [data?.program?.franchise?.code, pathname, router])
 
   useEffect(() => {
     if (!instanceId) {
@@ -199,13 +216,32 @@ export function InstanceDetail() {
   const category = data.program?.category
   const franchise = data.program?.franchise
   const config = data.offering?.type_config_data ?? {}
+  const portalConfig = data.offering?.portal_config ?? (config?.portal_config as { show_meal_service?: boolean; show_care_service?: boolean } | undefined) ?? {}
+  const showMealService = !!portalConfig.show_meal_service
+  const showCareService = !!portalConfig.show_care_service
+  if (typeof window !== "undefined") {
+    console.log("[InstanceDetail] Meal/Care blocks:", {
+      portal_config: data.offering?.portal_config,
+      portalConfig_from_config: config?.portal_config,
+      portalConfig_resolved: portalConfig,
+      show_meal_service: portalConfig.show_meal_service,
+      show_care_service: portalConfig.show_care_service,
+      showMealService,
+      showCareService,
+    })
+  }
+  const categorySlugNorm = categorySlug || (category?.name ? String(category.name).replace(/_/g, "-") : "")
   const ext = data.instance_data_ext ?? {}
-  const price = data.price_override ?? data.offering?.base_price ?? config.base_price ?? 0
-  const currency = (data.offering?.currency ?? config.currency ?? "USD") as string
-  const description = (config.description ?? data.offering?.name) as string | undefined
-  const targetAudience = config.target_audience as string | undefined
-  const learningOutcomes = config.learning_outcomes as string | undefined
-  const prerequisites = config.prerequisites as string | undefined
+  const instanceSchemaFields = data.offering?.offering_type?.instance_schema?.fields as Record<string, { type?: string; label?: string; display_scope?: string }> | undefined
+  const offeringSchemaFields = data.offering?.offering_type?.offering_schema?.fields as Record<string, { type?: string; label?: string; display_scope?: string }> | undefined
+  const flatExt = instanceSchemaFields ? flattenInstanceDataExtForDisplay(instanceSchemaFields, ext) : (ext as Record<string, unknown>)
+  const flatConfig = offeringSchemaFields ? flattenInstanceDataExtForDisplay(offeringSchemaFields, config) : (config as Record<string, unknown>)
+  const price = data.price_override ?? data.offering?.base_price ?? (flatConfig?.base_price as number | undefined) ?? 0
+  const currency = (data.offering?.currency ?? (flatConfig?.currency as string | undefined) ?? "USD") as string
+  const description = ((flatConfig?.description as string | undefined) ?? data.offering?.name) as string | undefined
+  const targetAudience = flatConfig?.target_audience as string | undefined
+  const learningOutcomes = flatConfig?.learning_outcomes as string | undefined
+  const prerequisites = flatConfig?.prerequisites as string | undefined
   const posterUrl = data.offering?.poster_url
   const dates =
     data.start_date && data.end_date
@@ -220,8 +256,8 @@ export function InstanceDetail() {
         ? formatTime(data.start_time)
         : ""
   const locationName = data.location?.name ?? franchise?.name ?? "Multiple locations"
-  const ageMin = (ext.age_min ?? config.age_min) as number | undefined
-  const ageMax = (ext.age_max ?? config.age_max) as number | undefined
+  const ageMin = (flatExt.age_min ?? config.age_min) as number | undefined
+  const ageMax = (flatExt.age_max ?? config.age_max) as number | undefined
   const ageGroup =
     ageMin != null && ageMax != null
       ? `Ages ${ageMin}–${ageMax}`
@@ -264,16 +300,13 @@ export function InstanceDetail() {
           )}
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 pb-24">
-          <Button
-            variant="ghost"
-            className="text-slate-400 hover:text-white mb-8 -ml-2"
-            asChild
+          <Link
+            href={`/programs${franchise?.code ? `?location=${encodeURIComponent(franchise.code)}` : ""}`}
+            className="inline-flex items-center gap-2 mb-8 px-4 py-2.5 rounded-xl border border-white/20 bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 hover:border-white/30 transition-all duration-200 text-sm font-medium backdrop-blur-sm"
           >
-            <Link href={categorySlug ? `/category/${categorySlug}` : "/"} className="inline-flex items-center">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to programs
-            </Link>
-          </Button>
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span>Programs</span>
+          </Link>
           <div className="flex flex-col md:flex-row gap-8 items-start">
             <div className="flex-grow">
               <div className="flex flex-wrap gap-3 mb-4">
@@ -376,7 +409,7 @@ export function InstanceDetail() {
               </section>
             )}
 
-            {/* Extra type_config_data / instance_data_ext fields */}
+            {/* Offering (type_config_data) + Instance (instance_data_ext) details; both flattened by schema to avoid [object Object] */}
             {(() => {
               const omit = new Set([
                 "description",
@@ -385,27 +418,96 @@ export function InstanceDetail() {
                 "prerequisites",
                 "base_price",
                 "currency",
+                "portal_config",
                 "age_min",
                 "age_max",
+                "price_override",
               ])
-              const fromConfig = Object.entries(config).filter(([k, v]) => !omit.has(k) && v != null && v !== "")
-              const fromExt = Object.entries(ext).filter(([k]) => !omit.has(k))
-              const extra = [...fromConfig, ...fromExt]
-              if (extra.length === 0) return null
+              const WEEKDAY_NAMES = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+              const isDisplayable = (v: unknown) =>
+                v !== undefined && v !== null && v !== "" && (typeof v !== "object" || Array.isArray(v))
+              const renderDetailValue = (value: unknown, key?: string, label?: string): ReactNode => {
+                if (typeof value === "boolean") {
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "inline-flex items-center gap-1.5 font-medium",
+                        value
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-100 text-slate-500"
+                      )}
+                    >
+                      {value ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                    </Badge>
+                  )
+                }
+                return formatDetailValue(value, key, label)
+              }
+              const formatDetailValue = (v: unknown, key?: string, label?: string): string => {
+                if (v == null) return "—"
+                if (typeof v === "boolean") {
+                  if (label && String(label).includes("是否提供")) return v ? "提供" : "不提供"
+                  return v ? "是" : "否"
+                }
+                if (key === "days_of_week") {
+                  const arr = Array.isArray(v) ? (v as (number | string)[]) : [v]
+                  const names = arr
+                    .map((d) => (typeof d === "number" ? WEEKDAY_NAMES[d] : WEEKDAY_NAMES[Number(d)]))
+                    .filter(Boolean)
+                  return names.length ? names.join("、") : "—"
+                }
+                if (Array.isArray(v)) return v.join(", ")
+                if (typeof v === "object") return "—"
+                return String(v)
+              }
+              const offeringEntries = offeringSchemaFields
+                ? Array.from(iterateInstanceSchemaFieldsForDisplay(offeringSchemaFields, config, { displayScope: "web", flatten: true }))
+                    .filter((e) => !omit.has(e.key) && isDisplayable(e.value))
+                    .map((e) => [e.label, e.value, e.key] as const)
+                : Object.entries(flatConfig)
+                    .filter(([k, v]) => !omit.has(k) && isDisplayable(v))
+                    .map(([k, v]) => [k.replace(/_/g, " "), v, k] as const)
+              const instanceEntries = instanceSchemaFields
+                ? Array.from(iterateInstanceSchemaFieldsForDisplay(instanceSchemaFields, ext, { displayScope: "web", flatten: true }))
+                    .filter((e) => !omit.has(e.key) && isDisplayable(e.value))
+                    .map((e) => [e.label, e.value, e.key] as const)
+                : Object.entries(flatExt)
+                    .filter(([k]) => !omit.has(k) && isDisplayable(flatExt[k]))
+                    .map(([k, v]) => [k.replace(/_/g, " "), v, k] as const)
+              const hasOffering = offeringEntries.length > 0
+              const hasInstance = instanceEntries.length > 0
+              if (!hasOffering && !hasInstance) return null
               return (
                 <section className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
                   <h2 className="text-2xl font-bold text-slate-900 mb-4">Details</h2>
                   <dl className="grid gap-3 sm:grid-cols-2">
-                    {extra.map(([key, value]) => (
-                      <div key={key} className="border-b border-slate-100 pb-2">
-                        <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                          {key.replace(/_/g, " ")}
-                        </dt>
-                        <dd className="text-slate-700 mt-1">
-                          {Array.isArray(value) ? value.join(", ") : String(value)}
-                        </dd>
-                      </div>
-                    ))}
+                    {hasOffering && (
+                      <>
+                        <div className="sm:col-span-2">
+                          <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Offering</h3>
+                        </div>
+                        {offeringEntries.map(([label, value, key]) => (
+                          <div key={`offering-${String(label)}`} className="border-b border-slate-100 pb-2">
+                            <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</dt>
+                            <dd className="text-slate-700 mt-1">{renderDetailValue(value, key, label)}</dd>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {hasInstance && (
+                      <>
+                        <div className="sm:col-span-2">
+                          <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mt-2">This session</h3>
+                        </div>
+                        {instanceEntries.map(([label, value, key]) => (
+                          <div key={`instance-${String(label)}`} className="border-b border-slate-100 pb-2">
+                            <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</dt>
+                            <dd className="text-slate-700 mt-1">{renderDetailValue(value, key, label)}</dd>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </dl>
                 </section>
               )
@@ -469,12 +571,41 @@ export function InstanceDetail() {
               </Button>
             </div>
 
+            {(showMealService || showCareService) && (
+              <>
+                {showMealService && (
+                  <MealCareServiceBlock
+                    role="meal_service"
+                    title="Meal Service"
+                    description="Add lunch or meal service for this program."
+                    locationCode={franchise?.code}
+                    categoryId={category?.id}
+                    categorySlug={categorySlugNorm}
+                    excludeInstanceId={data.id}
+                    maxItems={4}
+                  />
+                )}
+                {showCareService && (
+                  <MealCareServiceBlock
+                    role="care_service"
+                    title="Care Service"
+                    description="Add after-care or care service for this program."
+                    locationCode={franchise?.code}
+                    categoryId={category?.id}
+                    categorySlug={categorySlugNorm}
+                    excludeInstanceId={data.id}
+                    maxItems={4}
+                  />
+                )}
+              </>
+            )}
+
             {data.offering?.offering_type?.id && (
               <InstanceRecommendations
                 offeringTypeId={data.offering.offering_type.id}
                 excludeOfferingId={data.offering.id}
                 categoryId={category?.id}
-                categorySlug={categorySlug || (category?.name ? String(category.name).replace(/_/g, "-") : "")}
+                categorySlug={categorySlugNorm}
               />
             )}
           </div>

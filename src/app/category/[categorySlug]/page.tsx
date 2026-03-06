@@ -574,7 +574,7 @@ function CategoryPageContent() {
                                     key={instance.id}
                                     className="group bg-white rounded-[32px] overflow-hidden border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col h-full"
                                   >
-                                    <Link href={`/category/${categorySlug}/instance/${instance.id}`} className="block flex flex-col flex-grow">
+                                    <Link href={`/category/${categorySlug}/instance/${instance.id}${locationSlug ? `?location=${encodeURIComponent(locationSlug)}` : ""}`} className="block flex flex-col flex-grow">
                                       <div className="h-64 relative overflow-hidden">
                                         <Image
                                           src={image}
@@ -631,7 +631,7 @@ function CategoryPageContent() {
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <Link
-                                          href={`/category/${categorySlug}/instance/${instance.id}`}
+                                          href={`/category/${categorySlug}/instance/${instance.id}${locationSlug ? `?location=${encodeURIComponent(locationSlug)}` : ""}`}
                                           className="bg-[#0f172a] hover:bg-slate-800 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all inline-flex items-center justify-center"
                                         >
                                           <ArrowRight className="w-4 h-4 md:mr-2 transition-transform group-hover:translate-x-1" />

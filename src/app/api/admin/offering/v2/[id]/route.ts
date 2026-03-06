@@ -2,6 +2,28 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
+/** Flatten nested type_config_data for v2_offering table columns. */
+function flattenTypeConfigDataForTable(config: Record<string, unknown> | null | undefined): {
+  base_price?: number | null
+  currency?: string | null
+  description?: string | null
+  target_audience?: string | null
+  learning_outcomes?: string | null
+  prerequisites?: string | null
+} {
+  if (!config || typeof config !== 'object') return {}
+  const p = config.pricing as Record<string, unknown> | undefined
+  const c = config.content as Record<string, unknown> | undefined
+  return {
+    base_price: (p?.base_price != null ? Number(p.base_price) : config.base_price != null ? Number(config.base_price) : null) ?? undefined,
+    currency: (p?.currency != null ? String(p.currency) : config.currency != null ? String(config.currency) : null) ?? undefined,
+    description: (c?.description != null ? String(c.description) : config.description != null ? String(config.description) : null) ?? undefined,
+    target_audience: (c?.target_audience != null ? String(c.target_audience) : config.target_audience != null ? String(config.target_audience) : null) ?? undefined,
+    learning_outcomes: (c?.learning_outcomes != null ? String(c.learning_outcomes) : config.learning_outcomes != null ? String(config.learning_outcomes) : null) ?? undefined,
+    prerequisites: (c?.prerequisites != null ? String(c.prerequisites) : config.prerequisites != null ? String(config.prerequisites) : null) ?? undefined,
+  }
+}
+
 // 获取单个 offering (使用 v2_offering 表)
 export async function GET(
   request: Request,
@@ -101,10 +123,10 @@ export async function PUT(
     const targetOfferingTypeId = offering_type_id || existing.offering_type_id
     const targetCategoryId = category_id || existing.category_id
 
-    // 获取 offering type 的 schema（用于验证）
+    // 获取 offering type 的 schema 与 portal_service_role（用于验证及 instance 同步回退）
     const { data: offeringType, error: offeringTypeError } = await supabaseAdmin
       .from("v2_offering_type")
-      .select("id, is_active, offering_schema")
+      .select("id, is_active, offering_schema, portal_service_role")
       .eq("id", targetOfferingTypeId)
       .single()
 
@@ -174,6 +196,8 @@ export async function PUT(
       }
     }
     
+    const flattened = configData !== undefined ? flattenTypeConfigDataForTable(configData as Record<string, unknown>) : null
+
     // 如果提供了 configData，进行基础验证
     if (configData !== undefined && offeringType.offering_schema && typeof offeringType.offering_schema === 'object') {
       const schema = offeringType.offering_schema as any
@@ -236,11 +260,17 @@ export async function PUT(
     if (name !== undefined) updateData.name = name
     if (slug !== undefined) updateData.slug = slug ? String(slug).trim().toLowerCase() : null
     if (description !== undefined) updateData.description = description || null
+    else if (flattened?.description !== undefined) updateData.description = flattened.description ?? null
     if (target_audience !== undefined) updateData.target_audience = target_audience || null
+    else if (flattened?.target_audience !== undefined) updateData.target_audience = flattened.target_audience ?? null
     if (learning_outcomes !== undefined) updateData.learning_outcomes = learning_outcomes || null
+    else if (flattened?.learning_outcomes !== undefined) updateData.learning_outcomes = flattened.learning_outcomes ?? null
     if (prerequisites !== undefined) updateData.prerequisites = prerequisites || null
+    else if (flattened?.prerequisites !== undefined) updateData.prerequisites = flattened.prerequisites ?? null
     if (base_price !== undefined) updateData.base_price = base_price || null
+    else if (flattened?.base_price !== undefined) updateData.base_price = flattened.base_price ?? null
     if (currency !== undefined) updateData.currency = currency
+    else if (flattened?.currency !== undefined) updateData.currency = flattened.currency ?? 'USD'
     if (poster_url !== undefined) updateData.poster_url = poster_url || null
     if (category_id !== undefined) updateData.category_id = category_id
     if (offering_type_id !== undefined) updateData.offering_type_id = offering_type_id
@@ -287,30 +317,36 @@ export async function PUT(
       )
     }
 
-    // Sync is_course_type to all instances of this offering (design: PORTAL_OFFERING_TYPE_DESIGN, INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN)
+    // Sync is_course_type and portal_service_role to all instances of this offering (design: PORTAL_OFFERING_TYPE_DESIGN, INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3)
     if (configData !== undefined && typeof configData === "object" && configData !== null) {
       const portalConfig = configData.portal_config
       const isCourseType =
         portalConfig && typeof portalConfig === "object" && typeof portalConfig.is_course_type === "boolean"
           ? portalConfig.is_course_type
           : undefined
-      if (isCourseType !== undefined) {
-        const instanceUpdate = { is_course_type: isCourseType }
+      const rawRole = configData.portal_service_role
+      const typeRole = offeringType?.portal_service_role
+      // 优先用 type_config_data.portal_service_role；缺省时用 type 级 portal_service_role，确保 care/lunch 类型即使 schema 未包含该字段也能同步到 instance
+      const portalServiceRole =
+        rawRole === "meal_service" || rawRole === "care_service"
+          ? rawRole
+          : typeRole === "meal_service" || typeRole === "care_service"
+            ? typeRole
+            : null
+
+      const instanceUpdate: Record<string, unknown> = {}
+      if (isCourseType !== undefined) instanceUpdate.is_course_type = isCourseType
+      instanceUpdate.portal_service_role = portalServiceRole
+
+      if (Object.keys(instanceUpdate).length > 0) {
         const { error: instanceErr } = await supabaseAdmin
           .from("v2_instance")
           .update(instanceUpdate)
           .eq("offering_id", id)
         if (instanceErr) {
-          console.error("Error syncing is_course_type to v2_instance:", instanceErr)
+          console.error("Error syncing to v2_instance:", instanceErr)
         }
-        // If project uses instance_v2 table for enrollments/orders, sync there too
-        const { error: instanceV2Err } = await supabaseAdmin
-          .from("instance_v2")
-          .update(instanceUpdate)
-          .eq("offering_id", id)
-        if (instanceV2Err) {
-          console.error("Error syncing is_course_type to instance_v2 (table may not exist or lack column):", instanceV2Err.message)
-        }
+        // instance_v2 已废弃，仅同步 v2_instance
       }
     }
 
