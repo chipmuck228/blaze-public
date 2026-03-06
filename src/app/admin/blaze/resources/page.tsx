@@ -575,7 +575,7 @@ export default function BlazeResourcesManagementPage() {
 
       {/* Category dialog */}
       <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-xl md:max-w-2xl">
+        <DialogContent className="max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
             <DialogDescription>
@@ -662,7 +662,7 @@ export default function BlazeResourcesManagementPage() {
 
       {/* Resource dialog */}
       <Dialog open={isResourceDialogOpen} onOpenChange={setIsResourceDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingResource ? "Edit Resource" : "Add Resource"}</DialogTitle>
             <DialogDescription>
