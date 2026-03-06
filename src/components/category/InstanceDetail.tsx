@@ -72,7 +72,17 @@ function RichTextContent({ content, className = "" }: { content: string; classNa
   )
 }
 
-const OFFERING_TYPE_LABELS: Record<string, { overview: string; audience: string; outcomes: string; prerequisites: string }> = {
+const SECTION_LABELS_DEFAULT = {
+  overview: "Overview",
+  audience: "Audience",
+  outcomes: "Outcomes",
+  prerequisites: "Prerequisites",
+} as const
+
+type SectionLabels = { overview: string; audience: string; outcomes: string; prerequisites: string }
+
+/** Overrides per offering type; unknown types fall back to SECTION_LABELS_DEFAULT. */
+const OFFERING_TYPE_LABEL_OVERRIDES: Record<string, Partial<SectionLabels>> = {
   course: { overview: "Course Overview", audience: "Target Audience", outcomes: "What You'll Learn", prerequisites: "Prerequisites" },
   camp: { overview: "Camp Overview", audience: "Who It's For", outcomes: "Camp Highlights", prerequisites: "Requirements" },
   workshop: { overview: "Workshop Overview", audience: "Who It's For", outcomes: "What You'll Gain", prerequisites: "Prerequisites" },
@@ -117,9 +127,10 @@ export interface InstanceDetailData {
   is_full: boolean
 }
 
-function getTypeLabels(code?: string) {
-  const key = (code ?? "course").toLowerCase()
-  return OFFERING_TYPE_LABELS[key] ?? OFFERING_TYPE_LABELS.course
+function getTypeLabels(code?: string): SectionLabels {
+  const key = (code ?? "").toLowerCase()
+  const overrides = key ? OFFERING_TYPE_LABEL_OVERRIDES[key] : undefined
+  return { ...SECTION_LABELS_DEFAULT, ...overrides } as SectionLabels
 }
 
 function formatDate(dateStr: string | null): string {
