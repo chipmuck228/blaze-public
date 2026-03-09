@@ -622,7 +622,7 @@ export function InstanceCreateDialog({
         )
       }
 
-      case 'array':
+      case 'array': {
         if (fieldConfig.items?.type === 'string') {
           return (
             <div key={fieldName} className="space-y-1.5">
@@ -644,7 +644,73 @@ export function InstanceCreateDialog({
             </div>
           )
         }
+        // array of objects (e.g. recurrence.schedule_patterns: [{ frequency, weekday }])
+        if (fieldConfig.items?.type === 'object' && fieldConfig.items?.properties) {
+          const itemSchema = fieldConfig.items.properties as Record<string, any>
+          const arr = Array.isArray(value) ? value : []
+          const str = (v: any) => (v === undefined || v === null ? '' : String(v))
+          return (
+            <div key={fieldName} className="space-y-1.5">
+              {labelEl}
+              <div className="space-y-3">
+                {arr.map((item: Record<string, any>, index: number) => (
+                  <div key={index} className="flex flex-wrap items-end gap-2 rounded border p-2 bg-muted/30">
+                    {Object.entries(itemSchema).map(([propKey, propConfig]) => {
+                      const propVal = item && item[propKey]
+                      const optValues = propConfig.options ?? []
+                      const optionLabels = propConfig.option_labels ?? optValues.map(str)
+                      if (propConfig.type === 'select') {
+                        return (
+                          <div key={propKey} className="space-y-1 min-w-[100px]">
+                            <Label className="text-xs text-muted-foreground">{propConfig.label || propKey}</Label>
+                            <Select
+                              value={str(propVal)}
+                              onValueChange={(val) => {
+                                const next = [...arr]
+                                const numVal = Number(val)
+                                const isNumericOption = !isNaN(numVal) && optValues.some((o: any) => Number(o) === numVal)
+                                const stored = isNumericOption ? numVal : val
+                                const nextItem = { ...(next[index] ?? {}), [propKey]: stored }
+                                next[index] = nextItem
+                                onChange(next)
+                              }}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder={propConfig.placeholder ?? 'Select...'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {optValues.map((opt: any, idx: number) => (
+                                  <SelectItem key={str(opt)} value={str(opt)}>{optionLabels[idx] ?? str(opt)}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )
+                      }
+                      return null
+                    })}
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { const next = [...arr]; next.splice(index, 1); onChange(next) }}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
+                  const defaultItem: Record<string, any> = {}
+                  Object.entries(itemSchema).forEach(([k, c]) => {
+                    if (c?.type === 'select' && c.options?.length) defaultItem[k] = c.options[0]
+                    else defaultItem[k] = c?.default ?? ''
+                  })
+                  onChange([...arr, defaultItem])
+                }}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add
+                </Button>
+              </div>
+              {descEl}
+            </div>
+          )
+        }
         return null
+      }
 
       case 'date':
         return (
@@ -668,7 +734,7 @@ export function InstanceCreateDialog({
     const commonFieldNames = new Set(Object.values(COMMON_FIELD_MAPPING))
     commonFieldNames.add('start_date')
     commonFieldNames.add('end_date')
-    const objectGroupOrder = ['schedule', 'capacity_price', 'age_range', 'audience', 'class_info', 'camp_services', 'event_info', 'workshop_info', 'service_info', 'card_value', 'recipient_delivery', 'greeting', 'additional']
+    const objectGroupOrder = ['schedule', 'capacity_price', 'recurrence', 'age_range', 'audience', 'class_info', 'camp_services', 'event_info', 'workshop_info', 'service_info', 'card_value', 'recipient_delivery', 'greeting', 'additional']
 
     const extendedNames = (Object.keys(schema) as string[]).filter((name) => !commonFieldNames.has(name))
     const orderIndex = (name: string) => {

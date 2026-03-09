@@ -568,7 +568,7 @@ export default function BlazeProgramsManagementPage() {
   }
 
   // Format instance_data_ext value for display based on instance_schema field type
-  const formatSchemaValue = (value: unknown, fieldConfig: { type?: string; options?: string[] }): string => {
+  const formatSchemaValue = (value: unknown, fieldConfig: { type?: string; options?: unknown[] }): string => {
     if (value === undefined || value === null) return "—"
     switch (fieldConfig?.type) {
       case "boolean":
