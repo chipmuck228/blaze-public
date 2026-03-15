@@ -534,6 +534,8 @@ export default function AdminGuidePage() {
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 <strong>Offering Type</strong> is the config brain: it defines what fields an Offering and an Instance
                 of that type have. Examples: <code>course</code>, <code>camp</code>, <code>workshop</code>,{" "}
@@ -548,6 +550,24 @@ export default function AdminGuidePage() {
                 </ul>
                 <p className="mt-2">For full schema writing rules, field types, and properties, see <strong>Schema Reference</strong> below.</p>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                <strong>产品类型（Offering Type）</strong>是配置中枢：定义该类型下的产品与场次各有哪些字段。示例：<code>course</code>、<code>camp</code>、<code>workshop</code>、<code>giftcard</code>、<code>competition</code>、<code>free_trial</code>。
+              </p>
+              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                <p><strong>关键字段：</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li><code>offering_schema</code>（JSONB）：产品 <code>type_config_data</code> 的结构</li>
+                  <li><code>instance_schema</code>（JSONB）：场次 <code>instance_data_ext</code> 的结构</li>
+                  <li><code>code</code>、<code>name</code>、<code>display_order</code>、<code>is_active</code></li>
+                </ul>
+                <p className="mt-2">完整 schema 书写规则、字段类型与属性见下方<strong>Schema 参考</strong>。</p>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
