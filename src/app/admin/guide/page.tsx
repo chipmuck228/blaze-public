@@ -57,38 +57,102 @@ function jsonToMarkdownBlock(obj: Record<string, unknown>): string {
 }
 
 // Table of contents: Overview, Operation Guide (collapsible), Deployment Guide (collapsible)
-const overviewItem = { id: "overview", title: "Overview", icon: Info }
+const overviewItem = { id: "overview", titleEn: "Overview", titleZh: "概述", icon: Info }
 const operationItems = [
-  { id: "hierarchy", title: "System Hierarchy", icon: Layers },
-  { id: "workflow", title: "Admin Workflow", icon: List },
-  { id: "offering-type", title: "Offering Type", icon: Shapes },
-  { id: "schema-reference", title: "Schema Reference", icon: Code },
-  { id: "schema-by-type", title: "Schema by Offering Type", icon: Shapes },
-  { id: "portal-config", title: "Portal config & service role (C-end)", icon: Settings },
-  { id: "category", title: "Category", icon: FolderTree },
-  { id: "offering", title: "Offering", icon: Package },
-  { id: "franchise", title: "Franchise & Subscription", icon: MapPin },
-  { id: "program", title: "Program", icon: List },
-  { id: "instance", title: "Instance", icon: Calendar },
-  { id: "design-example", title: "Example: Categories & Programs", icon: LayoutGrid },
-  { id: "notes", title: "Important Notes", icon: BookOpen },
+  { id: "hierarchy", titleEn: "System Hierarchy", titleZh: "系统层级", icon: Layers },
+  { id: "workflow", titleEn: "Admin Workflow", titleZh: "管理流程", icon: List },
+  { id: "offering-type", titleEn: "Offering Type", titleZh: "产品类型", icon: Shapes },
+  { id: "schema-reference", titleEn: "Schema Reference", titleZh: "Schema 参考", icon: Code },
+  { id: "schema-by-type", titleEn: "Schema by Offering Type", titleZh: "按类型的 Schema", icon: Shapes },
+  { id: "portal-config", titleEn: "Portal config & service role (C-end)", titleZh: "Portal 配置与服务角色（C 端）", icon: Settings },
+  { id: "category", titleEn: "Category", titleZh: "分类", icon: FolderTree },
+  { id: "offering", titleEn: "Offering", titleZh: "产品", icon: Package },
+  { id: "franchise", titleEn: "Franchise & Subscription", titleZh: "加盟与订阅", icon: MapPin },
+  { id: "program", titleEn: "Program", titleZh: "项目", icon: List },
+  { id: "instance", titleEn: "Instance", titleZh: "场次", icon: Calendar },
+  { id: "design-example", titleEn: "Example: Categories & Programs", titleZh: "示例：分类与项目", icon: LayoutGrid },
+  { id: "notes", titleEn: "Important Notes", titleZh: "重要说明", icon: BookOpen },
 ]
 const deploymentItems = [
-  { id: "deployment-vercel", title: "Vercel Deployment", icon: CloudCog },
-  { id: "deployment-google-auth", title: "Google Auth", icon: KeyRound },
-  { id: "deployment-google-map", title: "Google Map", icon: Map },
-  { id: "deployment-google-gemini", title: "Google Gemini", icon: Sparkles },
-  { id: "deployment-stripe", title: "Stripe", icon: CreditCard },
+  { id: "deployment-vercel", titleEn: "Vercel Deployment", titleZh: "Vercel 部署", icon: CloudCog },
+  { id: "deployment-google-auth", titleEn: "Google Auth", titleZh: "Google 登录", icon: KeyRound },
+  { id: "deployment-google-map", titleEn: "Google Map", titleZh: "Google 地图", icon: Map },
+  { id: "deployment-google-gemini", titleEn: "Google Gemini", titleZh: "Google Gemini", icon: Sparkles },
+  { id: "deployment-stripe", titleEn: "Stripe", titleZh: "Stripe", icon: CreditCard },
 ]
 const allSectionIds = [overviewItem.id, ...operationItems.map((i) => i.id), ...deploymentItems.map((i) => i.id)]
 
+// Bilingual copy for page and main sections
+const T = {
+  en: {
+    pageTitle: "Admin Guide",
+    pageSubtitle: "V2 schema-driven design: Library vs. Local Shelf, and how to configure offerings and instances",
+    tocTitle: "Table of Contents",
+    operationGuideLabel: "Operation Guide",
+    deploymentGuideLabel: "Deployment Guide",
+    overviewTitle: "Overview",
+    overviewDesc: "Configuration-driven (Schema-Driven) design with a global Library and local Shelf model",
+    operationGuideTitle: "Operation Guide",
+    operationGuideDesc: "Schema-driven workflow and entity reference; click a title to expand or collapse",
+    deploymentGuideTitle: "Deployment Guide",
+    deploymentGuideDesc: "Vercel, Google (Auth / Map / Gemini), Stripe, and environment setup",
+    corePrinciples: "Core principles",
+    threePhaseWorkflow: "Three-Phase Admin Workflow",
+    phase1: "Phase 1: Global resource modeling",
+    phase2: "Phase 2: Franchise initialization",
+    phase3: "Phase 3: Scheduling and publishing",
+    configLayer: "Config layer",
+    library: "Library",
+    whatUsersEnroll: "What users enroll in",
+    schemaByTypeIntro: "Schemas below are loaded from v2_offering_type. Offering schema defines type_config_data on Offerings; instance schema defines instance_data_ext on Instances.",
+    schemaByTypeLoading: "Loading offering types…",
+    schemaByTypeEmpty: "No offering types found. Configure them in Admin → Blaze → Offering Types.",
+    schemaByTypeOfferingLabel: "offering_schema → type_config_data",
+    schemaByTypeInstanceLabel: "instance_schema → instance_data_ext",
+    schemaByTypeFooter: "Full schema definitions, including all field properties (placeholder, description, display_scope), are in docs/design/Database_redesign_document_v2.md. The tables v2_offering.type_config_data and v2_instance.instance_data_ext store the actual values; they are validated against the Offering Type's offering_schema and instance_schema.",
+    badgeInactive: "Inactive",
+  },
+  zh: {
+    pageTitle: "管理后台指南",
+    pageSubtitle: "V2 以 Schema 驱动的设计：图书馆与本地书架，以及如何配置产品与场次",
+    tocTitle: "目录",
+    operationGuideLabel: "操作指南",
+    deploymentGuideLabel: "部署指南",
+    overviewTitle: "概述",
+    overviewDesc: "以配置驱动（Schema 驱动）的设计：全局图书馆与本地书架模型",
+    operationGuideTitle: "操作指南",
+    operationGuideDesc: "Schema 驱动的工作流与实体说明；点击标题展开或折叠",
+    deploymentGuideTitle: "部署指南",
+    deploymentGuideDesc: "Vercel、Google（登录 / 地图 / Gemini）、Stripe 与环境变量配置",
+    corePrinciples: "核心原则",
+    threePhaseWorkflow: "三阶段管理流程",
+    phase1: "阶段一：全局资源建模",
+    phase2: "阶段二：加盟初始化",
+    phase3: "阶段三：排课与发布",
+    configLayer: "配置层",
+    library: "图书馆",
+    whatUsersEnroll: "用户报名对象",
+    schemaByTypeIntro: "以下 Schema 从 v2_offering_type 加载。产品 Schema 定义产品上的 type_config_data；场次 Schema 定义场次上的 instance_data_ext。",
+    schemaByTypeLoading: "正在加载产品类型…",
+    schemaByTypeEmpty: "未找到产品类型。请在 管理后台 → Blaze → 产品类型 中配置。",
+    schemaByTypeOfferingLabel: "offering_schema → type_config_data",
+    schemaByTypeInstanceLabel: "instance_schema → instance_data_ext",
+    schemaByTypeFooter: "完整 Schema 定义（含 placeholder、description、display_scope 等）见 docs/design/Database_redesign_document_v2.md。v2_offering.type_config_data 与 v2_instance.instance_data_ext 存实际数据，会按产品类型的 offering_schema、instance_schema 校验。",
+    badgeInactive: "未启用",
+  },
+} as const
+type Lang = keyof typeof T
+
 export default function AdminGuidePage() {
+  const [lang, setLang] = useState<Lang>("en")
   const [activeSection, setActiveSection] = useState<string>("overview")
   const [operationOpen, setOperationOpen] = useState<string[]>(["hierarchy"])
   const [deploymentOpen, setDeploymentOpen] = useState<string[]>(["deployment-vercel"])
   const [offeringTypes, setOfferingTypes] = useState<V2OfferingTypeSchema[]>([])
   const [offeringTypesLoading, setOfferingTypesLoading] = useState(true)
   const [offeringTypesError, setOfferingTypesError] = useState<string | null>(null)
+  const t = T[lang]
+  const navTitle = (item: { titleEn: string; titleZh: string }) => (lang === "zh" ? item.titleZh : item.titleEn)
 
   useEffect(() => {
     let cancelled = false
@@ -151,7 +215,7 @@ export default function AdminGuidePage() {
       <aside className="hidden lg:block w-64 flex-shrink-0">
         <Card className="sticky top-24">
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Table of Contents</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t.tocTitle}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <nav className="space-y-1 p-4">
@@ -166,10 +230,10 @@ export default function AdminGuidePage() {
                 )}
               >
                 <Info className="h-4 w-4 shrink-0" />
-                <span className="text-left">{overviewItem.title}</span>
+                <span className="text-left">{navTitle(overviewItem)}</span>
               </button>
               <div className="pt-2">
-                <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Operation Guide</p>
+                <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t.operationGuideLabel}</p>
                 {operationItems.map((item) => {
                   const Icon = item.icon
                   const isActive = activeSection === item.id
@@ -184,13 +248,13 @@ export default function AdminGuidePage() {
                       )}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
-                      <span className="text-left">{item.title}</span>
+                      <span className="text-left">{navTitle(item)}</span>
                     </button>
                   )
                 })}
               </div>
               <div className="pt-2">
-                <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deployment Guide</p>
+                <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t.deploymentGuideLabel}</p>
                 {deploymentItems.map((item) => {
                   const Icon = item.icon
                   const isActive = activeSection === item.id
@@ -205,7 +269,7 @@ export default function AdminGuidePage() {
                       )}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
-                      <span className="text-left">{item.title}</span>
+                      <span className="text-left">{navTitle(item)}</span>
                     </button>
                   )
                 })}
@@ -217,11 +281,35 @@ export default function AdminGuidePage() {
 
       {/* Main Content */}
       <div className="flex-1 min-w-0">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Admin Guide</h1>
-          <p className="text-muted-foreground text-lg">
-            V2 schema-driven design: Library vs. Local Shelf, and how to configure offerings and instances
-          </p>
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">{t.pageTitle}</h1>
+            <p className="text-muted-foreground text-lg">
+              {t.pageSubtitle}
+            </p>
+          </div>
+          <div className="flex rounded-lg border border-input bg-muted/30 p-0.5">
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                lang === "en" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang("zh")}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                lang === "zh" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              中文
+            </button>
+          </div>
         </div>
 
         {/* Overview */}
@@ -230,37 +318,53 @@ export default function AdminGuidePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Info className="h-5 w-5" />
-                Overview
+                {t.overviewTitle}
               </CardTitle>
               <CardDescription>
-                Configuration-driven (Schema-Driven) design with a global Library and local Shelf model
+                {t.overviewDesc}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  The V2 data model uses a <strong>Schema-Driven</strong> approach. <strong>Category</strong> and{" "}
-                  <strong>Offering</strong> are global &quot;knowledge library&quot; resources;{" "}
-                  <strong>Franchise</strong> subscribes to categories and turns them into local Programs and Instances
-                  (&quot;local shelf&quot;).
+                  {lang === "zh" ? (
+                    <>V2 数据模型采用<strong> Schema 驱动</strong>：<strong>分类</strong>与<strong>产品</strong>为全局「知识库」资源；<strong>加盟</strong>订阅分类后，在本地创建<strong>项目</strong>与<strong>场次</strong>（「本地书架」）。</>
+                  ) : (
+                    <>The V2 data model uses a <strong>Schema-Driven</strong> approach. <strong>Category</strong> and{" "}
+                    <strong>Offering</strong> are global &quot;knowledge library&quot; resources;{" "}
+                    <strong>Franchise</strong> subscribes to categories and turns them into local Programs and Instances
+                    (&quot;local shelf&quot;).</>
+                  )}
                 </p>
 
                 <div className="bg-muted p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2">Core principles</h3>
+                  <h3 className="font-semibold mb-2">{t.corePrinciples}</h3>
                   <ul className="list-disc list-inside space-y-1 text-sm">
                     <li>
-                      <strong>Schema-Driven:</strong> Offering Type defines <code>offering_schema</code> and{" "}
-                      <code>instance_schema</code>; Offerings and Instances store data in JSONB (
-                      <code>type_config_data</code>, <code>instance_data_ext</code>) validated against these schemas.
+                      {lang === "zh" ? (
+                        <><strong>Schema 驱动：</strong>产品类型定义 <code>offering_schema</code> 与 <code>instance_schema</code>；产品与场次将数据存入 JSONB（<code>type_config_data</code>、<code>instance_data_ext</code>），并按 schema 校验。</>
+                      ) : (
+                        <><strong>Schema-Driven:</strong> Offering Type defines <code>offering_schema</code> and{" "}
+                        <code>instance_schema</code>; Offerings and Instances store data in JSONB (
+                        <code>type_config_data</code>, <code>instance_data_ext</code>) validated against these schemas.</>
+                      )}
                     </li>
                     <li>
-                      <strong>Library vs. Shelf:</strong> Category and Offering are global and independent; Franchise
-                      subscribes to Categories via <code>v2_franchise_category_map</code> and creates Programs and
-                      Instances locally.
+                      {lang === "zh" ? (
+                        <><strong>图书馆 vs 书架：</strong>分类与产品为全局且独立；加盟通过 <code>v2_franchise_category_map</code> 订阅分类，并在本地创建项目与场次。</>
+                      ) : (
+                        <><strong>Library vs. Shelf:</strong> Category and Offering are global and independent; Franchise
+                        subscribes to Categories via <code>v2_franchise_category_map</code> and creates Programs and
+                        Instances locally.</>
+                      )}
                     </li>
                     <li>
-                      <strong>Extensibility:</strong> New product types can be added by defining new Offering Types
-                      and schemas without changing table structure.
+                      {lang === "zh" ? (
+                        <><strong>可扩展：</strong>新增产品类型只需定义新的 Offering Type 与 schema，无需改表结构。</>
+                      ) : (
+                        <><strong>Extensibility:</strong> New product types can be added by defining new Offering Types
+                        and schemas without changing table structure.</>
+                      )}
                     </li>
                   </ul>
                 </div>
@@ -275,9 +379,9 @@ export default function AdminGuidePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <List className="h-5 w-5" />
-                Operation Guide
+                {t.operationGuideTitle}
               </CardTitle>
-              <CardDescription>Schema-driven workflow and entity reference; click a title to expand or collapse</CardDescription>
+              <CardDescription>{t.operationGuideDesc}</CardDescription>
             </CardHeader>
             <CardContent>
               <Accordion type="multiple" value={operationOpen} onValueChange={setOperationOpen} className="w-full">
@@ -285,7 +389,7 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Layers className="h-4 w-4" />
-                      System Hierarchy
+                      {navTitle(operationItems[0])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -300,7 +404,7 @@ export default function AdminGuidePage() {
                         Defines product structure (course, camp, workshop, giftcard…) via offering_schema &amp;
                         instance_schema
                       </div>
-                      <Badge variant="outline" className="mt-1">Config layer</Badge>
+                      <Badge variant="outline" className="mt-1">{t.configLayer}</Badge>
                     </div>
                   </div>
 
@@ -319,7 +423,7 @@ export default function AdminGuidePage() {
                     <div className="flex-1">
                       <div className="font-semibold text-lg">Offering</div>
                       <div className="text-sm text-muted-foreground">Global product definitions (name, price, type_config_data)</div>
-                      <Badge variant="outline" className="mt-1">Library</Badge>
+                      <Badge variant="outline" className="mt-1">{t.library}</Badge>
                     </div>
                   </div>
 
@@ -363,7 +467,7 @@ export default function AdminGuidePage() {
                     <div className="flex-1">
                       <div className="font-semibold text-lg">Instance</div>
                       <div className="text-sm text-muted-foreground">Concrete run: dates, times, capacity, instance_data_ext</div>
-                      <Badge variant="outline" className="mt-1">What users enroll in</Badge>
+                      <Badge variant="outline" className="mt-1">{t.whatUsersEnroll}</Badge>
                     </div>
                   </div>
                 </div>
@@ -375,7 +479,7 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <List className="h-4 w-4" />
-                      Three-Phase Admin Workflow
+                      {navTitle(operationItems[1])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -385,7 +489,7 @@ export default function AdminGuidePage() {
                     1
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold mb-2">Phase 1: Global resource modeling</h3>
+                    <h3 className="font-semibold mb-2">{t.phase1}</h3>
                     <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
                       <li>Define <strong>Offering Types</strong> (offering_schema, instance_schema)</li>
                       <li>Create global <strong>Categories</strong> and optional config_base</li>
@@ -398,7 +502,7 @@ export default function AdminGuidePage() {
                     2
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold mb-2">Phase 2: Franchise initialization</h3>
+                    <h3 className="font-semibold mb-2">{t.phase2}</h3>
                     <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
                       <li>Configure <strong>Franchise</strong> (branding, marketing, domain)</li>
                       <li>Subscribe to <strong>Categories</strong> via Franchise–Category map; set is_visible</li>
@@ -411,7 +515,7 @@ export default function AdminGuidePage() {
                     3
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold mb-2">Phase 3: Scheduling and publishing</h3>
+                    <h3 className="font-semibold mb-2">{t.phase3}</h3>
                     <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
                       <li>Create <strong>Programs</strong> (Franchise + Category, start/end dates)</li>
                       <li>Create <strong>Instances</strong> under a Program: pick Offering (from that Category), set core fields and instance_data_ext from instance_schema</li>
@@ -426,7 +530,7 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Shapes className="h-4 w-4" />
-                      Offering Type
+                      {navTitle(operationItems[2])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
@@ -451,10 +555,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Code className="h-4 w-4" />
-                      Offering Schema &amp; Instance Schema
+                      {navTitle(operationItems[3])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-6">
+              {lang === "en" && (
+                <>
               <div>
                 <h3 className="font-semibold mb-2">Schema structure</h3>
                 <p className="text-sm text-muted-foreground mb-2">
@@ -743,6 +849,184 @@ export default function AdminGuidePage() {
                   Invalid payloads are rejected. Optional: DB triggers can perform the same checks.
                 </p>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <div>
+                <h3 className="font-semibold mb-2">Schema 结构</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  <code>offering_schema</code> 与 <code>instance_schema</code> 均为顶层带 <code>fields</code> 对象的 JSONB。<code>fields</code> 的键为字段名（存入 <code>type_config_data</code> 或 <code>instance_data_ext</code>），值为字段定义。
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`{
+  "fields": {
+    "field_name": {
+      "type": "text",
+      "label": "Display Label",
+      "required": true,
+      "display_scope": "both"
+    }
+  }
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>数据存储：</strong> offering_schema 定义的数据存入 <code>v2_offering.type_config_data</code>；instance_schema 定义的数据存入 <code>v2_instance.instance_data_ext</code>。创建/更新时应用层会按对应 schema 校验这些 JSONB。
+                </p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">字段类型</h3>
+                <p className="text-sm text-muted-foreground mb-3">每个字段必须有 <code>type</code>。支持的类型及用途：</p>
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 font-medium">类型</th>
+                        <th className="text-left p-3 font-medium">说明</th>
+                        <th className="text-left p-3 font-medium">示例</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b"><td className="p-3"><code>text</code></td><td className="p-3">单行/多行文本</td><td className="p-3"><code>multiline: true</code> 表示长文本</td></tr>
+                      <tr className="border-b"><td className="p-3"><code>number</code></td><td className="p-3">数值；支持 min、max、step、default</td><td className="p-3"><code>min: 0, max: 100, step: 0.01</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>boolean</code></td><td className="p-3">复选框 true/false</td><td className="p-3"><code>&quot;default&quot;: false</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>select</code></td><td className="p-3">单选</td><td className="p-3"><code>&quot;options&quot;: [&quot;a&quot;, &quot;b&quot;]</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>multiselect</code></td><td className="p-3">多选</td><td className="p-3"><code>&quot;options&quot;: [&quot;K&quot;, &quot;1&quot;, &quot;2&quot;]</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>array</code></td><td className="p-3">列表（如字符串数组）</td><td className="p-3"><code>{'"items": { "type": "string" }'}</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>object</code></td><td className="p-3">嵌套字段组，存为 JSON 对象</td><td className="p-3"><code>{'"properties": { "sub_field": { "type": "text" } }'}</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>date</code></td><td className="p-3">日期</td><td className="p-3"><code>&quot;type&quot;: &quot;date&quot;</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>time</code></td><td className="p-3">时间</td><td className="p-3"><code>&quot;type&quot;: &quot;time&quot;</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>Markdown（富文本）：</strong> 当 <code>type</code> 为 <code>text</code> 且 <code>multiline: true</code>，且字段名为 <code>target_audience</code>、<code>learning_outcomes</code> 或 <code>prerequisites</code> 时，后台显示 Markdown 编辑/预览，前台按 Markdown 渲染。见上方「产品」中的「Markdown 编辑」。
+                </p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">type: object（嵌套组）</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  <code>type: &quot;object&quot;</code> 表示一组嵌套字段，存值为 JSON 对象。用 <code>properties</code> 定义子字段；子字段支持与顶层相同的类型；<code>text</code> 且 <code>multiline: true</code> 时使用与 prerequisites 相同的 Markdown 编辑器。
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"portal_config": {
+  "type": "object",
+  "label": "C-end display options",
+  "display_scope": "admin",
+  "default": { "is_course_type": true, "show_meal_service": false },
+  "properties": {
+    "is_course_type": { "type": "boolean", "label": "Count as course in Portal", "default": true },
+    "show_meal_service": { "type": "boolean", "label": "Show Meal Service block", "default": false },
+    "notes": { "type": "text", "label": "Internal notes", "multiline": true }
+  }
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  在后台配置页中，object 字段以带边框的控件组展示（复选框、输入框、下拉或富文本）。整对象存于 <code>type_config_data</code> / <code>instance_data_ext</code> 下对应字段名（如 <code>type_config_data.portal_config</code>）。
+                </p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">字段属性（数据项）</h3>
+                <p className="text-sm text-muted-foreground mb-3">用于控制标签、校验、默认值与可见性的可选属性：</p>
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 font-medium">属性</th>
+                        <th className="text-left p-3 font-medium">说明</th>
+                        <th className="text-left p-3 font-medium">示例</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b"><td className="p-3"><code>label</code></td><td className="p-3">后台及（若 scope 允许）前台的显示标签</td><td className="p-3"><code>&quot;label&quot;: &quot;课程描述&quot;</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>required</code></td><td className="p-3">是否必填</td><td className="p-3"><code>&quot;required&quot;: true</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>default</code></td><td className="p-3">新建产品/场次时的默认值</td><td className="p-3"><code>&quot;default&quot;: 0</code> 或 <code>&quot;default&quot;: false</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>min</code> / <code>max</code></td><td className="p-3">数值或长度范围</td><td className="p-3"><code>&quot;min&quot;: 0, &quot;max&quot;: 18</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>step</code></td><td className="p-3">数字步长（如 0.01 表示金额）</td><td className="p-3"><code>&quot;step&quot;: 0.01</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>placeholder</code></td><td className="p-3">输入框占位文案</td><td className="p-3"><code>&quot;placeholder&quot;: &quot;输入描述...&quot;</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>description</code></td><td className="p-3">字段说明/帮助文案</td><td className="p-3"><code>&quot;description&quot;: &quot;班级最大人数&quot;</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>multiline</code></td><td className="p-3">文本使用多行输入</td><td className="p-3"><code>&quot;multiline&quot;: true</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>maxLength</code></td><td className="p-3">文本最大长度（可选）</td><td className="p-3"><code>&quot;maxLength&quot;: 500</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>options</code></td><td className="p-3">select / multiselect 的选项数组</td><td className="p-3"><code>&quot;options&quot;: [&quot;standard&quot;, &quot;vegetarian&quot;]</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>items</code></td><td className="p-3">array 的元素 schema</td><td className="p-3"><code>{'"items": { "type": "string" }'}</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>properties</code></td><td className="p-3">object 的嵌套字段定义</td><td className="p-3"><code>{'"properties": { "x": { "type": "boolean" } }'}</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>condition</code></td><td className="p-3">仅当某字段满足条件时显示/必填（见下）</td><td className="p-3"><code>{'"condition": { "field": "x", "equals": true }'}</code></td></tr>
+                      <tr className="border-b"><td className="p-3"><code>display_scope</code></td><td className="p-3">谁可见：admin、web 或 both（默认 admin）</td><td className="p-3"><code>&quot;display_scope&quot;: &quot;both&quot;</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">display_scope 规则</h3>
+                <p className="text-sm text-muted-foreground mb-2">控制字段值对哪端可见。对外 Web API 应只返回 <code>display_scope</code> 为 <code>web</code> 或 <code>both</code> 的字段；后台可查看 schema 定义的全部字段。</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li><code>admin</code> — 仅后台；不出现在公开产品/场次 API 中。</li>
+                  <li><code>web</code> — 仅前台（如产品页）；后台仍可查看。</li>
+                  <li><code>both</code> — 后台与 Web API 均可见。</li>
+                  <li>未写时视为 <code>admin</code>（安全默认）。</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">condition（条件显示）</h3>
+                <p className="text-sm text-muted-foreground mb-2">仅当某字段等于某值时才显示或必填该字段。使用 <code>condition</code>：</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground mb-2">
+                  <li><code>field</code> — 另一字段名（同 schema）。instance_schema 中可用 <code>offering.field_name</code> 引用产品字段（如 <code>offering.is_multidrop</code>）。</li>
+                  <li><code>equals</code> — 该字段须等于的值。</li>
+                  <li><code>in</code> — 值数组；该字段须为其中之一。</li>
+                </ul>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"drop_in_price": {
+  "type": "number",
+  "label": "Drop-in price",
+  "condition": { "field": "is_multidrop", "equals": true }
+}
+"trial_sessions_count": {
+  "type": "number",
+  "label": "Trial sessions",
+  "condition": { "field": "trial_type", "in": ["multi_session"] }
+}`}</pre>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">示例：最简 offering_schema</h3>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`{
+  "fields": {
+    "description": {
+      "type": "text",
+      "label": "Description",
+      "required": true,
+      "multiline": true,
+      "display_scope": "both"
+    },
+    "base_price": {
+      "type": "number",
+      "label": "Base price",
+      "required": true,
+      "min": 0,
+      "step": 0.01,
+      "default": 0,
+      "display_scope": "both"
+    },
+    "base_capacity": {
+      "type": "number",
+      "label": "Default capacity",
+      "required": true,
+      "min": 1,
+      "default": 20,
+      "display_scope": "both"
+    }
+  }
+}`}</pre>
+                </div>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg">
+                <p className="text-sm">
+                  <strong>校验：</strong> 创建/更新时应用层会按 schema 校验 <code>type_config_data</code> 与 <code>instance_data_ext</code>（字段名、类型、必填、min/max 等）。不合法请求会被拒绝。可选：在 DB 层用触发器做相同校验。
+                </p>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -750,17 +1034,21 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Shapes className="h-4 w-4" />
-                      Schema by Offering Type
+                      {navTitle(operationItems[4])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-8">
               <p className="text-sm text-muted-foreground mb-4">
-                Schemas below are loaded from <code>v2_offering_type</code>. Offering schema defines <code>type_config_data</code> on Offerings; instance schema defines <code>instance_data_ext</code> on Instances.
+                {lang === "en" ? (
+                  <>Schemas below are loaded from <code>v2_offering_type</code>. Offering schema defines <code>type_config_data</code> on Offerings; instance schema defines <code>instance_data_ext</code> on Instances.</>
+                ) : (
+                  <>以下 Schema 从 <code>v2_offering_type</code> 加载。产品 Schema 定义产品上的 <code>type_config_data</code>；场次 Schema 定义场次上的 <code>instance_data_ext</code>。</>
+                )}
               </p>
               {offeringTypesLoading && (
                 <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>Loading offering types…</span>
+                  <span>{t.schemaByTypeLoading}</span>
                 </div>
               )}
               {offeringTypesError && (
@@ -769,20 +1057,20 @@ export default function AdminGuidePage() {
                 </div>
               )}
               {!offeringTypesLoading && !offeringTypesError && offeringTypes.length === 0 && (
-                <p className="text-sm text-muted-foreground">No offering types found. Configure them in Admin → Blaze → Offering Types.</p>
+                <p className="text-sm text-muted-foreground">{t.schemaByTypeEmpty}</p>
               )}
               {!offeringTypesLoading && !offeringTypesError && offeringTypes.map((type, index) => (
                 <div key={type.id}>
                   <h3 className="text-lg font-semibold mb-1">
                     {index + 1}. {type.name} <span className="font-mono text-sm font-normal text-muted-foreground">({type.code})</span>
-                    {!type.is_active && <Badge variant="secondary" className="ml-2">Inactive</Badge>}
+                    {!type.is_active && <Badge variant="secondary" className="ml-2">{t.badgeInactive}</Badge>}
                   </h3>
                   {type.description && (
                     <p className="text-sm text-muted-foreground mb-3">{type.description}</p>
                   )}
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs font-medium text-muted-foreground mb-2">offering_schema → type_config_data</p>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">{t.schemaByTypeOfferingLabel}</p>
                       <div className="overflow-x-auto max-h-64 overflow-y-auto bg-background p-3 rounded border text-xs font-mono">
                         <ReactMarkdown
                           components={{
@@ -797,7 +1085,7 @@ export default function AdminGuidePage() {
                       </div>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs font-medium text-muted-foreground mb-2">instance_schema → instance_data_ext</p>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">{t.schemaByTypeInstanceLabel}</p>
                       <div className="overflow-x-auto max-h-64 overflow-y-auto bg-background p-3 rounded border text-xs font-mono">
                         <ReactMarkdown
                           components={{
@@ -816,7 +1104,11 @@ export default function AdminGuidePage() {
               ))}
 
               <p className="text-sm text-muted-foreground border-t pt-4">
-                Full schema definitions, including all field properties (placeholder, description, display_scope), are in <strong>docs/design/Database_redesign_document_v2.md</strong>. The tables <code>v2_offering.type_config_data</code> and <code>v2_instance.instance_data_ext</code> store the actual values; they are validated against the Offering Type&apos;s <code>offering_schema</code> and <code>instance_schema</code>.
+                {lang === "en" ? (
+                  <>Full schema definitions, including all field properties (placeholder, description, display_scope), are in <strong>docs/design/Database_redesign_document_v2.md</strong>. The tables <code>v2_offering.type_config_data</code> and <code>v2_instance.instance_data_ext</code> store the actual values; they are validated against the Offering Type&apos;s <code>offering_schema</code> and <code>instance_schema</code>.</>
+                ) : (
+                  <>完整 Schema 定义（含 placeholder、description、display_scope 等）见 <strong>docs/design/Database_redesign_document_v2.md</strong>。<code>v2_offering.type_config_data</code> 与 <code>v2_instance.instance_data_ext</code> 存实际数据，会按产品类型的 <code>offering_schema</code>、<code>instance_schema</code> 校验。</>
+                )}
               </p>
                   </AccordionContent>
                 </AccordionItem>
@@ -825,10 +1117,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Settings className="h-4 w-4" />
-                      Portal config &amp; service role (C-end)
+                      {navTitle(operationItems[5])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-6">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 Two schema-driven settings control C-end behavior: <strong>portal_config</strong> (whether an offering&apos;s instance detail page shows Meal/Care blocks and whether the instance counts as &quot;course&quot; in Portal) and <strong>portal_service_role</strong> (whether this offering&apos;s instances are listed as Meal Service or Care Service in those blocks). Both live in <code>offering_schema.fields</code> and are stored in <code>v2_offering.type_config_data</code>; <code>portal_service_role</code> is also flattened to <code>v2_instance.portal_service_role</code>.
               </p>
@@ -914,6 +1208,92 @@ export default function AdminGuidePage() {
               <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg text-sm">
                 <p><strong>Design doc:</strong> <code>docs/design/INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN.md</code> and <code>docs/design/PORTAL_OFFERING_TYPE_DESIGN.md</code>.</p>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                两项由 Schema 驱动的配置控制 C 端行为：<strong>portal_config</strong>（产品场次详情页是否展示 Meal/Care 区块、是否在 Portal 中计为「课程」）和 <strong>portal_service_role</strong>（该产品场次是否在这些区块中列为 Meal Service / Care Service）。二者均在 <code>offering_schema.fields</code> 中定义，并存入 <code>v2_offering.type_config_data</code>；<code>portal_service_role</code> 还会同步到 <code>v2_instance.portal_service_role</code>。
+              </p>
+              <div>
+                <h3 className="font-semibold mb-2">1. portal_config（C 端展示）</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  在 schema 中新增 <code>portal_config</code> 字段，类型 <code>object</code>，<code>properties</code> 含 <code>is_course_type</code>、<code>show_meal_service</code>、<code>show_care_service</code>。存于 <code>type_config_data.portal_config</code>。创建/编辑场次时用于设置 <code>v2_instance.is_course_type</code>；C 端根据这些布尔值在场次详情页显示或隐藏 Meal/Care 区块。
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"portal_config": {
+  "type": "object",
+  "label": "C 端展示行为",
+  "required": false,
+  "display_scope": "admin",
+  "default": { "is_course_type": true, "show_meal_service": false, "show_care_service": false },
+  "properties": {
+    "is_course_type": { "type": "boolean", "label": "在 C 端 Portal 中视为课程类", "default": true },
+    "show_meal_service": { "type": "boolean", "label": "Instance 详情页推荐/展示 Meal Service", "default": false },
+    "show_care_service": { "type": "boolean", "label": "Instance 详情页推荐/展示 Care Service", "default": false }
+  }
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  <strong>按类型推荐默认：</strong> camp → show_meal_service true；workshop、competition → show_meal_service + show_care_service true；course、free_trial → 两者 false；care_service、lunch_service → is_course_type false，两者 false。
+                </p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">2. portal_service_role（Meal/Care 列表）</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  在 schema 中新增 <code>portal_service_role</code>，类型 <code>select</code>，<code>options: ["", "meal_service", "care_service"]</code>。存于 <code>type_config_data.portal_service_role</code> 并同步到 <code>v2_instance.portal_service_role</code>。C 端按该列筛选场次，在课程类场次详情页展示「Meal Service」/「Care Service」列表。也可在<strong>产品类型</strong>中设置「Instance 详情页角色」（v2_offering_type.portal_service_role），使该类型的新产品默认带该值。
+                </p>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                  <pre>{`"portal_service_role": {
+  "type": "select",
+  "label": "Instance 详情页服务角色",
+  "options": ["", "meal_service", "care_service"],
+  "display_scope": "admin",
+  "default": "care_service"
+}`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  lunch_service 类型建议 <code>default: "meal_service"</code>；care_service 类型建议 <code>default: "care_service"</code>。空字符串表示无角色（不出现在 Meal/Care 区块）。
+                </p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">按产品类型的 Schema 示例</h3>
+                <div className="overflow-x-auto rounded-md border text-sm">
+                  <table className="w-full text-muted-foreground">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 font-medium">类型 (code)</th>
+                        <th className="text-left p-3 font-medium">portal_config.default</th>
+                        <th className="text-left p-3 font-medium">portal_service_role</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b"><td className="p-3">camp</td><td className="p-3">is_course_type: true, show_meal_service: true, show_care_service: false</td><td className="p-3">—（省略或默认 &quot;&quot;）</td></tr>
+                      <tr className="border-b"><td className="p-3">workshop</td><td className="p-3">is_course_type: true, show_meal_service: true, show_care_service: true</td><td className="p-3">—</td></tr>
+                      <tr className="border-b"><td className="p-3">competition</td><td className="p-3">is_course_type: true, show_meal_service: true, show_care_service: true</td><td className="p-3">—</td></tr>
+                      <tr className="border-b"><td className="p-3">course, free_trial</td><td className="p-3">is_course_type: true, show_meal_service: false, show_care_service: false</td><td className="p-3">—</td></tr>
+                      <tr className="border-b"><td className="p-3">gift_card, care_service, lunch_service</td><td className="p-3">is_course_type: false, show_meal_service: false, show_care_service: false</td><td className="p-3">lunch_service → default &quot;meal_service&quot;；care_service → default &quot;care_service&quot;</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">创建/编辑流程中如何使用</h3>
+                <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                  <li><strong>创建产品：</strong>选择产品类型后，表单按该类型 schema 默认值预填 <code>type_config_data</code>。若类型 schema 含 <code>portal_config</code>，会得到默认对象；若含 <code>portal_service_role</code>，默认可来自类型的「Instance 详情页角色」或字段 <code>default</code>。保存前可在配置页修改。</li>
+                  <li><strong>编辑产品：</strong>配置页展示该类型 <code>offering_schema</code> 的全部字段（含 <code>portal_config</code>、<code>portal_service_role</code>）。保存后更新 <code>v2_offering.type_config_data</code>；若 payload 中含 <code>portal_config.is_course_type</code> 或 <code>portal_service_role</code>，后端会将该产品的所有 <code>v2_instance</code> 的 <code>is_course_type</code>、<code>portal_service_role</code> 同步更新。</li>
+                  <li><strong>创建场次：</strong>创建场次时后端读取该产品的 <code>type_config_data.portal_config.is_course_type</code> 与 <code>type_config_data.portal_service_role</code>（缺失时用产品类型的 <code>portal_service_role</code> 列），并写入新场次的 <code>v2_instance.is_course_type</code>、<code>v2_instance.portal_service_role</code>。</li>
+                  <li><strong>编辑场次：</strong>更新场次时后端再次从关联产品读取 <code>type_config_data</code>（及类型的 <code>portal_service_role</code> 兜底），重写该场次的 <code>is_course_type</code>、<code>portal_service_role</code>，与产品保持一致。</li>
+                </ul>
+                <p className="text-sm text-muted-foreground mt-3">
+                  小结：<code>portal_config</code> 与 <code>portal_service_role</code> 仅在<strong>产品</strong>（或产品类型默认）上编辑；场次创建/编辑与产品编辑会将它们同步到 <code>v2_instance</code>，C 端即可按列筛选展示而无需每次 join 产品。
+                </p>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg text-sm">
+                <p><strong>设计文档：</strong> <code>docs/design/INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN.md</code> 与 <code>docs/design/PORTAL_OFFERING_TYPE_DESIGN.md</code>。</p>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -921,10 +1301,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <FolderTree className="h-4 w-4" />
-                      Category
+                      {navTitle(operationItems[6])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 <strong>Category</strong> is global and independent. It represents a theme/domain (e.g. Beginner
                 Robotics, VEX IQ, Competition Robotics). Offerings belong to one Category and one Offering Type.
@@ -937,6 +1319,23 @@ export default function AdminGuidePage() {
                   <li>Franchise subscribes to Categories via <code>v2_franchise_category_map</code>; only subscribed categories can have Programs.</li>
                 </ul>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                <strong>分类（Category）</strong>是全局且独立的，表示主题/领域（如入门机器人、VEX IQ、竞赛机器人）。产品归属于一个分类和一个产品类型。
+              </p>
+              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                <p><strong>要点：</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>分类不是「课程/营地/工作坊」——后者是产品类型（Offering Type）。</li>
+                  <li>一个分类下可有多种产品类型（如「入门机器人」下同时有课程、营地、工作坊）。</li>
+                  <li>加盟通过 <code>v2_franchise_category_map</code> 订阅分类；只有已订阅的分类才能创建项目。</li>
+                </ul>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -944,10 +1343,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Package className="h-4 w-4" />
-                      Offering
+                      {navTitle(operationItems[7])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 <strong>Offering</strong> is a global product template: name, description, base_price, poster, and{" "}
                 <code>type_config_data</code> (filled according to its Offering Type&apos;s <code>offering_schema</code>).
@@ -1007,6 +1408,70 @@ export default function AdminGuidePage() {
                   Content is stored as Markdown source; the frontend Instance detail page uses the same Markdown renderer for consistent display.
                 </p>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                <strong>产品（Offering）</strong>是全局产品模板：名称、描述、base_price、海报及 <code>type_config_data</code>（按其产品类型的 <code>offering_schema</code> 填写）。
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                <li>归属于一个<strong>分类</strong>和一个<strong>产品类型</strong>。</li>
+                <li>状态：draft、published、suspended、archived。仅<strong>已发布</strong>的产品可用于创建场次。</li>
+                <li>无加盟引用，完全全局，可在各加盟间复用。</li>
+              </ul>
+
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                <h4 className="font-semibold text-sm">Markdown 编辑（富文本）</h4>
+                <p className="text-sm text-muted-foreground">
+                  在新增/编辑产品弹窗中，以下字段支持 <strong>Markdown</strong> 编辑与预览；前台详情页会按格式渲染：
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li><strong>基本信息</strong>：描述（仅后台）</li>
+                  <li><strong>配置</strong>（按 offering_schema）：<code>target_audience</code>、<code>learning_outcomes</code>、<code>prerequisites</code> — 当 schema 定义为多行文本时，后台会显示编辑/预览 Markdown 编辑器。</li>
+                </ul>
+                <p className="text-sm text-muted-foreground mt-2">富文本 Markdown 语法（左：输入；右：前台效果）：</p>
+                <div className="overflow-x-auto rounded-md border text-sm mt-2">
+                  <table className="w-full text-muted-foreground">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2 font-medium w-1/2">输入（Markdown 源码）</th>
+                        <th className="text-left p-2 font-medium">展示效果</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono text-xs">
+                      <tr className="border-b"><td className="p-2"><code># Heading</code></td><td className="p-2">一级标题</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>## Subheading</code></td><td className="p-2">二级标题</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>### Level 3</code></td><td className="p-2">三级标题</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>**bold**</code> / <code>__bold__</code></td><td className="p-2">粗体</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>*italic*</code> / <code>_italic_</code></td><td className="p-2">斜体</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>***bold italic***</code></td><td className="p-2">粗体+斜体</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>- item</code> / <code>* item</code></td><td className="p-2">无序列表</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>1. First</code> <code>2. Second</code></td><td className="p-2">有序列表</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>[link text](https://url)</code></td><td className="p-2">可点击链接（新标签打开）</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>`inline code`</code></td><td className="p-2">等宽高亮</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>&gt; quote</code></td><td className="p-2">引用块</td></tr>
+                      <tr className="border-b"><td className="p-2">段前空行</td><td className="p-2">新段落</td></tr>
+                      <tr className="border-b"><td className="p-2"><code>---</code> 或 <code>***</code>（单独一行）</td><td className="p-2">分隔线</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-md border bg-background p-3 font-mono text-xs overflow-x-auto mt-2">
+                  <p className="text-muted-foreground mb-1">示例（学习成果）：</p>
+                  <pre className="whitespace-pre-wrap">{`After this course you will be able to:
+
+- **Understand** basic robotics concepts
+- *Build* simple structures hands-on
+- Use the [official docs](https://example.com) for reference
+
+> We recommend completing "Intro to Programming" before enrolling.`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  内容以 Markdown 源码存储；前台场次详情页使用同一 Markdown 渲染器以保持一致展示。
+                </p>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1014,10 +1479,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
-                      Franchise &amp; Subscription
+                      {navTitle(operationItems[8])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 <strong>Franchise</strong> is the tenant: code, name, domain, branding_config, marketing_config,
                 timezone, etc. <strong>Franchise–Category Map</strong> records which global Categories this Franchise
@@ -1031,6 +1498,23 @@ export default function AdminGuidePage() {
                 </ul>
                 <p className="mt-2"><strong>Campus</strong> belongs to Franchise; Instances can optionally link to a Campus.</p>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                <strong>加盟（Franchise）</strong>即租户：code、name、domain、branding_config、marketing_config、timezone 等。<strong>加盟–分类映射</strong>记录该加盟订阅了哪些全局分类；<code>is_visible</code> 控制分类是否在默认导航中显示。
+              </p>
+              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                <p><strong>订阅与可见性：</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>订阅：在该分类下创建项目和场次的前提。</li>
+                  <li>可见性：<code>is_visible = true</code> 时分类出现在默认导航/列表中；<code>false</code> 仍可通过直接 URL 或特殊页面使用。</li>
+                </ul>
+                <p className="mt-2"><strong>校区（Campus）</strong>归属于加盟；场次可选择性关联到某一校区。</p>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1038,10 +1522,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <List className="h-4 w-4" />
-                      Program
+                      {navTitle(operationItems[9])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 <strong>Program</strong> is an operational unit: e.g. &quot;Spring 2026&quot; for a given Franchise and Category. It has
                 <code>start_date</code> and <code>end_date</code>. The Category must be subscribed by the Franchise.
@@ -1050,6 +1536,19 @@ export default function AdminGuidePage() {
                 <li>Program → Franchise (required), Program → Category (required, must be in franchise_category_map).</li>
                 <li>Instances belong to a Program and reference a global Offering that belongs to the same Category as the Program.</li>
               </ul>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                <strong>项目（Program）</strong>是运营单元：例如某加盟某分类下的「2026 春季」。包含 <code>start_date</code> 与 <code>end_date</code>。分类必须已被该加盟订阅。
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                <li>项目 → 加盟（必填）、项目 → 分类（必填，且须在 franchise_category_map 中）。</li>
+                <li>场次归属于一个项目，并引用一个与该项目同分类的全局产品。</li>
+              </ul>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1057,10 +1556,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
-                      Instance
+                      {navTitle(operationItems[10])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 <strong>Instance</strong> is the enrollable unit: it links a Program and an Offering (from the
                 Program&apos;s Category), plus optional Campus. It has core fields (dates, times, session_count,
@@ -1089,6 +1590,36 @@ export default function AdminGuidePage() {
                 <strong>Price:</strong> If <code>price_override</code> is null, effective price is the Offering&apos;s{" "}
                 <code>base_price</code>.
               </p>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                <strong>场次（Instance）</strong>是可报名单元：关联一个项目和一个产品（须属于该项目的分类），以及可选的校区。包含核心字段（日期、时间、session_count、days_of_week、max_students、price_override）和 <code>instance_data_ext</code>（由产品类型的 <code>instance_schema</code> 定义的 JSONB）。
+              </p>
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="border rounded-lg p-3">
+                  <Badge variant="outline" className="mb-2">scheduled</Badge>
+                  <p className="text-sm text-muted-foreground">开放报名</p>
+                </div>
+                <div className="border rounded-lg p-3">
+                  <Badge variant="outline" className="mb-2">ongoing</Badge>
+                  <p className="text-sm text-muted-foreground">进行中，不再接受新报名</p>
+                </div>
+                <div className="border rounded-lg p-3">
+                  <Badge variant="outline" className="mb-2">completed</Badge>
+                  <p className="text-sm text-muted-foreground">已结束</p>
+                </div>
+                <div className="border rounded-lg p-3">
+                  <Badge variant="outline" className="mb-2">cancelled</Badge>
+                  <p className="text-sm text-muted-foreground">已取消</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                <strong>价格：</strong>若 <code>price_override</code> 为空，实际价格为产品的 <code>base_price</code>。
+              </p>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1096,10 +1627,12 @@ export default function AdminGuidePage() {
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <LayoutGrid className="h-4 w-4" />
-                      Example: Categories &amp; Programs
+                      {navTitle(operationItems[11])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4">
+              {lang === "en" && (
+                <>
               <p className="text-sm text-muted-foreground">
                 The following example is from an <strong>operator’s perspective</strong>: your organization offers Offering Types such as <strong>Course, Camp, Competition, Workshop</strong>. You need to design Categories and Programs for the site and understand how they relate to Offerings and Instances. Full design details are in <code>docs/design/Database_redesign_document_v2.md</code>.
               </p>
@@ -1170,6 +1703,82 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <strong>Summary:</strong> Category and Offering are global. Program fixes &quot;who (Franchise) runs which term for which theme (Category)&quot;. Instance is the concrete enrollable run (which product, when, where); the Offering referenced by an Instance must belong to that Program’s Category.
                 </p>
               </div>
+                </>
+              )}
+              {lang === "zh" && (
+                <>
+              <p className="text-sm text-muted-foreground">
+                以下示例从<strong>运营者视角</strong>说明：机构提供<strong>课程、营地、竞赛、工作坊</strong>等产品类型，需要为站点设计分类与项目，并理解其与产品、场次的关系。完整设计见 <code>docs/design/Database_redesign_document_v2.md</code>。
+              </p>
+
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <h4 className="font-semibold text-sm">设计原则（摘要）</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li><strong>分类</strong> = 主题/领域（如入门机器人、竞赛机器人），不是产品形态。一个分类下可有多种产品类型。</li>
+                  <li><strong>产品</strong> = 全局产品定义；归属于一个分类 + 一个产品类型；可在各加盟与项目间复用。</li>
+                  <li><strong>项目</strong> = 某加盟某分类下的学期/期次（如 2026 春季）。项目关联加盟 + 分类（加盟须已订阅该分类）。</li>
+                  <li><strong>场次</strong> = 可报名的一期；归属于一个项目并引用一个产品（该产品须属于项目的分类）。</li>
+                </ul>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-4">
+                <h4 className="font-semibold text-sm">示例：组织一览</h4>
+                <p className="text-xs text-muted-foreground">
+                  假设加盟「Blaze 北京」订阅两个分类：「入门机器人」「竞赛机器人」。为每个分类创建一个 2026 春季项目，再在每个项目下创建若干场次，每场次引用该分类下的一个产品。
+                </p>
+                <div className="grid gap-4 md:grid-cols-2 text-sm">
+                  <div className="space-y-2">
+                    <p className="font-medium text-muted-foreground">全局层（图书馆）</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                      <li><strong>分类</strong>：入门机器人、竞赛机器人</li>
+                      <li><strong>产品</strong>（示例）：
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          <li>入门机器人 → 课程「VEX IQ 入门」、营地「冬令营」、工作坊「周末创意工坊」</li>
+                          <li>竞赛机器人 → 竞赛「VEX 校际联赛」、课程「竞赛策略」</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-muted-foreground">运营层（加盟 + 项目 + 场次）</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                      <li><strong>加盟</strong>：Blaze 北京（已订阅上述两分类）</li>
+                      <li><strong>项目</strong>：入门机器人 · 2026 春季，竞赛机器人 · 2026 春季</li>
+                      <li><strong>场次</strong>（示例）：
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          <li>「入门机器人 · 2026 春季」下：1 月开「VEX IQ 入门」、2 月开「周末创意工坊」</li>
+                          <li>「竞赛机器人 · 2026 春季」下：3 月开「VEX 校际联赛」、2 月开「竞赛策略」</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="rounded-md border bg-background p-3 font-mono text-xs text-muted-foreground overflow-x-auto">
+                  <pre className="whitespace-pre-wrap">{`Category (global)          Offering (global; Category + Offering Type)
+─────────────────────────────────────────────────────────────
+Beginner Robotics  ──┬── Course:      VEX IQ Intro
+                    ├── Camp:        Winter Experience
+                    └── Workshop:    Weekend Creative Lab
+
+Competition Robotics ──┬── Competition: VEX School League
+                      └── Course:      Competition Strategy
+
+Franchise: Blaze Beijing (subscribed to Beginner Robotics, Competition Robotics)
+
+Program (Franchise + Category + term)    Instance (enrollable runs)
+─────────────────────────────────────────────────────────────
+Beginner Robotics · Spring 2026   ──┬── Instance of "VEX IQ Intro" (Jan)
+                                    └── Instance of "Weekend Creative Lab" (Feb)
+
+Competition Robotics · Spring 2026 ──┬── Instance of "VEX School League" (Mar)
+                                    └── Instance of "Competition Strategy" (Feb)`}</pre>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  <strong>小结：</strong>分类与产品是全局的。项目确定「谁（加盟）在哪个主题（分类）下运营哪一期」。场次是具体的可报名期次（哪个产品、何时、何地）；场次引用的产品必须属于该项目的分类。
+                </p>
+              </div>
+                </>
+              )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1177,10 +1786,11 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <BookOpen className="h-4 w-4" />
-                      Important Notes
+                      {navTitle(operationItems[12])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
+              {lang === "en" && (
               <div className="space-y-3 text-sm">
                 <div className="flex gap-2">
                   <Badge variant="outline" className="shrink-0">1</Badge>
@@ -1220,6 +1830,41 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   </p>
                 </div>
               </div>
+              )}
+              {lang === "zh" && (
+              <div className="space-y-3 text-sm">
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="shrink-0">1</Badge>
+                  <p className="text-muted-foreground">
+                    <strong>分类 ≠ 产品类型。</strong> 分类 = 主题/领域（如 VEX IQ）；产品类型 = 产品形态（课程、营地、工作坊）。一个分类可有多种产品类型；一种产品类型可出现在多个分类中。
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="shrink-0">2</Badge>
+                  <p className="text-muted-foreground">
+                    <strong>仅已发布的产品</strong>可用于创建场次。草稿/暂停/归档不能用于新建场次；产品被暂停或归档后，已有场次仍保持有效。
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="shrink-0">3</Badge>
+                  <p className="text-muted-foreground">
+                    <strong>场次的产品须与项目分类一致。</strong> 创建场次时，所选产品必须属于该项目的同一分类。
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="shrink-0">4</Badge>
+                  <p className="text-muted-foreground">
+                    <strong>Schema 校验。</strong> <code>type_config_data</code> 与 <code>instance_data_ext</code> 会按产品类型的 schema 校验（应用层；可选 DB 触发器）。
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="shrink-0">5</Badge>
+                  <p className="text-muted-foreground">
+                    <strong>display_scope。</strong> Schema 中字段可有 <code>display_scope</code>：admin、web 或 both。对外的 Web API 应只返回 web 或 both 的字段；后台可查看全部。
+                  </p>
+                </div>
+              </div>
+              )}
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
@@ -1233,9 +1878,9 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
-                Deployment Guide
+                {t.deploymentGuideTitle}
               </CardTitle>
-              <CardDescription>Vercel, Google (Auth / Map / Gemini), Stripe, and environment setup</CardDescription>
+              <CardDescription>{t.deploymentGuideDesc}</CardDescription>
             </CardHeader>
             <CardContent>
               <Accordion type="multiple" value={deploymentOpen} onValueChange={setDeploymentOpen} className="w-full">
@@ -1243,10 +1888,11 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <CloudCog className="h-4 w-4" />
-                      Vercel Deployment
+                      {navTitle(deploymentItems[0])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {lang === "en" && (
                     <div className="space-y-6 text-sm">
                       <h3 className="font-semibold">1. Create project</h3>
                       <p className="text-muted-foreground">
@@ -1317,6 +1963,65 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                         After saving, redeploy so new variables take effect. Use <code>NEXTAUTH_URL</code> and <code>NEXT_PUBLIC_APP_URL</code> set to your production domain once you add a custom domain.
                       </p>
                     </div>
+                    )}
+                    {lang === "zh" && (
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. 创建项目</h3>
+                      <p className="text-muted-foreground">
+                        登录 <a href="https://vercel.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">vercel.com</a>，点击 <strong>Add New</strong> → <strong>Project</strong>。选择 Git 提供商并按需授权。
+                      </p>
+                      <h3 className="font-semibold">2. 关联 GitHub 仓库</h3>
+                      <p className="text-muted-foreground">
+                        导入包含本应用的仓库。选择正确的组织/账号、仓库，根目录保持 <code>./</code>，框架选 <strong>Next.js</strong>。非必要不要改 Build Command / Output。
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>结果：</strong> Vercel 会创建项目并从默认分支触发首次构建。
+                      </p>
+                      <h3 className="font-semibold">3. 集成 Supabase 并获取密钥</h3>
+                      <p className="text-muted-foreground">
+                        在 <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Supabase Dashboard</a> 中创建或选择项目，进入 <strong>Settings → API</strong>。需要：
+                      </p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
+                        <li><code>Project URL</code> → 用作 <code>NEXT_PUBLIC_SUPABASE_URL</code></li>
+                        <li><code>anon</code>（公开）key → <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
+                        <li><code>service_role</code> key → <code>SUPABASE_SERVICE_ROLE_KEY</code>（仅服务端，勿暴露给前端）</li>
+                      </ul>
+                      <p className="text-muted-foreground">
+                        新项目在 Supabase <strong>SQL Editor</strong> 中执行初始化脚本（<code>sql/init/00-supabase-init.sql</code>，再 <code>01-seed-offering-types.sql</code>）。
+                      </p>
+                      <h3 className="font-semibold">4. 集成 Blob 存储并获取密钥</h3>
+                      <p className="text-muted-foreground">
+                        本应用可使用 <strong>Vercel Blob</strong> 做上传（如海报）。在 Vercel：Project → <strong>Storage</strong> → 创建 Blob 存储。在 <strong>Settings → Environment Variables</strong> 中会看到（或需添加）<code>BLOB_READ_WRITE_TOKEN</code>（服务端上传/下载用）。本地开发在 <code>.env.local</code> 中添加同名变量，值从 Vercel Blob 控制台获取。
+                      </p>
+                      <h3 className="font-semibold">5. 集成 AI Gateway 并获取 API Key</h3>
+                      <p className="text-muted-foreground">
+                        若使用 AI Gateway（如聊天或 AI 功能），在网关提供方控制台创建 API Key，设为 <code>AI_GATEWAY_API_KEY</code> 或代码中使用的变量名，并在 Vercel 环境变量与 <code>.env.local</code> 中配置。
+                      </p>
+                      <h3 className="font-semibold">6. Vercel 环境变量</h3>
+                      <p className="text-muted-foreground">
+                        在 Vercel：Project → <strong>Settings → Environment Variables</strong>。添加应用所需的全部变量（Production 及可选 Preview）。保存后重新部署使变量生效。配置自定义域名后，将 <code>NEXTAUTH_URL</code> 与 <code>NEXT_PUBLIC_APP_URL</code> 设为生产域名。
+                      </p>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">变量</th>
+                              <th className="text-left p-3 font-medium">说明</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-muted-foreground">
+                            <tr className="border-b"><td className="p-3"><code>AUTH_SECRET</code></td><td className="p-3">NextAuth 密钥（如 <code>openssl rand -base64 32</code>）</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>NEXTAUTH_URL</code></td><td className="p-3">生产 URL，如 <code>https://your-app.vercel.app</code></td></tr>
+                            <tr className="border-b"><td className="p-3"><code>NEXT_PUBLIC_SUPABASE_URL</code>、<code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>、<code>SUPABASE_SERVICE_ROLE_KEY</code></td><td className="p-3">Supabase（步骤 3）</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>BLOB_READ_WRITE_TOKEN</code></td><td className="p-3">Vercel Blob（步骤 4）</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>GOOGLE_CLIENT_ID</code>、<code>GOOGLE_CLIENT_SECRET</code></td><td className="p-3">Google OAuth（见 Google 登录）</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>SMTP_*</code>、<code>NEXT_PUBLIC_APP_URL</code></td><td className="p-3">邮件与应用 URL</td></tr>
+                            <tr className="border-b"><td className="p-3"><code>STRIPE_*</code></td><td className="p-3">Stripe（见 Stripe 小节）</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1324,10 +2029,11 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <KeyRound className="h-4 w-4" />
-                      Google Auth
+                      {navTitle(deploymentItems[1])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {lang === "en" && (
                     <div className="space-y-6 text-sm">
                       <h3 className="font-semibold">1. Get Client ID and Secret</h3>
                       <p className="text-muted-foreground">
@@ -1357,6 +2063,23 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                         <strong>Result:</strong> Users can sign in with Google; after auth they are redirected back to your app.
                       </p>
                     </div>
+                    )}
+                    {lang === "zh" && (
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. 获取 Client ID 与 Secret</h3>
+                      <p className="text-muted-foreground">
+                        在 <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Console</a>：创建或选择项目 → <strong>APIs &amp; Services → Credentials</strong> → <strong>Create Credentials → OAuth client ID</strong>。应用类型选 <strong>Web application</strong>。将 <strong>Client ID</strong> 设为 <code>GOOGLE_CLIENT_ID</code>，<strong>Client Secret</strong> 设为 <code>GOOGLE_CLIENT_SECRET</code>。
+                      </p>
+                      <h3 className="font-semibold">2. 在项目与 Google 中配置</h3>
+                      <p className="text-muted-foreground">
+                        <strong>Google 控制台：</strong>在同一 OAuth 客户端中，将 <strong>Authorized JavaScript origins</strong> 设为应用 URL（如 <code>http://localhost:3000</code>、<code>https://your-app.vercel.app</code>、<code>https://yourdomain.com</code>）。<strong>项目内：</strong>将 <code>GOOGLE_CLIENT_ID</code>、<code>GOOGLE_CLIENT_SECRET</code> 写入 <code>.env.local</code>（本地）和 Vercel 环境变量（生产）。NextAuth 用其作为 Google 提供商。
+                      </p>
+                      <h3 className="font-semibold">3. 回调与重定向 URL</h3>
+                      <p className="text-muted-foreground">
+                        <strong>Google 控制台：</strong>在 OAuth 客户端中设置 <strong>Authorized redirect URIs</strong> 为 NextAuth 回调 URL：<code>{"{NEXTAUTH_URL}/api/auth/callback/google"}</code>，例如 <code>https://your-app.vercel.app/api/auth/callback/google</code>。<strong>项目内：</strong><code>NEXTAUTH_URL</code> 须与当前环境一致（本地 <code>http://localhost:3000</code>，Vercel 上为 <code>https://your-app.vercel.app</code>）。<code>NEXTAUTH_URL</code> 正确时无需在代码中额外配置重定向。完成后用户可使用 Google 登录并回到应用。
+                      </p>
+                    </div>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1364,10 +2087,11 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Map className="h-4 w-4" />
-                      Google Map
+                      {navTitle(deploymentItems[2])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {lang === "en" && (
                     <div className="space-y-6 text-sm">
                       <h3 className="font-semibold">1. How the project uses Google Maps</h3>
                       <p className="text-muted-foreground">
@@ -1387,6 +2111,24 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                         <strong>Result:</strong> Maps and related APIs work on your app for the allowed referrers.
                       </p>
                     </div>
+                    )}
+                    {lang === "zh" && (
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. 项目中如何使用 Google 地图</h3>
+                      <p className="text-muted-foreground">
+                        应用可能使用 Google Maps（Maps JavaScript API）做地点页、校区图或地址展示。地图通过 Google Maps 脚本加载，使用限制在你方域名下的 API Key。
+                      </p>
+                      <h3 className="font-semibold">2. 获取 Google Maps API Key</h3>
+                      <p className="text-muted-foreground">
+                        在 <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Console</a>：与 Auth 同项目（或单独项目）→ <strong>APIs &amp; Services → Library</strong> → 启用 <strong>Maps JavaScript API</strong>（可选 <strong>Geocoding API</strong>）。再 <strong>Credentials → Create Credentials → API key</strong>。限制该 Key：<strong>Application restrictions</strong> → HTTP referrers → 添加站点 URL（如 <code>https://yourdomain.com/*</code>、<code>http://localhost:3000/*</code>）；<strong>API restrictions</strong> → 仅允许 Maps JavaScript API（若用 Geocoding 也勾选）。
+                      </p>
+                      <h3 className="font-semibold">3. 在项目中配置 Key</h3>
+                      <p className="text-muted-foreground">
+                        将 <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code>（或代码中使用的环境变量名）设为该 API Key。在 <code>.env.local</code> 与 Vercel 环境变量中配置。<code>NEXT_PUBLIC_</code> 会暴露到浏览器，请通过 Key 限制确保仅在你方域名有效。
+                      </p>
+                      <p className="text-muted-foreground"><strong>结果：</strong> 在允许的 referrer 下，地图及相关 API 在应用中可用。</p>
+                    </div>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1394,10 +2136,11 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4" />
-                      Google Gemini
+                      {navTitle(deploymentItems[3])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {lang === "en" && (
                     <div className="space-y-6 text-sm">
                       <h3 className="font-semibold">1. How the project uses Google Gemini</h3>
                       <p className="text-muted-foreground">
@@ -1415,6 +2158,23 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                         <strong>Result:</strong> Server-side Gemini calls succeed and AI features work in the app.
                       </p>
                     </div>
+                    )}
+                    {lang === "zh" && (
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. 项目中如何使用 Google Gemini</h3>
+                      <p className="text-muted-foreground">
+                        应用可能调用 Google Gemini（生成式 AI）实现 AI 对话、内容建议或助手流程。请求由服务端通过 Gemini API 发送，响应在 UI 中使用或按需存储。
+                      </p>
+                      <h3 className="font-semibold">2. 获取 Gemini API Key</h3>
+                      <p className="text-muted-foreground">
+                        在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google AI Studio</a>（或已启用 Gemini API 的 Cloud Console）中创建 Gemini / Generative AI API 的 API Key，复制并妥善保存。
+                      </p>
+                      <p className="text-muted-foreground">
+                        在项目中将 <code>GOOGLE_GEMINI_API_KEY</code>（或代码中使用的变量名）设为该 Key。仅写入服务端环境（如 <code>.env.local</code> 与 Vercel 环境变量），不要暴露给前端，不要使用 <code>NEXT_PUBLIC_</code> 前缀。
+                      </p>
+                      <p className="text-muted-foreground"><strong>结果：</strong> 服务端 Gemini 调用成功，AI 功能在应用中可用。</p>
+                    </div>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
 
@@ -1422,10 +2182,11 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                   <AccordionTrigger className="hover:no-underline">
                     <span className="flex items-center gap-2">
                       <CreditCard className="h-4 w-4" />
-                      Stripe
+                      {navTitle(deploymentItems[4])}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {lang === "en" && (
                     <div className="space-y-6 text-sm">
                       <h3 className="font-semibold">1. How the project integrates Stripe</h3>
                       <p className="text-muted-foreground">
@@ -1455,6 +2216,29 @@ Competition Robotics · Spring 2026 ──┬── Instance of "VEX School Leag
                         <strong>Result:</strong> Payments work in dev (test mode) and in production (live mode) with webhooks for reliable confirmation.
                       </p>
                     </div>
+                    )}
+                    {lang === "zh" && (
+                    <div className="space-y-6 text-sm">
+                      <h3 className="font-semibold">1. 项目如何集成 Stripe</h3>
+                      <p className="text-muted-foreground">
+                        应用使用 Stripe 处理支付（如报名结账、退款）。服务端创建 Payment Intents 或 Checkout 会话，并在用户上存储 <code>stripe_customer_id</code>。可用 Webhook 确认支付；前端在需要时用 Publishable key 加载 Stripe.js。
+                      </p>
+                      <h3 className="font-semibold">2. 获取 Stripe 密钥</h3>
+                      <p className="text-muted-foreground">
+                        在 <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Stripe Dashboard</a>：<strong>Developers → API keys</strong>。需要：<strong>Publishable key</strong> (pk_…) → <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>；<strong>Secret key</strong> (sk_…) → <code>STRIPE_SECRET_KEY</code>（仅服务端）。
+                      </p>
+                      <p className="text-muted-foreground">
+                        Webhook：<strong>Developers → Webhooks</strong> → 添加端点（如 <code>https://your-app.vercel.app/api/webhooks/stripe</code>）并选择事件（如 <code>payment_intent.succeeded</code>）。将 <strong>Signing secret</strong> (whsec_…) 设为 <code>STRIPE_WEBHOOK_SECRET</code>。
+                      </p>
+                      <h3 className="font-semibold">3. 本地与 Vercel 生产环境</h3>
+                      <p className="text-muted-foreground">
+                        <strong>本地：</strong>在 <code>.env.local</code> 中设置 <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>、<code>STRIPE_SECRET_KEY</code>，若测 Webhook 再设 <code>STRIPE_WEBHOOK_SECRET</code>。开发用测试密钥 (pk_test_…, sk_test_…)。本地测 Webhook 可用 <a href="https://stripe.com/docs/stripe-cli" target="_blank" rel="noopener noreferrer" className="text-primary underline">Stripe CLI</a> 转发：<code>stripe listen --forward-to localhost:3000/api/webhooks/stripe</code>，并将 CLI 给出的 secret 设为 <code>STRIPE_WEBHOOK_SECRET</code>。
+                      </p>
+                      <p className="text-muted-foreground">
+                        <strong>Vercel：</strong>在 Project → Settings → Environment Variables 中添加同名变量，Production 用生产值 (pk_live_…, sk_live_…)，Preview 可选测试密钥。在 Stripe 中添加生产 Webhook 端点，并将该端点的 signing secret 设为 <code>STRIPE_WEBHOOK_SECRET</code>。<strong>结果：</strong> 支付在开发（测试模式）与生产（live 模式）下均可工作，Webhook 用于可靠确认。
+                      </p>
+                    </div>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
