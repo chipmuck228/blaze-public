@@ -1,0 +1,48 @@
+---
+description: API route handler conventions for Blaze
+globs: src/app/api/**/*.ts
+alwaysApply: false
+---
+
+# API Routes
+
+## Handler Shape
+
+```typescript
+export async function GET(request: Request) {
+  try {
+    const session = await auth()
+    if (!session?.user || session.user.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    // ... logic
+    return NextResponse.json(data, { status: 200 })
+  } catch (error: any) {
+    console.error("Error fetching X:", error)
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch X" },
+      { status: 500 }
+    )
+  }
+}
+```
+
+## Auth by Namespace
+
+- `admin/` — require `session.user.role === "admin"`
+- `coach/` — require coach role
+- `public/` — no auth; read-only catalog/franchise data
+- `user/`, `enrollments/` — authenticated parent or student
+- `cron/` — verify Vercel cron secret or internal auth
+- `payments/webhook` — Stripe signature, not session auth
+
+## Data Access
+
+- V2 catalog CRUD: query `v2_*` tables via `supabaseAdmin` — follow `database-schema` rule
+- Reference implementations: `src/app/api/admin/*/v2/` routes
+- Auth/enrollment/payment: `@/lib/db`, `@/lib/permissions`
+- Validate dynamic fields against `offering_schema` / `instance_schema` before insert/update
+
+## Special Cases
+
+Stripe webhooks need `export const runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, and raw body via `req.text()`.

@@ -1,0 +1,37 @@
+---
+description: Data layer, auth, and external service conventions for Blaze
+globs: src/{lib,auth.ts,types}/**
+alwaysApply: false
+---
+
+# Data & Auth
+
+## Supabase
+
+- Client-side: `supabase` from `@/lib/supabase` (anon key)
+- Server-side/admin: `supabaseAdmin` (service role key, no session persistence)
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` to the client
+
+## Data Layer
+
+- **V2 catalog**: query `v2_*` tables via `supabaseAdmin` — see `database-schema` rule; reference `src/app/api/admin/*/v2/` routes
+- **Auth/enrollment/payment**: `@/lib/db.ts`, `@/lib/permissions.ts`, `@/lib/stripe` for users, students, `instance_enrollments`, Stripe
+- **Deprecated**: do not extend `@/lib/db-v2.ts` (uses old `*_v2` table names)
+
+## Auth
+
+- Central config: `src/auth.ts` (NextAuth v5)
+- Session role types: `src/types/next-auth.d.ts`
+- Roles: `admin`, `coach`, default user (parent/student)
+- Enrollment permissions: `checkEnrollmentPermission()` in `@/lib/permissions`
+
+## Stripe
+
+- Client helpers: `@/lib/stripe`
+- Webhooks verify signature with `STRIPE_WEBHOOK_SECRET`; update enrollment via `@/lib/db` helpers
+
+## Environment
+
+- Secrets in `.env.local` only (gitignored)
+- Required vars checked by `scripts/check/check-env-vars.js`
+- Do not commit or log secrets

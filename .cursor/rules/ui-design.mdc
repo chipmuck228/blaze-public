@@ -1,0 +1,45 @@
+---
+description: Blaze visual design system — colors, typography, spacing, and UI patterns
+globs: src/{app,components}/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# UI Design System
+
+Tokens in `globals.css` / `tailwind.config.ts`. `--radius: 1rem`.
+
+## Brand Colors
+
+- `#2563eb` → `primary` (CTAs, links) | `#38bdf8` → `secondary` (gradients)
+- `#0f172a` dark heroes | `#1e3a5f` navbar text on white
+- Admin/coach: semantic tokens (`bg-primary`, `text-muted-foreground`). Marketing: brand hex OK.
+
+## Typography & Radius
+
+- Montserrat headings (`tracking-tight`, `font-extrabold`); Roboto body (`font-sans`)
+- Marketing h1: `text-5xl lg:text-7xl font-extrabold`
+- Marketing: `rounded-full` CTAs/badges; cards `rounded-3xl border border-slate-200`
+- Admin: shadcn `rounded-md`/`rounded-lg`
+
+## Marketing Patterns
+
+Dark hero `bg-[#0f172a] pt-20` + blur orbs. Gradient: `.brand-gradient-text`. CTA: `rounded-full font-bold hover:-translate-y-1 shadow-xl`. Badge: `text-xs font-bold uppercase tracking-wider rounded-full`.
+
+```tsx
+<section className="relative bg-[#0f172a] pt-20 overflow-hidden">
+  <span className="brand-gradient-text font-extrabold">Future.</span>
+  <Link className="rounded-full font-bold px-8 py-4 bg-[#2563eb] hover:-translate-y-1 shadow-xl" />
+</section>
+```
+
+## Admin Patterns
+
+shadcn `Button`/`Card`/`Badge` variants. Hints: `text-xs text-muted-foreground`. No raw hex.
+
+## Motion, Dark Mode, Mobile
+
+Hover: `-translate-y-1` + shadow; `active:scale-[0.98]`. Reuse `.btn-primary`, `.glass-card`, `.animate-in`. Heroes hardcode dark bg; elsewhere `dark:` + tokens. Touch ≥ 44px; inputs 16px on mobile; navbar offset `pt-20`.
+
+## Do Not
+
+Invent brand colors. Edit `@/components/ui/*` for one-offs. Arbitrary colors outside marketing without matching hex.

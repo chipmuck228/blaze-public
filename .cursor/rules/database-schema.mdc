@@ -1,0 +1,51 @@
+---
+description: V2 database schema, table relationships, and data operation conventions
+globs: v2/**
+alwaysApply: false
+---
+
+# V2 Database Schema
+
+## Source of Truth
+
+DDL lives in `v2/` — run order per `v2/README.md` (`00_helpers.sql` first, then `01`–`08`). Schema changes require a new numbered SQL file in `v2/`.
+
+## Table Naming
+
+Always use `v2_*` prefix. Never create `offerings_v2`, `franchises_v2`, or `instance_v2` style names. Do not extend `@/lib/db-v2.ts` (deprecated old table names).
+
+## Entity Hierarchy
+
+- **Config**: `v2_offering_type` — `offering_schema` / `instance_schema` drive dynamic fields
+- **Global**: `v2_category`, `v2_offering`
+- **Franchise**: `v2_franchise`, `v2_franchise_category_map`, `v2_campus`
+- **Operations**: `v2_program`, `v2_instance` (user purchase target)
+- `v2_instance.featured` (boolean, default `false`) — marks an instance for featured/recommended display on the C-end
+
+## Schema-Driven Fields
+
+- `v2_offering.type_config_data` ← `offering_schema`; flatten nested keys (e.g. `pricing.base_price`) to table columns on write
+- `v2_instance.instance_data_ext` ← `instance_schema`; object groups (`schedule`, `capacity_price`) derive row columns (`start_date`, `max_students`, etc.)
+- Validate against schema before insert/update; display via `@/lib/instance-schema.ts` (see `admin/instance/v2/route.ts`)
+
+## Status & Integrity
+
+- Offering status: `draft` | `published` | `suspended` | `archived`
+- Instance status: `scheduled` | `ongoing` | `completed` | `cancelled`
+- Program: category must be subscribed by franchise (`v2_franchise_category_map`)
+- Instance: offering.category_id must match program.category_id; campus must belong to program's franchise
+
+## Query Pattern
+
+```typescript
+supabaseAdmin.from("v2_instance").select(`
+  *,
+  program:v2_program(id, name, franchise:v2_franchise(code, name)),
+  offering:v2_offering(id, name, offering_type:v2_offering_type(instance_schema))
+`)
+```
+
+Use `supabaseAdmin`; copy joins from `src/app/api/admin/*/v2/` routes. Treat `PGRST116` as not-found.
+## Non-Catalog Tables
+
+Auth/users, enrollments (`instance_enrollments`), Stripe are separate — `v2_resource` tables follow existing API routes, not `v2/` DDL.

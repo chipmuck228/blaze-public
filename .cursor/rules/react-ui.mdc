@@ -1,0 +1,38 @@
+---
+description: React component and page conventions for Blaze
+globs: src/{app,components}/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# React UI
+
+## Components
+
+- Use shadcn/ui primitives from `@/components/ui/*` (new-york style)
+- Merge classes with `cn()` from `@/lib/utils`
+- Feature components live in `src/components/{admin,mobile,location,coach,...}/`
+- Marketing blocks: PascalCase files in `src/components/` (e.g. `Hero.tsx`, `Navbar.tsx`)
+
+## Client vs Server
+
+- Add `'use client'` only when using hooks, browser APIs, or event handlers
+- Admin/coach layouts guard auth client-side via `useSession()` + role redirect
+- Prefer server components for static/marketing pages when possible
+
+## Visual Design
+
+Follow `ui-design` rule for colors, typography, radius, marketing vs admin patterns. Use semantic tokens in admin; brand hex in public marketing pages.
+
+- Icons: Lucide (`lucide-react`)
+- Toasts: `sonner` via root layout `Toaster`
+
+## Mobile (Capacitor)
+
+- Detect platform with `usePlatform()` from `@/hooks/usePlatform`
+- Mobile-specific UI in `src/components/mobile/` and `MobileHomePage`
+- Do not assume static export — iOS dev uses live reload to `localhost:3000`
+
+## Naming
+
+- React components: PascalCase files and exports
+- Route segments: kebab-case (`course-catalog`, `learning-paths`)
