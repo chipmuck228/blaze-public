@@ -33,10 +33,10 @@ const journeySteps: JourneyStep[] = [
   {
     id: 2,
     stepNumber: "Step 2",
-    title: "Build",
+    title: "Learn",
     description: "Intermediate to advanced, ages 12–18. Develop core robotics skills in structured courses—programming, control, sensors, and automation—and prepare for competition or career paths.",
     ctaText: "Learn More",
-    ctaLink: "/journey/build",
+    ctaLink: "/journey/learn",
     icon: <Target className="w-8 h-8" strokeWidth={1} />,
     gradientFrom: "#2563eb",
     gradientTo: "#2563eb"

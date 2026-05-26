@@ -39,7 +39,9 @@ export default function JourneyExplorePage() {
           <div className="absolute top-0 right-0 w-1/3 h-full bg-[#38bdf8]/5 -skew-x-12 translate-x-20" />
           <div className="max-w-7xl mx-auto px-4 relative z-10 flex flex-col md:flex-row items-center gap-12">
             <div className="md:w-3/5 text-white">
-              <p className="text-[#38bdf8] font-semibold uppercase tracking-widest text-sm mb-2">The Robotics Journey</p>
+              <p className="text-[#38bdf8] font-semibold uppercase tracking-wide sm:tracking-widest text-xs sm:text-sm mb-2 leading-snug text-balance max-w-xl sm:max-w-none">
+                The Programs for Your Robotics Journey
+              </p>
               <nav className="flex flex-wrap gap-2 mb-6" aria-label="Journey steps">
                 <Link
                   href="/journey/explore"
@@ -48,10 +50,10 @@ export default function JourneyExplorePage() {
                   Step 1: Explore
                 </Link>
                 <Link
-                  href="/journey/build"
+                  href="/journey/learn"
                   className="px-4 py-2 rounded-xl text-sm font-semibold border border-white/30 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
                 >
-                  Step 2: Build
+                  Step 2: Learn
                 </Link>
                 <Link
                   href="/journey/compete"
@@ -72,7 +74,7 @@ export default function JourneyExplorePage() {
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-2xl border border-[#38bdf8]/20 mb-8 max-w-2xl">
                 <h3 className="text-white font-bold text-lg mb-3">Your Robotics Journey Starts Here</h3>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  Explore is the perfect introduction: high-energy, game-style learning that sparks interest and builds confidence. You can start with a <strong>camp</strong>, a <strong>course</strong>, or a <strong>workshop</strong>—all designed for beginners. From here, students progress to <strong>Step 2: Build</strong> and eventually <strong>Step 3: Compete & Innovate</strong>. Begin your journey today.
+                  Explore is the perfect introduction: high-energy, game-style learning that sparks interest and builds confidence. You can start with a <strong>camp</strong>, a <strong>course</strong>, or a <strong>workshop</strong>—all designed for beginners. From here, students progress to <strong>Step 2: Learn</strong> and eventually <strong>Step 3: Compete & Innovate</strong>. Begin your journey today.
                 </p>
               </div>
               <div className="flex flex-wrap gap-4">
@@ -82,7 +84,8 @@ export default function JourneyExplorePage() {
                   asChild
                 >
                   <Link href={exploreProgramsHref}>
-                    Explore beginner programs
+                    <span className="sm:hidden">Start...</span>
+                    <span className="hidden sm:inline">Start your EXPLORE</span>
                     <ArrowRight className="ml-2 w-5 h-5" />
                   </Link>
                 </Button>
@@ -127,10 +130,10 @@ export default function JourneyExplorePage() {
                 Where Curiosity Becomes Confidence
               </h2>
               <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-6">
-                The Explore step is the foundation of The Robotics Journey. We meet young learners where they are—with beginner <strong>camps</strong>, <strong>courses</strong>, and <strong>workshops</strong> that spark interest in building and coding. Through VEX IQ and game-style learning, students develop foundational skills and the confidence to take the next step.
+                The Explore step is the foundation of The Programs for Your Robotics Journey. We meet young learners where they are—with beginner <strong>camps</strong>, <strong>courses</strong>, and <strong>workshops</strong> that spark interest in building and coding. Through VEX IQ and game-style learning, students develop foundational skills and the confidence to take the next step.
               </p>
               <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
-                This isn’t just an intro—it’s the moment many discover a lifelong passion. From here, the path leads to structured courses (Build) and competition or innovation (Compete & Innovate). Your journey begins with a single step: <strong>Explore.</strong>
+                This isn’t just an intro—it’s the moment many discover a lifelong passion. From here, the path leads to structured courses (Learn) and competition or innovation (Compete & Innovate). Your journey begins with a single step: <strong>Explore.</strong>
               </p>
               <Button
                 size="lg"
@@ -138,7 +141,8 @@ export default function JourneyExplorePage() {
                 asChild
               >
                 <Link href={exploreProgramsHref}>
-                  Explore beginner programs
+                  <span className="sm:hidden">Start...</span>
+                  <span className="hidden sm:inline">Start your EXPLORE</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
@@ -167,7 +171,7 @@ export default function JourneyExplorePage() {
                     <Target className="w-8 h-8 text-[#38bdf8]" strokeWidth={1} />
                   </div>
                   <h3 className="text-lg font-bold text-white dark:text-slate-100 mb-2">Build Foundations</h3>
-                  <p className="text-slate-400 dark:text-slate-300 text-sm">Core skills and confidence that set up success in Build and Compete.</p>
+                  <p className="text-slate-400 dark:text-slate-300 text-sm">Core skills and confidence that set up success in Learn and Compete.</p>
                 </div>
                 <div className="bg-slate-800/50 dark:bg-slate-800/70 p-6 rounded-3xl border border-slate-700 hover:bg-slate-800 transition-colors backdrop-blur-sm text-center">
                   <div className="w-12 h-12 bg-transparent rounded-xl flex items-center justify-center mb-4 mx-auto">
@@ -193,7 +197,8 @@ export default function JourneyExplorePage() {
                 asChild
               >
                 <Link href={exploreProgramsHref}>
-                  Explore beginner programs
+                  <span className="sm:hidden">Start...</span>
+                  <span className="hidden sm:inline">Start your EXPLORE</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>

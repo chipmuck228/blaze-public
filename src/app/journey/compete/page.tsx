@@ -16,7 +16,9 @@ export default function JourneyCompetePage() {
           <div className="absolute top-0 right-0 w-1/3 h-full bg-[#38bdf8]/5 -skew-x-12 translate-x-20" />
           <div className="max-w-7xl mx-auto px-4 relative z-10 flex flex-col md:flex-row items-center gap-12">
             <div className="md:w-3/5 text-white">
-              <p className="text-[#38bdf8] font-semibold uppercase tracking-widest text-sm mb-2">The Robotics Journey</p>
+              <p className="text-[#38bdf8] font-semibold uppercase tracking-wide sm:tracking-widest text-xs sm:text-sm mb-2 leading-snug text-balance max-w-xl sm:max-w-none">
+                The Programs for Your Robotics Journey
+              </p>
               <nav className="flex flex-wrap gap-2 mb-6" aria-label="Journey steps">
                 <Link
                   href="/journey/explore"
@@ -25,10 +27,10 @@ export default function JourneyCompetePage() {
                   Step 1: Explore
                 </Link>
                 <Link
-                  href="/journey/build"
+                  href="/journey/learn"
                   className="px-4 py-2 rounded-xl text-sm font-semibold border border-white/30 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
                 >
-                  Step 2: Build
+                  Step 2: Learn
                 </Link>
                 <Link
                   href="/journey/compete"
@@ -49,7 +51,7 @@ export default function JourneyCompetePage() {
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-2xl border border-[#38bdf8]/20 mb-8 max-w-2xl">
                 <h3 className="text-white font-bold text-lg mb-3">The Pinnacle of Your Journey</h3>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  After <strong>Explore</strong> and <strong>Build</strong>, Step 3 opens two paths: <strong>Competition</strong>—team-based VEX events and world-stage excellence—or <strong>Innovation</strong>—labs where students explore AI, IoT, and automation. Both demand the skills you’ve built; both lead to extraordinary outcomes.
+                  After <strong>Explore</strong> and <strong>Learn</strong>, Step 3 opens two paths: <strong>Competition</strong>—team-based VEX events and world-stage excellence—or <strong>Innovation</strong>—labs where students explore AI, IoT, and automation. Both demand the skills you’ve built; both lead to extraordinary outcomes.
                 </p>
               </div>
               <div className="flex flex-wrap gap-4">
@@ -59,7 +61,8 @@ export default function JourneyCompetePage() {
                   asChild
                 >
                   <Link href="/competition">
-                    Explore teams & events
+                    <span className="sm:hidden">Start...</span>
+                    <span className="hidden sm:inline">Start your COMPETE</span>
                     <ArrowRight className="ml-2 w-5 h-5" />
                   </Link>
                 </Button>
@@ -104,10 +107,10 @@ export default function JourneyCompetePage() {
                 Where Mastery Meets the World
               </h2>
               <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-6">
-                Step 3 is the culmination of The Robotics Journey. On the <strong>Competition</strong> track, students join teams, design and build tournament-ready robots, and compete in VEX events from local to world championships. On the <strong>Innovation</strong> track, they explore AI, IoT, and automation in dedicated labs—turning ideas into real projects.
+                Step 3 is the culmination of The Programs for Your Robotics Journey. On the <strong>Competition</strong> track, students join teams, design and build tournament-ready robots, and compete in VEX events from local to world championships. On the <strong>Innovation</strong> track, they explore AI, IoT, and automation in dedicated labs—turning ideas into real projects.
               </p>
               <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
-                Both paths build on the skills from Explore and Build. Whether you’re drawn to the thrill of competition or the frontier of innovation, this is where your journey reaches its peak. <strong>Compete & Innovate</strong>—and leave your mark.
+                Both paths build on the skills from Explore and Learn. Whether you’re drawn to the thrill of competition or the frontier of innovation, this is where your journey reaches its peak. <strong>Compete & Innovate</strong>—and leave your mark.
               </p>
               <Button
                 size="lg"
@@ -115,7 +118,8 @@ export default function JourneyCompetePage() {
                 asChild
               >
                 <Link href="/competition">
-                  Explore teams & events
+                  <span className="sm:hidden">Start...</span>
+                  <span className="hidden sm:inline">Start your COMPETE</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
@@ -170,7 +174,8 @@ export default function JourneyCompetePage() {
                 asChild
               >
                 <Link href="/competition">
-                  Explore teams & events
+                  <span className="sm:hidden">Start...</span>
+                  <span className="hidden sm:inline">Start your COMPETE</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>

@@ -6,7 +6,7 @@ import { ArrowRight, Home, Target, BookOpen, Cpu, Layers } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
-export default function JourneyBuildPage() {
+export default function JourneyLearnPage() {
   return (
     <>
       <Navbar />
@@ -16,7 +16,9 @@ export default function JourneyBuildPage() {
           <div className="absolute top-0 right-0 w-1/3 h-full bg-[#38bdf8]/5 -skew-x-12 translate-x-20" />
           <div className="max-w-7xl mx-auto px-4 relative z-10 flex flex-col md:flex-row items-center gap-12">
             <div className="md:w-3/5 text-white">
-              <p className="text-[#38bdf8] font-semibold uppercase tracking-widest text-sm mb-2">The Robotics Journey</p>
+              <p className="text-[#38bdf8] font-semibold uppercase tracking-wide sm:tracking-widest text-xs sm:text-sm mb-2 leading-snug text-balance max-w-xl sm:max-w-none">
+                The Programs for Your Robotics Journey
+              </p>
               <nav className="flex flex-wrap gap-2 mb-6" aria-label="Journey steps">
                 <Link
                   href="/journey/explore"
@@ -25,10 +27,10 @@ export default function JourneyBuildPage() {
                   Step 1: Explore
                 </Link>
                 <Link
-                  href="/journey/build"
+                  href="/journey/learn"
                   className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#38bdf8]/20 border border-[#38bdf8] text-white"
                 >
-                  Step 2: Build
+                  Step 2: Learn
                 </Link>
                 <Link
                   href="/journey/compete"
@@ -38,7 +40,7 @@ export default function JourneyBuildPage() {
                 </Link>
               </nav>
               <h1 className="text-5xl md:text-6xl font-black mb-6 leading-none">
-                Build
+                Learn
               </h1>
               <p className="text-lg md:text-xl text-gray-300 mb-2">
                 Where skills become mastery.
@@ -49,7 +51,7 @@ export default function JourneyBuildPage() {
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-2xl border border-[#38bdf8]/20 mb-8 max-w-2xl">
                 <h3 className="text-white font-bold text-lg mb-3">From Exploration to Expertise</h3>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  Build is the natural next step after <strong>Explore</strong>. In structured courses, students deepen their programming and engineering skills, work with advanced platforms, and prepare for <strong>Step 3: Compete & Innovate</strong>—whether that means joining a team or diving into innovation labs.
+                  Learn is the natural next step after <strong>Explore</strong>. In structured courses, students deepen their programming and engineering skills, work with advanced platforms, and prepare for <strong>Step 3: Compete & Innovate</strong>—whether that means joining a team or diving into innovation labs.
                 </p>
               </div>
               <div className="flex flex-wrap gap-4">
@@ -59,7 +61,8 @@ export default function JourneyBuildPage() {
                   asChild
                 >
                   <Link href="/course">
-                    Explore courses
+                    <span className="sm:hidden">Start...</span>
+                    <span className="hidden sm:inline">Start your LEARN</span>
                     <ArrowRight className="ml-2 w-5 h-5" />
                   </Link>
                 </Button>
@@ -104,10 +107,10 @@ export default function JourneyBuildPage() {
                 Where Skills Become Mastery
               </h2>
               <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed mb-6">
-                The Build step turns curiosity into capability. Through structured courses, students develop core robotics skills: programming, control systems, sensors, and automation. Using VEX V5 and VEX EXP, they tackle real engineering challenges and prepare for competition or career paths.
+                The Learn step turns curiosity into capability. Through structured courses, students develop core robotics skills: programming, control systems, sensors, and automation. Using VEX V5 and VEX EXP, they tackle real engineering challenges and prepare for competition or career paths.
               </p>
               <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
-                Whether the goal is joining a competitive team or exploring advanced applications, Build provides the technical foundation. Ready to level up? Enroll in a course and <strong>Build</strong> your future.
+                Whether the goal is joining a competitive team or exploring advanced applications, Learn provides the technical foundation. Ready to level up? Enroll in a course and build your future.
               </p>
               <Button
                 size="lg"
@@ -115,20 +118,21 @@ export default function JourneyBuildPage() {
                 asChild
               >
                 <Link href="/course">
-                  Explore courses
+                  <span className="sm:hidden">Start...</span>
+                  <span className="hidden sm:inline">Start your LEARN</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
             </div>
           </div>
 
-          {/* Why Build */}
+          {/* Why Learn */}
           <section className="bg-[#0f172a] dark:bg-slate-900 py-16 sm:py-20 lg:py-24 relative overflow-hidden rounded-3xl">
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
             <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-sky-600/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4" />
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
               <div className="text-center mb-16">
-                <h2 className="text-3xl md:text-5xl font-bold text-white dark:text-slate-100 mb-4">Why Build?</h2>
+                <h2 className="text-3xl md:text-5xl font-bold text-white dark:text-slate-100 mb-4">Why Learn?</h2>
                 <p className="text-gray-400 max-w-2xl mx-auto">Structured learning that prepares you for what’s next.</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -160,7 +164,7 @@ export default function JourneyBuildPage() {
           {/* Final CTA */}
           <section className="mt-20 text-center">
             <div className="bg-slate-100 dark:bg-slate-800/50 p-12 rounded-3xl border border-slate-200 dark:border-slate-700">
-              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Ready to Build?</h2>
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Ready to Learn?</h2>
               <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xl mx-auto">
                 Browse courses at your location and take the next step on your robotics journey.
               </p>
@@ -170,7 +174,8 @@ export default function JourneyBuildPage() {
                 asChild
               >
                 <Link href="/course">
-                  Explore courses
+                  <span className="sm:hidden">Start...</span>
+                  <span className="hidden sm:inline">Start your LEARN</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
