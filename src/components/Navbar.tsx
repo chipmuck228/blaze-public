@@ -61,6 +61,63 @@ interface RouteProps {
     poster_url?: string | null;
   }
 
+  /** 无 location 时，journey 阶段 category name → 静态页路径 */
+  const JOURNEY_CATEGORY_PATHS: Record<string, string> = {
+    explore: '/journey/explore',
+    learn: '/journey/learn',
+    compete: '/journey/compete',
+  };
+
+  const getCategorySlug = (categoryName: string) =>
+    (categoryName || '').replace(/_/g, '-');
+
+  const getCategoryHref = (
+    category: Category,
+    locationCode: string | null,
+    pathname: string | null
+  ) => {
+    if (locationCode) {
+      const params = new URLSearchParams();
+      params.set("location", locationCode.toLowerCase());
+      if (category.name) params.set("program", category.name);
+      return `/programs?${params.toString()}`;
+    }
+    if (pathname === "/programs") {
+      const params = new URLSearchParams();
+      params.set("category", category.id);
+      return `/programs?${params.toString()}`;
+    }
+    const journeyPath = JOURNEY_CATEGORY_PATHS[(category.name || '').toLowerCase()];
+    if (journeyPath) return journeyPath;
+    return `/category/${encodeURIComponent(getCategorySlug(category.name))}`;
+  };
+
+  const isCategoryLinkActive = (
+    category: Category,
+    locationCode: string | null,
+    pathname: string | null
+  ) => {
+    if (!pathname) return false;
+    if (pathname === "/programs" && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const catParam = params.get("category");
+      const programParam = params.get("program");
+      if (programParam) {
+        return programParam.toLowerCase() === (category.name || "").toLowerCase();
+      }
+      return catParam === category.id;
+    }
+    if (!locationCode) {
+      const journeyPath = JOURNEY_CATEGORY_PATHS[(category.name || '').toLowerCase()];
+      if (journeyPath) return pathname === journeyPath || pathname.startsWith(`${journeyPath}/`);
+    }
+    const categorySlug = getCategorySlug(category.name);
+    const currentSlug = pathname.startsWith('/category/')
+      ? pathname.replace(/^\/category\//, '').split('/')[0]
+      : null;
+    return currentSlug !== null && currentSlug === categorySlug;
+  };
+
   // 根据 v2_category 的 name 字段返回对应的图标
   const getCategoryIcon = (categoryName: string) => {
     const normalizedName = categoryName.toLowerCase().trim()
@@ -441,7 +498,7 @@ interface RouteProps {
                 <button 
                   className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${pathname === '/programs' ? NAV_ACTIVE : NAV_TEXT}`}
                 >
-                  <span>Categories</span>
+                  <span>Programs</span>
                   <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
                 </button>
                 
@@ -459,11 +516,8 @@ interface RouteProps {
                       ) : (
                         <div className="py-2">
                           {categories.map((category) => {
-                            const categorySlug = (category.name || '').replace(/_/g, '-');
-                            const base = `/category/${encodeURIComponent(categorySlug)}`;
-                            const href = currentLocationCode ? `${base}?location=${encodeURIComponent(currentLocationCode)}` : base;
-                            const currentSlug = pathname.startsWith('/category/') ? pathname.replace(/^\/category\//, '').split('/')[0] : null;
-                            const isCategoryActive = currentSlug !== null && currentSlug === categorySlug;
+                            const href = getCategoryHref(category, currentLocationCode, pathname);
+                            const isCategoryActive = isCategoryLinkActive(category, currentLocationCode, pathname);
 
                             return (
                               <Link
@@ -796,11 +850,8 @@ interface RouteProps {
                       </div>
                     ) : (
                       categories.map((category) => {
-                        const categorySlug = (category.name || '').replace(/_/g, '-');
-                        const base = `/category/${encodeURIComponent(categorySlug)}`;
-                        const href = currentLocationCode ? `${base}?location=${encodeURIComponent(currentLocationCode)}` : base;
-                        const currentSlug = pathname.startsWith('/category/') ? pathname.replace(/^\/category\//, '').split('/')[0] : null;
-                        const isCategoryActive = currentSlug !== null && currentSlug === categorySlug;
+                        const href = getCategoryHref(category, currentLocationCode, pathname);
+                        const isCategoryActive = isCategoryLinkActive(category, currentLocationCode, pathname);
 
                         return (
                           <Link

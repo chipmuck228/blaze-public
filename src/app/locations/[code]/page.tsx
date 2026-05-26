@@ -3,7 +3,7 @@ import { Footer } from "@/components/Footer"
 import { notFound } from "next/navigation"
 import { supabaseAdmin } from "@/lib/supabase"
 import { LocationProgramsByCategory } from "@/components/location/LocationProgramsByCategory"
-import type { CategoryGroup } from "@/components/location/LocationProgramsByCategory"
+import type { CategoryGroup, LocationProgram } from "@/components/location/LocationProgramsByCategory"
 import { LocationHero } from "@/components/location/LocationHero"
 import { LocationCampuses } from "@/components/location/LocationCampuses"
 import { LocationFeatures } from "@/components/location/LocationFeatures"
@@ -13,7 +13,12 @@ import { Testimonials } from "@/components/Testimonials"
 import { Newsletter } from "@/components/Newsletter"
 import { AIChatButton } from "@/components/location/AIChatButton"
 import { LocationCta } from "@/components/location/LocationCta"
-import type { LocationHeroProgram } from "@/components/location/LocationHero"
+import {
+  FEATURED_INSTANCE_SELECT,
+  mapInstanceRowToFeaturedSession,
+  sortFeaturedInstanceRows,
+  type FeaturedSession,
+} from "@/lib/featured-sessions"
 
 interface LocationPageProps {
   params: Promise<{ code: string }>
@@ -55,14 +60,19 @@ type V2Campus = {
   city?: string | null
   state?: string | null
   zip_code?: string | null
+  country?: string | null
+  phone?: string | null
+  email?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
-/** 优先使用 branding_config.hero.title，否则 [location] Robotics Academy */
-function getHeroTitle(franchise: V2Franchise, locationLabel: string): string {
+/** 优先 branding_config.hero.title，否则使用 v2_franchise.name，如 "Mill Creek Robotics Academy" */
+function getHeroTitle(franchise: V2Franchise): string {
   if (franchise.branding_config?.hero?.title?.trim()) {
     return franchise.branding_config.hero.title.trim()
   }
-  const loc = locationLabel?.trim()
+  const loc = franchise.name?.trim()
   return loc ? `${loc} Robotics Academy` : "Robotics Academy"
 }
 
@@ -87,7 +97,7 @@ function getHeroBackgroundUrl(franchise: V2Franchise): string | null {
 function getHeroCta(franchise: V2Franchise, normalizedCode: string): { text: string; link: string; external: boolean } {
   const text = franchise.branding_config?.hero?.ctaText?.trim()
   const link = franchise.branding_config?.hero?.ctaLink?.trim()
-  const defaultLink = `/programs?location=${encodeURIComponent(normalizedCode)}`
+  const defaultLink = `/programs?location=${encodeURIComponent(normalizedCode.toLowerCase())}`
   const href = link || defaultLink
   const external = href.startsWith("http://") || href.startsWith("https://")
   return { text: text || "View Programs", link: href, external }
@@ -134,15 +144,21 @@ function formatLocationLabel(code: string): string {
 export async function generateMetadata({ params }: LocationPageProps) {
   const { code } = await params
   const normalizedCode = decodeURIComponent(code).toLowerCase()
-  const locationLabel = formatLocationLabel(normalizedCode)
-  const defaultTitle = locationLabel ? `${locationLabel} Robotics Academy` : "Robotics Academy"
 
   const { data: franchise } = await supabaseAdmin
     .from("v2_franchise")
-    .select("marketing_config")
+    .select("name, marketing_config")
     .eq("code", normalizedCode)
     .eq("is_active", true)
     .single()
+
+  const franchiseName = (franchise as { name?: string | null } | null)?.name?.trim()
+  const locationLabel = formatLocationLabel(normalizedCode)
+  const defaultTitle = franchiseName
+    ? `${franchiseName} Robotics Academy`
+    : locationLabel
+      ? `${locationLabel} Robotics Academy`
+      : "Robotics Academy"
 
   const marketing = (franchise as { marketing_config?: MarketingConfig } | null)?.marketing_config
   const title = marketing?.seo?.title?.trim() || defaultTitle
@@ -184,10 +200,36 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
   // v2_campus：该 franchise 下全部 active campuses（用于主地址 + 多地点列表）
   const { data: campusesData } = await supabaseAdmin
     .from("v2_campus")
-    .select("id, name, display_name, address, city, state, zip_code")
+    .select(
+      "id, name, display_name, address, city, state, zip_code, country, phone, email, latitude, longitude"
+    )
     .eq("franchise_id", v2Franchise.id)
     .eq("is_active", true)
     .order("name", { ascending: true })
+
+  const { data: categoryMapsData, error: categoryMapsError } = await supabaseAdmin
+    .from("v2_franchise_category_map")
+    .select(
+      `
+      display_order,
+      category:v2_category!inner(
+        id,
+        name,
+        display_name,
+        description,
+        poster_url,
+        display_order,
+        is_active
+      )
+    `
+    )
+    .eq("franchise_id", v2Franchise.id)
+    .eq("is_visible", true)
+    .order("display_order", { ascending: true })
+
+  if (categoryMapsError) {
+    console.error("[LocationPage] Error fetching franchise category subscriptions:", categoryMapsError)
+  }
 
   const allCampuses = (campusesData || []) as V2Campus[]
   const firstCampus = allCampuses[0] ?? null
@@ -223,7 +265,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     console.error("[LocationPage] Error fetching v2_program:", programsError)
   }
 
-  const programs: LocationHeroProgram[] = (programsData || []).map(
+  const programs: LocationProgram[] = (programsData || []).map(
     (row: any) => ({
       id: row.id,
       name: row.name,
@@ -241,42 +283,70 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     })
   )
 
-  // 方案 A：按 v2_category 分组，仅展示该 franchise 下有 program 的 category；用于「按兴趣探索」区块
+  // 该 franchise 订阅的全部 category（含无 program 的），用于「按兴趣探索」区块
   const programsGroupedByCategory: CategoryGroup[] = (() => {
-    const map = new Map<string, { category: CategoryGroup["category"]; programIds: string[] }>()
-    const programById = new Map(programs.map((p) => [p.id, p]))
-    for (const row of programsData || []) {
-      const rawCat = row.category
-      const cat = Array.isArray(rawCat) ? rawCat[0] : rawCat
-      if (!cat?.id) continue
-      if (!map.has(cat.id)) {
-        map.set(cat.id, {
-          category: {
-            id: cat.id,
-            name: cat.name,
-            display_name: cat.display_name,
-            description: cat.description ?? null,
-            poster_url: cat.poster_url ?? null,
-            display_order: cat.display_order ?? null,
-          },
-          programIds: [],
-        })
-      }
-      map.get(cat.id)!.programIds.push(row.id)
+    const programsByCategoryId = new Map<string, LocationProgram[]>()
+    for (const program of programs) {
+      if (!program.category?.id) continue
+      const list = programsByCategoryId.get(program.category.id) ?? []
+      list.push(program)
+      programsByCategoryId.set(program.category.id, list)
     }
-    return Array.from(map.entries())
-      .map(([, v]) => ({
-        category: v.category,
-        programs: v.programIds.map((id) => programById.get(id)!).filter(Boolean),
-      }))
-      .filter((g) => g.programs.length > 0)
-      .sort((a, b) => {
-        const orderA = a.category.display_order ?? 999
-        const orderB = b.category.display_order ?? 999
-        if (orderA !== orderB) return orderA - orderB
-        return (a.category.display_name || "").localeCompare(b.category.display_name || "")
+
+    const subscribed = (categoryMapsData || [])
+      .map((row: { display_order?: number | null; category: unknown }) => {
+        const rawCat = row.category
+        const cat = Array.isArray(rawCat) ? rawCat[0] : rawCat
+        if (!cat || typeof cat !== "object" || !("id" in cat)) return null
+        const c = cat as {
+          id: string
+          name: string
+          display_name: string
+          description?: string | null
+          poster_url?: string | null
+          display_order?: number | null
+          is_active?: boolean
+        }
+        if (c.is_active === false) return null
+        return {
+          mapOrder: row.display_order ?? null,
+          category: {
+            id: c.id,
+            name: c.name,
+            display_name: c.display_name,
+            description: c.description ?? null,
+            poster_url: c.poster_url ?? null,
+            display_order: c.display_order ?? null,
+          },
+          programs: programsByCategoryId.get(c.id) ?? [],
+        }
       })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+
+    return subscribed.sort((a, b) => {
+      const orderA = a.mapOrder ?? a.category.display_order ?? 999
+      const orderB = b.mapOrder ?? b.category.display_order ?? 999
+      if (orderA !== orderB) return orderA - orderB
+      return (a.category.display_name || "").localeCompare(b.category.display_name || "")
+    })
   })()
+
+  const { data: featuredInstancesData, error: featuredInstancesError } = await supabaseAdmin
+    .from("v2_instance")
+    .select(FEATURED_INSTANCE_SELECT)
+    .eq("is_active", true)
+    .eq("featured", true)
+    .in("status", ["scheduled", "ongoing"])
+    .eq("program.franchise_id", v2Franchise.id)
+
+  if (featuredInstancesError) {
+    console.error("[LocationPage] Error fetching featured instances:", featuredInstancesError)
+  }
+
+  const featuredSessions: FeaturedSession[] = sortFeaturedInstanceRows(featuredInstancesData || [])
+    .map(mapInstanceRowToFeaturedSession)
+    .filter((item): item is FeaturedSession => item !== null)
+    .slice(0, 6)
 
   const displayName =
     v2Franchise.name ||
@@ -285,8 +355,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ") ||
     normalizedCode
-  const locationLabel = formatLocationLabel(normalizedCode) || displayName
-  const heroTitle = getHeroTitle(v2Franchise, locationLabel)
+  const heroTitle = getHeroTitle(v2Franchise)
   const heroSubtitle = getHeroSubtitle(v2Franchise)
   const heroDescription = getHeroDescription(v2Franchise)
   const heroBackgroundUrl = getHeroBackgroundUrl(v2Franchise)
@@ -313,22 +382,22 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
           displayName={displayName}
           primaryAddress={primaryAddress}
           normalizedCode={normalizedCode}
-          programs={programs}
+          sessions={featuredSessions}
         />
 
-        {allCampuses.length > 0 && (
-          <LocationCampuses campuses={allCampuses} displayName={displayName} />
-        )}
-
-        <LocationFeatures franchiseCode={normalizedCode} primaryAddressFromCampus={primaryAddress} />
-
-        <section className="bg-[#0f172a] dark:bg-slate-900">
+        <section className="bg-slate-50 dark:bg-slate-900/50">
           <LocationProgramsByCategory
             programsGroupedByCategory={programsGroupedByCategory}
             franchiseCode={normalizedCode}
             locationName={displayName}
           />
         </section>
+
+        <LocationFeatures franchiseCode={normalizedCode} primaryAddressFromCampus={primaryAddress} />
+
+        {allCampuses.length > 0 && (
+          <LocationCampuses campuses={allCampuses} displayName={displayName} />
+        )}
 
         {hasCta && (
           <LocationCta

@@ -18,12 +18,13 @@ export async function GET() {
       );
     }
     
-    // 从 v2_category 表获取活跃的类别（is_active = true）
+    // 从 v2_category 表获取活跃类别（is_active = true），按 display_order 升序（0 起）
     const { data, error } = await supabaseAdmin
       .from('v2_category')
       .select('id, name, display_name, description, poster_url, is_active, display_order')
       .eq('is_active', true)
       .order('display_order', { ascending: true })
+      .order('name', { ascending: true })
 
     if (error) {
       console.error('[Categories API] Supabase error:', {

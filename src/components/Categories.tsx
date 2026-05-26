@@ -96,13 +96,20 @@ export const Categories = () => {
         // 从 v2_category 获取全局类别（仅 is_active = true）
         const response = await fetch('/api/public/categories')
         if (!response.ok) {
-          throw new Error('Failed to fetch categories')
+          throw new Error('Failed to fetch programs')
         }
         const data = await response.json()
-        setCategories(data.categories || [])
+        const items: Category[] = data.categories || []
+        items.sort((a, b) => {
+          const orderA = a.display_order ?? Number.MAX_SAFE_INTEGER
+          const orderB = b.display_order ?? Number.MAX_SAFE_INTEGER
+          if (orderA !== orderB) return orderA - orderB
+          return (a.display_name || a.name).localeCompare(b.display_name || b.name)
+        })
+        setCategories(items)
       } catch (err) {
         console.error('Error fetching categories:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load categories')
+        setError(err instanceof Error ? err.message : 'Failed to load programs')
       } finally {
         setIsLoading(false)
       }
@@ -139,10 +146,10 @@ export const Categories = () => {
     <section className="bg-[#0f172a] text-white pt-16 pb-8">
       <div className="text-center mb-12 md:mb-16">
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-          Blaze Categories
+          Blaze Programs
         </h2>
         <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-          Explore our categories—each location may offer a selection of these. Choose a category to see available programs.
+          Explore our programs—each location may offer a selection of these. Choose a program to see available sessions and schedules.
         </p>
       </div>
 
