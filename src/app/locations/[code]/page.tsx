@@ -66,13 +66,11 @@ type V2Campus = {
   longitude?: number | null
 }
 
-/** 优先 branding_config.hero.title，否则使用 v2_franchise.name，如 "Mill Creek Robotics Academy" */
-function getHeroTitle(franchise: V2Franchise): string {
-  if (franchise.branding_config?.hero?.title?.trim()) {
-    return franchise.branding_config.hero.title.trim()
-  }
-  const loc = franchise.name?.trim()
-  return loc ? `${loc} Robotics Academy` : "Robotics Academy"
+/** 各 location 页统一为 Blaze Robotics@{franchise 名称}，避免 branding_config.hero.title 误填他店名称 */
+function getHeroTitle(franchise: V2Franchise, normalizedCode: string): string {
+  const locationName =
+    franchise.name?.trim() || formatLocationLabel(normalizedCode)
+  return `Blaze Robotics@${locationName}`
 }
 
 function getHeroDescription(franchise: V2Franchise): string {
@@ -354,7 +352,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ") ||
     normalizedCode
-  const heroTitle = getHeroTitle(v2Franchise)
+  const heroTitle = getHeroTitle(v2Franchise, normalizedCode)
   const heroSubtitle = getHeroSubtitle(v2Franchise)
   const heroDescription = getHeroDescription(v2Franchise)
   const heroBackgroundUrl = getHeroBackgroundUrl(v2Franchise)
