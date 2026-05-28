@@ -125,6 +125,45 @@ export interface InstanceDetailData {
   }
   available_spots: number
   is_full: boolean
+  amilia_link?: string | null
+}
+
+function enrollCtaProps(data: InstanceDetailData, franchiseCode?: string) {
+  const cartHref = `/enrollments/cart?instance_id=${data.id}${franchiseCode ? `&franchise=${franchiseCode}` : ""}`
+  const amilia = data.amilia_link?.trim()
+  if (!data.is_full && amilia) {
+    return {
+      href: amilia,
+      external: true as const,
+    }
+  }
+  return { href: cartHref, external: false as const }
+}
+
+function EnrollCta({
+  data,
+  franchiseCode,
+  className,
+  children,
+}: {
+  data: InstanceDetailData
+  franchiseCode?: string
+  className?: string
+  children: ReactNode
+}) {
+  const { href, external } = enrollCtaProps(data, franchiseCode)
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {children}
+      </a>
+    )
+  }
+  return (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  )
 }
 
 function getTypeLabels(code?: string): SectionLabels {
@@ -409,9 +448,9 @@ export function InstanceDetail() {
           className="bg-[#2563eb] hover:bg-blue-600"
           asChild
         >
-          <Link href={`/enrollments/cart?instance_id=${data.id}${franchise?.code ? `&franchise=${franchise.code}` : ""}`}>
+          <EnrollCta data={data} franchiseCode={franchise?.code}>
             {data.is_full ? "Join waitlist" : "Enroll"}
-          </Link>
+          </EnrollCta>
         </Button>
       </div>
 
@@ -490,9 +529,9 @@ export function InstanceDetail() {
                 className="w-full bg-[#2563eb] hover:bg-blue-600 text-white py-4 rounded-xl font-bold text-lg"
                 asChild
               >
-                <Link href={`/enrollments/cart?instance_id=${data.id}${franchise?.code ? `&franchise=${franchise.code}` : ""}`}>
+                <EnrollCta data={data} franchiseCode={franchise?.code}>
                   {data.is_full ? "Join waitlist" : "Enroll now"}
-                </Link>
+                </EnrollCta>
               </Button>
             </div>
           </div>
@@ -651,9 +690,9 @@ export function InstanceDetail() {
                 {typeof price === "number" ? `${currency} ${price.toFixed(2)}` : currency}
               </div>
               <Button className="w-full bg-[#2563eb] hover:bg-blue-600 text-white py-3 rounded-xl font-bold" asChild>
-                <Link href={`/enrollments/cart?instance_id=${data.id}${franchise?.code ? `&franchise=${franchise.code}` : ""}`}>
+                <EnrollCta data={data} franchiseCode={franchise?.code}>
                   {data.is_full ? "Join waitlist" : "Enroll now"}
-                </Link>
+                </EnrollCta>
               </Button>
             </div>
 
@@ -707,9 +746,9 @@ export function InstanceDetail() {
                 className="w-full mt-6 bg-[#2563eb] hover:bg-blue-600 text-white py-3 rounded-xl font-bold"
                 asChild
               >
-                <Link href={`/enrollments/cart?instance_id=${data.id}${franchise?.code ? `&franchise=${franchise.code}` : ""}`}>
+                <EnrollCta data={data} franchiseCode={franchise?.code}>
                   {data.is_full ? "Join waitlist" : "Enroll now"}
-                </Link>
+                </EnrollCta>
               </Button>
             </div>
 

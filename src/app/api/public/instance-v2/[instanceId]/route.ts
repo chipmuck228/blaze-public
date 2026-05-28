@@ -53,6 +53,7 @@ export async function GET(
         start_time,
         end_time,
         max_students,
+        amilia_link,
         instance_data_ext,
         program:v2_program(
           id,
@@ -148,6 +149,7 @@ export async function GET(
       current_students: currentStudents,
       status: (row as any).status,
       price_override: (row as any).price_override ?? extData.price_override ?? capacityPrice?.price_override ?? null,
+      amilia_link: (row as any).amilia_link?.trim() || null,
       instance_data_ext: filterInstanceDataExtByDisplayScope(instanceSchema, extData),
       location: campus
         ? {

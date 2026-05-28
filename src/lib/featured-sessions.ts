@@ -36,7 +36,12 @@ export const FEATURED_INSTANCE_SELECT = `
     name,
     description,
     poster_url,
-    status
+    status,
+    category:v2_category(
+      id,
+      name,
+      display_name
+    )
   )
 `
 
@@ -62,7 +67,11 @@ export function mapInstanceRowToFeaturedSession(row: any): FeaturedSession | nul
   const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
   if (!program || !offering || offering.status !== "published") return null
 
-  const category = Array.isArray(program.category) ? program.category[0] : program.category
+  const offeringCategory = Array.isArray(offering.category)
+    ? offering.category[0]
+    : offering.category
+  const programCategory = Array.isArray(program.category) ? program.category[0] : program.category
+  const category = offeringCategory ?? programCategory
   const franchise = Array.isArray(program.franchise) ? program.franchise[0] : program.franchise
   if (franchise && franchise.is_active === false) return null
   if (!category?.name) return null

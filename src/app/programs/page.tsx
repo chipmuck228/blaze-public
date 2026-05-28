@@ -8,7 +8,6 @@ import { Loader2, MapPin, Calendar, Search, ArrowRight, BookOpen, ExternalLink, 
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import Image from "next/image"
-import { AIAssessmentDialog } from "@/components/location/AIAssessmentDialog"
 import {
   buildDisplayTree,
   countSessionsInLocation,
@@ -180,8 +179,6 @@ function ProgramsPageContent() {
   const [selectedProgramCategoryId, setSelectedProgramCategoryId] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAgeRange, setSelectedAgeRange] = useState<string>("all")
-  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false)
-
   useEffect(() => {
     if (catalogCategories.length === 0 && !categoryIdFromUrl && !programNameFromUrl) return
     const resolved = resolveCategoryIdFromUrl(catalogCategories, {
@@ -246,9 +243,9 @@ function ProgramsPageContent() {
           const one = await franchisesListRes.json()
           if (one?.id) {
             setLocationFranchiseMeta({
-              id: one.id,
-              code: (one.code || locationFromUrl).toLowerCase(),
-              name: one.name || locationFromUrl,
+              id: fromInstances?.id ?? one.id,
+              code: (fromInstances?.code || one.code || locationFromUrl).toLowerCase(),
+              name: fromInstances?.name || one.name || locationFromUrl,
             })
           } else if (fromInstances) {
             setLocationFranchiseMeta({
@@ -721,13 +718,12 @@ function ProgramsPageContent() {
                   interests.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsAIDialogOpen(true)}
-                className="bg-white text-blue-600 px-12 py-5 rounded-full font-black text-xl hover:scale-105 transition-all shadow-xl whitespace-nowrap"
+              <div
+                className="bg-white/90 text-blue-600 px-12 py-5 rounded-full font-black text-xl shadow-xl whitespace-nowrap cursor-not-allowed opacity-90"
+                aria-disabled="true"
               >
-                Get AI Assessment
-              </button>
+                Coming Soon
+              </div>
             </div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
           </div>
@@ -735,12 +731,6 @@ function ProgramsPageContent() {
       </div>
       <Footer />
 
-      <AIAssessmentDialog
-        franchiseCode={locationFromUrl || "general"}
-        franchiseName={activeLocName || "Blaze Robotics Academy"}
-        isOpen={isAIDialogOpen}
-        onOpenChange={setIsAIDialogOpen}
-      />
     </>
   )
 }

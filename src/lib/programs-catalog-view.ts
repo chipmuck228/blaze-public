@@ -176,11 +176,19 @@ export function buildDisplayTree(
 
   let sourceFranchises = franchisesData
   if (filters.selectedFranchiseId !== "all") {
-    sourceFranchises = franchisesData.filter((f) => f.id === filters.selectedFranchiseId)
+    const locCode = locationFranchise?.code?.toLowerCase()
+    sourceFranchises = franchisesData.filter(
+      (f) =>
+        f.id === filters.selectedFranchiseId ||
+        (locCode && (f.code || "").toLowerCase() === locCode)
+    )
   }
 
   if (viewMode === "location" && locationFranchise) {
-    const match = sourceFranchises.find((f) => f.id === locationFranchise.id)
+    const codeKey = (locationFranchise.code || "").toLowerCase()
+    const match =
+      sourceFranchises.find((f) => f.id === locationFranchise.id) ||
+      (codeKey ? sourceFranchises.find((f) => (f.code || "").toLowerCase() === codeKey) : undefined)
     sourceFranchises = [
       match ?? {
         id: locationFranchise.id,

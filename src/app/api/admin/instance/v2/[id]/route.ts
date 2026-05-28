@@ -125,6 +125,8 @@ export async function PUT(
       status,
       notes,
       is_active,
+      featured,
+      amilia_link,
     } = body
 
     const nextDataExt = {
@@ -244,6 +246,11 @@ export async function PUT(
     if (status !== undefined) updateData.status = status
     if (notes !== undefined) updateData.notes = notes
     if (is_active !== undefined) updateData.is_active = is_active
+    if (featured !== undefined) updateData.featured = !!featured
+    if (amilia_link !== undefined) {
+      updateData.amilia_link =
+        typeof amilia_link === "string" && amilia_link.trim() ? amilia_link.trim() : null
+    }
 
     // 更新 Instance
     const { data: updatedInstance, error: updateError } = await supabaseAdmin

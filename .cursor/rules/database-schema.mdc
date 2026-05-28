@@ -14,6 +14,11 @@ DDL lives in `v2/` — run order per `v2/README.md` (`00_helpers.sql` first, the
 
 Always use `v2_*` prefix. Never create `offerings_v2`, `franchises_v2`, or `instance_v2` style names. Do not extend `@/lib/db-v2.ts` (deprecated old table names).
 
+## C-end vs Admin naming
+
+- C-end: Location (`v2_franchise`) → Program (`v2_category`) → Activity (`v2_program`) → Session (`v2_instance`); session card title = `v2_offering.name`
+- Admin ops: franchise → category → program (`v2_program`) → instance; `v2_offering` is the product template linked on each instance
+
 ## Entity Hierarchy
 
 - **Config**: `v2_offering_type` — `offering_schema` / `instance_schema` drive dynamic fields
@@ -21,6 +26,7 @@ Always use `v2_*` prefix. Never create `offerings_v2`, `franchises_v2`, or `inst
 - **Franchise**: `v2_franchise`, `v2_franchise_category_map`, `v2_campus`
 - **Operations**: `v2_program`, `v2_instance` (user purchase target)
 - `v2_instance.featured` (boolean, default `false`) — marks an instance for featured/recommended display on the C-end
+- `v2_instance.amilia_link` (text, nullable) — external Amilia enrollment URL; C-end instance detail uses it for “Enroll now” when set (migration `11_v2_instance_amilia_link.sql`)
 
 ## Schema-Driven Fields
 

@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase"
 /**
  * GET /api/public/instances-v2?category=xxx&location=yyy&portal_service_role=meal_service|care_service
  * Returns enrollable instances from v2_instance only (instance_v2 已废弃，不再使用).
- * - category: optional v2_category id; when omitted, returns instances from all categories.
+ * - category: optional v2_category id; filters by offering.category_id (C-end Program), not program.category_id.
  * - location: optional franchise code; when omitted, returns all franchises.
  * - portal_service_role: optional 'meal_service' | 'care_service'; when set, returns only instances with that role (for detail page Meal/Care blocks). Design: INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN.
  * Shape: { franchises: [ { id, code, name, programs: [ { ..., instances: [...] } ] } ] }
@@ -73,14 +73,20 @@ export async function GET(request: Request) {
             name
           )
         ),
-        offering:v2_offering(
+        offering:v2_offering!inner(
           id,
           name,
           slug,
           description,
           base_price,
           poster_url,
-          status
+          status,
+          category_id,
+          category:v2_category(
+            id,
+            name,
+            display_name
+          )
         ),
         campus:v2_campus(
           id,
@@ -95,9 +101,6 @@ export async function GET(request: Request) {
       .eq("is_active", true)
       .in("status", ["scheduled", "ongoing"])
 
-    if (categoryId) {
-      query = query.eq("program.category_id", categoryId)
-    }
     if (franchiseId) {
       query = query.eq("program.franchise_id", franchiseId)
     }
@@ -124,6 +127,13 @@ export async function GET(request: Request) {
       list = list.filter((row: any) => row?.portal_service_role === portalServiceRole)
     } else {
       list = list.filter((row: any) => row?.is_course_type === true)
+    }
+    if (categoryId) {
+      list = list.filter((row: any) => {
+        const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
+        const cat = Array.isArray(offering?.category) ? offering.category[0] : offering?.category
+        return cat?.id === categoryId
+      })
     }
     const getStart = (row: any) => {
       const ext = row?.instance_data_ext
@@ -173,6 +183,10 @@ export async function GET(request: Request) {
       const campus = Array.isArray(row.campus) ? row.campus[0] : row.campus
       if (!program?.franchise?.id) continue
       if (!offering || offering.status !== "published") continue
+      const offeringCategory = Array.isArray(offering.category)
+        ? offering.category[0]
+        : offering.category
+      if (!offeringCategory?.id) continue
       const fr = program.franchise
       const franchiseKey = fr.id
       if (!franchiseMap.has(franchiseKey)) {
@@ -184,18 +198,18 @@ export async function GET(request: Request) {
         })
       }
       const franchiseData = franchiseMap.get(franchiseKey)!
-      const programKey = program.id
+      // Same v2_program can appear under multiple C-end Programs when offerings differ by category
+      const programKey = `${program.id}:${offeringCategory.id}`
       if (!franchiseData.programs.has(programKey)) {
-        const cat = Array.isArray(program.category) ? program.category[0] : program.category
         franchiseData.programs.set(programKey, {
           id: program.id,
           name: program.name ?? "",
           display_name: program.display_name ?? program.name ?? "",
           description: program.description ?? undefined,
           category: {
-            id: cat?.id ?? "",
-            name: cat?.name ?? "",
-            display_name: cat?.display_name ?? cat?.name ?? "",
+            id: offeringCategory.id,
+            name: offeringCategory.name ?? "",
+            display_name: offeringCategory.display_name ?? offeringCategory.name ?? "",
           },
           instances: [],
         })

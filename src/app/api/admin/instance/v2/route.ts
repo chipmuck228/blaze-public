@@ -140,6 +140,8 @@ export async function POST(request: Request) {
       status = "scheduled",
       notes,
       is_active = true,
+      featured = false,
+      amilia_link,
     } = body
 
     // 仅 program_id、offering_id 为必填；start_date/end_date 由 instance_schema 决定
@@ -426,8 +428,11 @@ export async function POST(request: Request) {
         status,
         notes: notes || null,
         is_active,
+        featured: !!featured,
         is_course_type: isCourseType,
         portal_service_role: portalServiceRole,
+        amilia_link:
+          typeof amilia_link === "string" && amilia_link.trim() ? amilia_link.trim() : null,
       })
       .select(`
         *,

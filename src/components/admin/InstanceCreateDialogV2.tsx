@@ -193,6 +193,8 @@ export function InstanceCreateDialog({
     status: "scheduled",
     notes: "",
     is_active: true,
+    featured: false,
+    amilia_link: "",
   })
 
   // Initialize form data when editingInstance changes; inflate flat instance_data_ext to nested when schema has object groups
@@ -220,6 +222,8 @@ export function InstanceCreateDialog({
         status: editingInstance.status ?? "scheduled",
         notes: editingInstance.notes ?? "",
         is_active: editingInstance.is_active !== undefined ? editingInstance.is_active : true,
+        featured: editingInstance.featured === true,
+        amilia_link: editingInstance.amilia_link ?? "",
       })
       setSelectedOffering(editingInstance.offering)
       setSelectedProgram(editingInstance.program)
@@ -427,6 +431,8 @@ export function InstanceCreateDialog({
         status: formData.status,
         notes: formData.notes || null,
         is_active: formData.is_active,
+        featured: formData.featured,
+        amilia_link: formData.amilia_link.trim() || null,
       }
 
       const url = isEditMode && editingInstance
@@ -466,6 +472,8 @@ export function InstanceCreateDialog({
         status: "scheduled",
         notes: "",
         is_active: true,
+        featured: false,
+        amilia_link: "",
       })
       setSelectedOffering(null)
     } catch (error: any) {
@@ -959,6 +967,32 @@ export function InstanceCreateDialog({
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm font-medium">Enrollment</CardTitle>
+              <CardDescription className="text-xs">
+                Optional Amilia URL for the public instance page &quot;Enroll now&quot; button.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              <Label htmlFor="instance-amilia-link" className="text-sm">
+                Amilia enrollment link
+              </Label>
+              <Input
+                id="instance-amilia-link"
+                type="url"
+                placeholder="https://app.amilia.com/store/en/..."
+                value={formData.amilia_link}
+                onChange={(e) =>
+                  setFormData({ ...formData, amilia_link: e.target.value })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty to use the in-app enrollment cart. When set, C-end opens this link in a new tab (unless the session is full).
+              </p>
+            </CardContent>
+          </Card>
+
           {/* 日期块：仅当 instance_schema 中定义了 start_date 或 end_date 且未用 object schedule 时显示 */}
           {(() => {
             const schema = selectedOffering?.offering_type?.instance_schema?.fields
@@ -1078,7 +1112,7 @@ export function InstanceCreateDialog({
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm font-medium">Schedule, capacity &amp; campus</CardTitle>
-                  <CardDescription className="text-xs">Time, max students, price override, status, and optional campus.</CardDescription>
+                  <CardDescription className="text-xs">Time, max students, price override, status, optional campus, and featured flag.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   {hasCommon && (
@@ -1089,6 +1123,21 @@ export function InstanceCreateDialog({
                     </div>
                   )}
                   {selectedOffering && campusEl}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1">
+                    <Checkbox
+                      id="instance-featured"
+                      checked={formData.featured}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, featured: checked === true })
+                      }
+                    />
+                    <Label htmlFor="instance-featured" className="text-sm cursor-pointer">
+                      Featured
+                    </Label>
+                    <span className="text-xs text-muted-foreground">
+                      Show this instance in featured/recommended placements
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
             )
