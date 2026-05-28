@@ -164,7 +164,11 @@ export default function BlazeProgramsManagementPage() {
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false)
   const [editingInstance, setEditingInstance] = useState<any | null>(null)
-  const [programToDelete, setProgramToDelete] = useState<{ id: string; display_name: string } | null>(null)
+  const [programToDelete, setProgramToDelete] = useState<{
+    id: string
+    display_name: string
+    instanceCount?: number
+  } | null>(null)
   const [isDeletingProgram, setIsDeletingProgram] = useState(false)
   const [posterFile, setPosterFile] = useState<File | null>(null)
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
@@ -305,6 +309,10 @@ export default function BlazeProgramsManagementPage() {
         fetchHierarchy()
         fetchPrograms()
         setProgramToDelete(null)
+        if (editingProgram?.id === programToDelete.id) {
+          setIsEditDialogOpen(false)
+          setEditingProgram(null)
+        }
         toast.success("Program deleted successfully")
       } else {
         const data = await response.json()
@@ -316,6 +324,14 @@ export default function BlazeProgramsManagementPage() {
     } finally {
       setIsDeletingProgram(false)
     }
+  }
+
+  const openDeleteProgram = (program: { id: string; display_name: string; instances?: unknown[] }) => {
+    setProgramToDelete({
+      id: program.id,
+      display_name: program.display_name,
+      instanceCount: program.instances?.length ?? 0,
+    })
   }
 
   const handlePosterFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -860,8 +876,8 @@ export default function BlazeProgramsManagementPage() {
                                                   Edit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
-                                                  className="text-destructive"
-                                                  onClick={() => setProgramToDelete({ id: programItem.id, display_name: programItem.display_name })}
+                                                  className="text-destructive focus:text-destructive"
+                                                  onClick={() => openDeleteProgram(programItem)}
                                                 >
                                                   <Trash2 className="mr-2 h-4 w-4" />
                                                   Delete
@@ -1220,8 +1236,32 @@ export default function BlazeProgramsManagementPage() {
               </Card>
             </div>
 
-            <DialogFooter className="flex-shrink-0 pt-4 border-t mt-4">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            <DialogFooter className="flex-shrink-0 pt-4 border-t mt-4 flex-col-reverse sm:flex-row sm:justify-between gap-2">
+              {editingProgram ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={isSubmitting}
+                  onClick={() =>
+                    openDeleteProgram({
+                      id: editingProgram.id,
+                      display_name: editingProgram.display_name,
+                      instances: hierarchyData
+                        .flatMap((f) => f.categories)
+                        .flatMap((c) => c.programs)
+                        .find((p) => p.id === editingProgram.id)?.instances,
+                    })
+                  }
+                  className="w-full sm:w-auto"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              ) : (
+                <span className="hidden sm:block" />
+              )}
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
               <Button 
@@ -1234,7 +1274,8 @@ export default function BlazeProgramsManagementPage() {
                   !formData.franchise_id ||
                   !formData.start_date ||
                   !formData.end_date
-                } 
+                }
+                className="w-full sm:w-auto"
               >
                 {isSubmitting ? (
                   <>
@@ -1247,6 +1288,7 @@ export default function BlazeProgramsManagementPage() {
                   "Create Program"
                 )}
               </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -1288,7 +1330,18 @@ export default function BlazeProgramsManagementPage() {
                     . This action cannot be undone.
                   </p>
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
-                    If this program has instances, the delete will fail and you’ll need to remove them first.
+                    {programToDelete.instanceCount != null && programToDelete.instanceCount > 0 ? (
+                      <>
+                        This program has{" "}
+                        <span className="font-medium text-destructive">
+                          {programToDelete.instanceCount} instance
+                          {programToDelete.instanceCount !== 1 ? "s" : ""}
+                        </span>
+                        . Remove all instances before deleting the program.
+                      </>
+                    ) : (
+                      <>If this program has instances, the delete will fail and you&apos;ll need to remove them first.</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1307,7 +1360,7 @@ export default function BlazeProgramsManagementPage() {
                 type="button"
                 variant="destructive"
                 onClick={handleConfirmDeleteProgram}
-                disabled={isDeletingProgram}
+                disabled={isDeletingProgram || (programToDelete.instanceCount ?? 0) > 0}
                 className="min-w-[100px]"
               >
                 {isDeletingProgram ? (

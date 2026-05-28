@@ -2,10 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { BookOpen, MapPin, User, MessageCircle } from 'lucide-react'
+import { BookOpen, MapPin, User } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { usePlatform } from '@/hooks/usePlatform'
-import { AIChatButton } from '@/components/location/AIChatButton'
 
 interface QuickAction {
   id: string
@@ -18,7 +16,6 @@ interface QuickAction {
 }
 
 export function QuickActions() {
-  const { isNative } = usePlatform()
   const router = useRouter()
   const { data: session, status } = useSession()
 
@@ -40,22 +37,12 @@ export function QuickActions() {
     {
       id: 'my-courses',
       title: status === 'authenticated' ? 'My Courses' : 'Sign In',
-      description: status === 'authenticated' 
-        ? 'View your enrollments' 
+      description: status === 'authenticated'
+        ? 'View your enrollments'
         : 'Sign in to view your courses',
       icon: User,
       href: status === 'authenticated' ? '/profile' : '/login',
-      requireAuth: false, // 未登录时显示 Sign In
-    },
-    {
-      id: 'ai-assistant',
-      title: 'Ask AI',
-      description: 'Get instant help',
-      icon: MessageCircle,
-      onClick: () => {
-        // 触发 AI 聊天对话框
-        window.dispatchEvent(new CustomEvent('openAIChat'))
-      },
+      requireAuth: false,
     },
   ]
 
@@ -92,9 +79,6 @@ export function QuickActions() {
           )
         })}
       </div>
-      {/* AI Chat Button (floating) */}
-      {isNative && <AIChatButton />}
     </section>
   )
 }
-

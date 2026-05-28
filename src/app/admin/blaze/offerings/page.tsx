@@ -340,18 +340,15 @@ export default function BlazeOfferingsManagementPage() {
     return groups
   }, [filteredOfferings])
 
-  const handleDelete = async (offeringId: string) => {
+  const handleDelete = async (offeringId: string, offeringName?: string) => {
     const offering = offerings.find(o => o.id === offeringId)
-    if (!offering) return
+    const name = offeringName ?? offering?.name ?? "this offering"
 
-    if (offering.status !== 'draft') {
-      toast.error("Cannot delete offering", {
-        description: `Only draft offerings can be deleted. Current status: ${offering.status}.`,
-      })
-      return
-    }
-
-    if (!confirm(`Are you sure you want to delete "${offering.name}"? This will fail if there are instances using this offering.`)) {
+    if (
+      !confirm(
+        `Delete "${name}"?\n\nThis cannot be undone. Deletion fails if any instances still use this offering.`
+      )
+    ) {
       return
     }
 
@@ -368,6 +365,10 @@ export default function BlazeOfferingsManagementPage() {
     toast.promise(deletePromise, {
       loading: "Deleting offering...",
       success: () => {
+        if (editingOffering?.id === offeringId) {
+          setIsEditDialogOpen(false)
+          setEditingOffering(null)
+        }
         fetchOfferings()
         return "Offering deleted successfully"
       },
@@ -800,15 +801,13 @@ export default function BlazeOfferingsManagementPage() {
                                         <Edit className="mr-2 h-4 w-4" />
                                         Edit
                                       </DropdownMenuItem>
-                                      {offering.status === 'draft' && (
-                                        <DropdownMenuItem
-                                          className="text-destructive"
-                                          onClick={() => handleDelete(offering.id)}
-                                        >
-                                          <Trash2 className="mr-2 h-4 w-4" />
-                                          Delete
-                                        </DropdownMenuItem>
-                                      )}
+                                      <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => handleDelete(offering.id, offering.name)}
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                      </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                 </div>
@@ -1319,7 +1318,22 @@ export default function BlazeOfferingsManagementPage() {
               </Tabs>
             </div>
 
-            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4 flex-col-reverse sm:flex-row sm:justify-between gap-2">
+              {editingOffering ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={isSubmitting}
+                  onClick={() => handleDelete(editingOffering.id, editingOffering.name)}
+                  className="w-full sm:w-auto"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              ) : (
+                <span className="hidden sm:block" />
+              )}
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
               <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
@@ -1344,6 +1358,7 @@ export default function BlazeOfferingsManagementPage() {
                   "Create Offering"
                 )}
               </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>

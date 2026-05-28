@@ -2,7 +2,6 @@
 
 import { Navbar } from '@/components/Navbar'
 import { Footer } from '@/components/Footer'
-import { AIChatButton } from '@/components/location/AIChatButton'
 import { AboutHero } from '@/components/about/AboutHero'
 import { Briefcase, ChevronRight, Award, Star, MapPin } from 'lucide-react'
 
@@ -85,7 +84,6 @@ export default function AboutCareersPage() {
         </div>
       </main>
       <Footer />
-      <AIChatButton franchiseCode="general" franchiseName="Blaze Robotics Academy" />
     </>
   )
 }

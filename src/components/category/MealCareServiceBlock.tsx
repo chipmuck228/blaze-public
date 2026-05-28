@@ -106,7 +106,11 @@ export function MealCareServiceBlock({
         {items.map((inst) => {
           const name = inst.course?.name ?? inst.offering?.name ?? "Session"
           const price = inst.offering?.base_price ?? inst.course?.base_price
-          const href = categorySlug ? `/category/${categorySlug}/instance/${inst.id}` : `/programs?location=${locationCode || ""}`
+          const href = categorySlug
+            ? `/category/${encodeURIComponent(categorySlug)}/instance/${encodeURIComponent(inst.id)}${
+                locationCode ? `?location=${encodeURIComponent(locationCode)}` : ""
+              }`
+            : `/programs${locationCode ? `?location=${encodeURIComponent(locationCode)}` : ""}`
           return (
             <li key={inst.id}>
               <Link

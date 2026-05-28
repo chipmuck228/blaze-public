@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import { Navbar } from '@/components/Navbar'
 import { Footer } from '@/components/Footer'
-import { AIChatButton } from '@/components/location/AIChatButton'
 import { AboutHero } from '@/components/about/AboutHero'
 import { faqData, type FaqTabKey } from '@/app/about/faq/faq-data'
 import { HelpCircle, Plus, Minus } from 'lucide-react'
@@ -109,7 +108,6 @@ export default function FaqPage() {
         </div>
       </main>
       <Footer />
-      <AIChatButton franchiseCode="general" franchiseName="Blaze Robotics Academy" />
     </>
   )
 }

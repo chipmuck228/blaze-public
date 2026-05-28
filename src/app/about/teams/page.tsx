@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Navbar } from '@/components/Navbar'
 import { Footer } from '@/components/Footer'
-import { AIChatButton } from '@/components/location/AIChatButton'
 import { AboutHero } from '@/components/about/AboutHero'
 import { Users, ThumbsUp, Bookmark, Loader2, Linkedin } from 'lucide-react'
 import Image from 'next/image'
@@ -259,7 +258,6 @@ export default function AboutTeamsPage() {
         </div>
       </main>
       <Footer />
-      <AIChatButton franchiseCode="general" franchiseName="Blaze Robotics Academy" />
     </>
   )
 }

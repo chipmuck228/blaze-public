@@ -783,10 +783,11 @@ export function InstanceDetail() {
 
             {data.offering?.offering_type?.id && (
               <InstanceRecommendations
-                offeringTypeId={data.offering.offering_type.id}
                 excludeOfferingId={data.offering.id}
+                excludeInstanceId={data.id}
                 categoryId={category?.id}
                 categorySlug={categorySlugNorm}
+                locationCode={franchise?.code}
               />
             )}
           </div>

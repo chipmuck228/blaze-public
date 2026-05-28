@@ -408,14 +408,6 @@ export async function DELETE(
       )
     }
 
-    // 只有 draft 状态的 offering 可以删除
-    if (offering.status !== 'draft') {
-      return NextResponse.json(
-        { error: `Cannot delete offering with status '${offering.status}'. Only draft offerings can be deleted.` },
-        { status: 400 }
-      )
-    }
-
     // 删除 offering
     const { error } = await supabaseAdmin
       .from("v2_offering")

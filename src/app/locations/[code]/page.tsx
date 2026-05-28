@@ -11,7 +11,6 @@ import { RoboticsJourney } from "@/components/RoboticsJourney"
 import { Advantages } from "@/components/Advantages"
 import { Testimonials } from "@/components/Testimonials"
 import { Newsletter } from "@/components/Newsletter"
-import { AIChatButton } from "@/components/location/AIChatButton"
 import { LocationCta } from "@/components/location/LocationCta"
 import {
   FEATURED_INSTANCE_SELECT,
@@ -412,10 +411,6 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
         <Newsletter />
       </main>
       <Footer />
-      <AIChatButton
-        franchiseCode={normalizedCode}
-        franchiseName={displayName}
-      />
     </>
   )
 }

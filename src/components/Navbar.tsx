@@ -25,6 +25,7 @@ import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { Menu, LogOut, User, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url";
 
   // Navbar 统一深蓝色（与白底搭配）
   const NAV_TEXT = "text-[#1e3a5f]";
@@ -46,6 +47,7 @@ interface RouteProps {
     id: string;
     code: string;
     name: string;
+    poster_url?: string | null;
     address?: string;
     city?: string;
     state?: string;
@@ -148,6 +150,29 @@ interface RouteProps {
         }
         return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" /> // default
     }
+  }
+
+  /** Desktop location dropdown: franchise poster; mobile / fallback: MapPin */
+  function FranchiseLocationIcon({
+    franchise,
+    variant,
+  }: {
+    franchise: FranchiseGroup;
+    variant: "desktop" | "mobile";
+  }) {
+    const iconClass = "h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500";
+    if (variant === "desktop") {
+      const poster = normalizeRemoteImageUrl(franchise.poster_url);
+      if (poster) {
+        return (
+          <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-slate-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={poster} alt="" className="w-full h-full object-cover" />
+          </div>
+        );
+      }
+    }
+    return <MapPin className={iconClass} />;
   }
   
   export const Navbar = () => {
@@ -473,7 +498,7 @@ interface RouteProps {
                                 className={`block px-4 py-3 text-sm transition-colors border-b border-slate-100 last:border-0 ${isFranchiseActive ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                               >
                                 <div className="flex items-start gap-3">
-                                  <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
+                                  <FranchiseLocationIcon franchise={franchise} variant="desktop" />
                                   <div className="flex-1 min-w-0">
                                     <div className="font-medium">{franchise.name}</div>
                                     {fullAddress && (
@@ -811,7 +836,7 @@ interface RouteProps {
                             className={`block px-3 py-3 text-sm font-medium rounded-md ${isFranchiseActive ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
                           >
                             <div className="flex items-start gap-2">
-                              <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                              <FranchiseLocationIcon franchise={franchise} variant="mobile" />
                               <div className="flex-1 min-w-0">
                                 <div>{franchise.name}</div>
                                 {fullAddress && (

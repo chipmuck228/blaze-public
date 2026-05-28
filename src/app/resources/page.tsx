@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { AIChatButton } from "@/components/location/AIChatButton"
 import { Download, FileText, Monitor, Book, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -170,10 +169,6 @@ export default function ResourcesPage() {
         </div>
       </main>
       <Footer />
-      <AIChatButton
-        franchiseCode="general"
-        franchiseName="Blaze Robotics Academy"
-      />
     </>
   )
 }
