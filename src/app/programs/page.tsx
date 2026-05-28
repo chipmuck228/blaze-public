@@ -20,6 +20,7 @@ import {
   type DisplayProgram,
   type InstancesLocation,
 } from "@/lib/programs-catalog-view"
+import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 
 type FranchiseListItem = { id: string; code: string; name: string }
 
@@ -71,8 +72,8 @@ function SessionCard({
 
   const basePrice = session.price_override ?? session.course.base_price ?? 0
   const image =
-    session.offering?.poster_url ||
-    session.course.poster_url ||
+    normalizeRemoteImageUrl(session.offering?.poster_url) ||
+    normalizeRemoteImageUrl(session.course.poster_url) ||
     `https://picsum.photos/400/300?random=${session.id}`
   const campusName = session.location?.name || franchise.name || "Multiple Locations"
   const detailHref = instanceDetailHref(activity, session.id, locationCode)

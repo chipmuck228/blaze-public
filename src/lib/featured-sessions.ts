@@ -1,3 +1,5 @@
+import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+
 export interface FeaturedSession {
   id: string
   title: string
@@ -82,7 +84,9 @@ export function mapInstanceRowToFeaturedSession(row: any): FeaturedSession | nul
     id: row.id,
     title: offering.name || program.display_name || program.name,
     description: offering.description ?? program.description ?? null,
-    poster_url: offering.poster_url ?? program.poster_url ?? null,
+    poster_url:
+      normalizeRemoteImageUrl(offering.poster_url) ??
+      normalizeRemoteImageUrl(program.poster_url),
     href: buildInstanceDetailHref(row.id, category.name, franchiseCode),
     franchise: franchise
       ? { code: franchise.code ?? "", name: franchise.name ?? "" }

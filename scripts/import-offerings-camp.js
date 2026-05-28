@@ -135,6 +135,18 @@ function decodeHtmlEntities(text) {
     .trim()
 }
 
+function normalizePosterUrl(url) {
+  const raw = String(url ?? "").trim()
+  if (!raw) return ""
+  try {
+    const parsed = new URL(raw)
+    parsed.pathname = parsed.pathname.replace(/\/{2,}/g, "/")
+    return parsed.toString()
+  } catch {
+    return raw.replace(/([^:]\/)\/+/g, "$1")
+  }
+}
+
 function cell(row, idx) {
   return decodeHtmlEntities(row[idx] != null ? String(row[idx]).trim() : "")
 }
@@ -264,7 +276,7 @@ function mapRowToPayload(row, offeringTypeId, categoryId) {
 
   const typeConfigData = buildTypeConfigData(row)
   const adminDesc = cell(row, COL.DESC_ADMIN)
-  const posterUrl = cell(row, COL.IMAGE)
+  const posterUrl = normalizePosterUrl(cell(row, COL.IMAGE))
 
   return {
     name,

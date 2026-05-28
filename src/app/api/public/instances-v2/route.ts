@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 
 /**
  * GET /api/public/instances-v2?category=xxx&location=yyy&portal_service_role=meal_service|care_service
@@ -252,13 +253,13 @@ export async function GET(request: Request) {
           age_min: extData.age_min ?? null,
           age_max: extData.age_max ?? null,
           base_price: offering?.base_price,
-          poster_url: offering?.poster_url ?? null,
+          poster_url: normalizeRemoteImageUrl(offering?.poster_url),
         },
         offering: offering
           ? {
               id: offering.id,
               name: offering.name,
-              poster_url: offering.poster_url ?? null,
+              poster_url: normalizeRemoteImageUrl(offering.poster_url),
               base_price: offering.base_price,
             }
           : undefined,
