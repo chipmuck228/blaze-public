@@ -43,10 +43,30 @@ export default function PaymentSettingsPage() {
   const fetchPaymentMethods = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch('/api/payment-methods')
+      const response = await fetch('/api/user/payment-methods')
       if (response.ok) {
         const data = await response.json()
-        setPaymentMethods(data.payment_methods || [])
+        const methods = Array.isArray(data) ? data : data.payment_methods || []
+        setPaymentMethods(
+          methods.map((method: {
+            id: string
+            type: string
+            card?: { brand?: string; last4?: string; exp_month?: number; exp_year?: number }
+            brand?: string
+            last4?: string
+            exp_month?: number
+            exp_year?: number
+            is_default?: boolean
+          }) => ({
+            id: method.id,
+            type: method.type,
+            brand: method.card?.brand ?? method.brand ?? '',
+            last4: method.card?.last4 ?? method.last4 ?? '',
+            exp_month: method.card?.exp_month ?? method.exp_month ?? 0,
+            exp_year: method.card?.exp_year ?? method.exp_year ?? 0,
+            is_default: method.is_default ?? false,
+          }))
+        )
       }
     } catch (error) {
       console.error('Error fetching payment methods:', error)
@@ -63,7 +83,7 @@ export default function PaymentSettingsPage() {
 
     try {
       setIsDeleting(paymentMethodId)
-      const response = await fetch(`/api/payment-methods/${paymentMethodId}`, {
+      const response = await fetch(`/api/user/payment-methods/${paymentMethodId}`, {
         method: 'DELETE'
       })
 
@@ -84,7 +104,7 @@ export default function PaymentSettingsPage() {
 
   const handleSetDefault = async (paymentMethodId: string) => {
     try {
-      const response = await fetch(`/api/payment-methods/${paymentMethodId}/default`, {
+      const response = await fetch(`/api/user/payment-methods/${paymentMethodId}`, {
         method: 'PATCH'
       })
 
