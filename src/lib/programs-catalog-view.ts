@@ -45,6 +45,11 @@ export type CatalogSession = {
     id: string
     name: string
     poster_url?: string | null
+    offering_type?: {
+      id: string
+      code: string
+      name: string
+    }
   }
   available_spots: number
   is_full: boolean
@@ -98,11 +103,18 @@ export type DisplayLocation = {
   programs: DisplayProgram[]
 }
 
+export type OfferingTypeOption = {
+  id: string
+  code: string
+  name: string
+}
+
 export type ProgramsFilterParams = {
   selectedProgramCategoryId: string
   searchQuery: string
   selectedAgeRange: string
   selectedFranchiseId: string
+  selectedOfferingTypeCode: string
 }
 
 export type ProgramsViewMode = "global" | "location"
@@ -129,6 +141,12 @@ function sessionMatchesAgeRange(session: CatalogSession, selectedAgeRange: strin
   return true
 }
 
+function sessionMatchesOfferingType(session: CatalogSession, selectedOfferingTypeCode: string): boolean {
+  if (selectedOfferingTypeCode === "all") return true
+  const code = session.offering?.offering_type?.code?.toLowerCase()
+  return code === selectedOfferingTypeCode
+}
+
 function sessionMatchesSearch(
   session: CatalogSession,
   activity: InstancesActivity,
@@ -145,14 +163,57 @@ function sessionMatchesSearch(
 
 export function filterSessionsForActivity(
   activity: InstancesActivity,
-  filters: Pick<ProgramsFilterParams, "searchQuery" | "selectedAgeRange">
+  filters: Pick<ProgramsFilterParams, "searchQuery" | "selectedAgeRange" | "selectedOfferingTypeCode">
 ): CatalogSession[] {
   return (activity.instances || []).filter(
     (session) =>
       session.id &&
       sessionMatchesSearch(session, activity, filters.searchQuery) &&
-      sessionMatchesAgeRange(session, filters.selectedAgeRange)
+      sessionMatchesAgeRange(session, filters.selectedAgeRange) &&
+      sessionMatchesOfferingType(session, filters.selectedOfferingTypeCode)
   )
+}
+
+/** Offering types present in loaded instances, optionally scoped to one franchise. */
+export function collectOfferingTypesFromInstances(
+  franchisesData: InstancesLocation[],
+  selectedFranchiseId: string
+): OfferingTypeOption[] {
+  const typeMap = new Map<string, OfferingTypeOption>()
+  const franchises =
+    selectedFranchiseId === "all"
+      ? franchisesData
+      : franchisesData.filter((f) => f.id === selectedFranchiseId)
+
+  for (const franchise of franchises) {
+    for (const activity of franchise.programs || []) {
+      for (const session of activity.instances || []) {
+        const ot = session.offering?.offering_type
+        const code = ot?.code?.toLowerCase()
+        if (!code || typeMap.has(code)) continue
+        typeMap.set(code, {
+          id: ot!.id,
+          code,
+          name: ot!.name || ot!.code,
+        })
+      }
+    }
+  }
+
+  return Array.from(typeMap.values())
+}
+
+export function sortOfferingTypeOptions(
+  derived: OfferingTypeOption[],
+  globalTypes: OfferingTypeOption[]
+): OfferingTypeOption[] {
+  const orderMap = new Map(globalTypes.map((t, index) => [t.code, index]))
+  return [...derived].sort((a, b) => {
+    const orderA = orderMap.get(a.code) ?? 999
+    const orderB = orderMap.get(b.code) ?? 999
+    if (orderA !== orderB) return orderA - orderB
+    return a.name.localeCompare(b.name)
+  })
 }
 
 export function countSessionsInLocation(location: DisplayLocation): number {
@@ -261,6 +322,8 @@ export function buildProgramsPageHref(options: {
   categoryId?: string | null
   /** v2_category.name — used with location (franchise-scoped programs link) */
   programName?: string | null
+  /** v2_offering_type.code, or "all" */
+  offeringType?: string | null
 }): string {
   const params = new URLSearchParams()
   if (options.locationCode) {
@@ -270,6 +333,9 @@ export function buildProgramsPageHref(options: {
     params.set("program", options.programName)
   } else if (options.categoryId) {
     params.set("category", options.categoryId)
+  }
+  if (options.offeringType && options.offeringType !== "all") {
+    params.set("offering_type", options.offeringType.toLowerCase())
   }
   const qs = params.toString()
   return qs ? `/programs?${qs}` : "/programs"

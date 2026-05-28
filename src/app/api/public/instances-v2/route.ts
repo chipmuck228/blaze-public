@@ -3,10 +3,11 @@ import { supabaseAdmin } from "@/lib/supabase"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 
 /**
- * GET /api/public/instances-v2?category=xxx&location=yyy&portal_service_role=meal_service|care_service
+ * GET /api/public/instances-v2?category=xxx&location=yyy&offering_type=camp|course|all&portal_service_role=meal_service|care_service
  * Returns enrollable instances from v2_instance only (instance_v2 已废弃，不再使用).
  * - category: optional v2_category id; filters by offering.category_id (C-end Program), not program.category_id.
  * - location: optional franchise code; when omitted, returns all franchises.
+ * - offering_type: optional v2_offering_type.code, or "all" for all catalog types (excludes meal/care service roles). When omitted, defaults to course-type instances only (is_course_type = true).
  * - portal_service_role: optional 'meal_service' | 'care_service'; when set, returns only instances with that role (for detail page Meal/Care blocks). Design: INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN.
  * Shape: { franchises: [ { id, code, name, programs: [ { ..., instances: [...] } ] } ] }
  */
@@ -15,13 +16,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const categoryId = searchParams.get("category")?.trim() || null
     const locationCode = searchParams.get("location")?.trim() || searchParams.get("franchise")?.trim() || null
+    const offeringTypeParam = searchParams.get("offering_type")?.trim().toLowerCase() || null
     const portalServiceRoleParam = searchParams.get("portal_service_role")?.trim() || null
     const portalServiceRole =
       portalServiceRoleParam === "meal_service" || portalServiceRoleParam === "care_service"
         ? portalServiceRoleParam
         : null
 
-    console.log("[Public instances-v2] Request params:", { categoryId, locationCode, portalServiceRole })
+    console.log("[Public instances-v2] Request params:", { categoryId, locationCode, offeringTypeParam, portalServiceRole })
 
     let franchiseId: string | null = null
     if (locationCode) {
@@ -87,6 +89,11 @@ export async function GET(request: Request) {
             id,
             name,
             display_name
+          ),
+          offering_type:v2_offering_type(
+            id,
+            code,
+            name
           )
         ),
         campus:v2_campus(
@@ -122,10 +129,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // C-end: when portal_service_role filter is set, return those instances; otherwise only show course-type instances (design: PORTAL_OFFERING_TYPE_DESIGN, INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN)
+    const getOfferingTypeCode = (row: any): string | null => {
+      const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
+      const ot = Array.isArray(offering?.offering_type) ? offering.offering_type[0] : offering?.offering_type
+      return ot?.code?.toLowerCase() ?? null
+    }
+
+    // C-end: portal_service_role filter for detail-page Meal/Care blocks; otherwise catalog by offering_type param
     let list = (rows || []) as any[]
     if (portalServiceRole) {
       list = list.filter((row: any) => row?.portal_service_role === portalServiceRole)
+    } else if (offeringTypeParam === "all") {
+      list = list.filter((row: any) => !row?.portal_service_role)
+    } else if (offeringTypeParam) {
+      list = list.filter((row: any) => getOfferingTypeCode(row) === offeringTypeParam)
     } else {
       list = list.filter((row: any) => row?.is_course_type === true)
     }
@@ -261,6 +278,14 @@ export async function GET(request: Request) {
               name: offering.name,
               poster_url: normalizeRemoteImageUrl(offering.poster_url),
               base_price: offering.base_price,
+              offering_type: (() => {
+                const ot = Array.isArray(offering.offering_type)
+                  ? offering.offering_type[0]
+                  : offering.offering_type
+                return ot
+                  ? { id: ot.id, code: ot.code, name: ot.name }
+                  : undefined
+              })(),
             }
           : undefined,
         available_spots: Math.max(0, maxStudents - currentStudents),

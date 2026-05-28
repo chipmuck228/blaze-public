@@ -4,21 +4,24 @@ import { useState, useEffect, useMemo, Suspense, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Loader2, MapPin, Calendar, Search, ArrowRight, BookOpen, ExternalLink, ChevronDown, Users } from "lucide-react"
+import { Loader2, MapPin, Calendar, Search, ArrowRight, BookOpen, ExternalLink, ChevronDown, Users, Layers } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import Image from "next/image"
 import {
   buildDisplayTree,
+  collectOfferingTypesFromInstances,
   countSessionsInLocation,
   resolveCategoryIdFromUrl,
   sortCatalogCategories,
+  sortOfferingTypeOptions,
   type CatalogCategory,
   type CatalogSession,
   type DisplayActivity,
   type DisplayLocation,
   type DisplayProgram,
   type InstancesLocation,
+  type OfferingTypeOption,
 } from "@/lib/programs-catalog-view"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 
@@ -165,21 +168,21 @@ function ProgramsPageContent() {
 
   const categoryIdFromUrl = searchParams.get("category")
   const programNameFromUrl = searchParams.get("program")
+  const offeringTypeFromUrl = searchParams.get("offering_type")?.toLowerCase() ?? "all"
   const locationFromUrl = (
     searchParams.get("location") || searchParams.get("franchise")
   )?.toLowerCase() ?? null
-  const viewMode = locationFromUrl ? "location" : "global"
 
   const [catalogCategories, setCatalogCategories] = useState<CatalogCategory[]>([])
   const [instancesFranchises, setInstancesFranchises] = useState<InstancesLocation[]>([])
   const [allFranchiseList, setAllFranchiseList] = useState<FranchiseListItem[]>([])
-  const [locationFranchiseMeta, setLocationFranchiseMeta] = useState<FranchiseListItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [selectedProgramCategoryId, setSelectedProgramCategoryId] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAgeRange, setSelectedAgeRange] = useState<string>("all")
+  const [globalOfferingTypes, setGlobalOfferingTypes] = useState<OfferingTypeOption[]>([])
   useEffect(() => {
     if (catalogCategories.length === 0 && !categoryIdFromUrl && !programNameFromUrl) return
     const resolved = resolveCategoryIdFromUrl(catalogCategories, {
@@ -194,19 +197,13 @@ function ProgramsPageContent() {
       setIsLoading(true)
       setError(null)
 
-      const instancesUrl = locationFromUrl
-        ? `/api/public/instances-v2?location=${encodeURIComponent(locationFromUrl)}`
-        : "/api/public/instances-v2"
-      const catalogUrl = locationFromUrl
-        ? `/api/public/franchises/${encodeURIComponent(locationFromUrl)}/categories`
-        : "/api/public/categories"
+      const instancesUrl = "/api/public/instances-v2?offering_type=all"
 
-      const [instancesRes, catalogRes, franchisesListRes] = await Promise.all([
+      const [instancesRes, catalogRes, franchisesListRes, offeringTypesRes] = await Promise.all([
         fetch(instancesUrl),
-        fetch(catalogUrl),
-        viewMode === "global"
-          ? fetch("/api/public/franchises-v2")
-          : fetch(`/api/public/franchises-v2/${encodeURIComponent(locationFromUrl!)}`).catch(() => null),
+        fetch("/api/public/categories"),
+        fetch("/api/public/franchises-v2"),
+        fetch("/api/public/offering-types"),
       ])
 
       if (!instancesRes.ok) {
@@ -221,12 +218,26 @@ function ProgramsPageContent() {
       const instancesData = await instancesRes.json()
       const catalogData = await catalogRes.json()
 
+      if (offeringTypesRes.ok) {
+        const offeringTypesData = await offeringTypesRes.json()
+        const types = offeringTypesData.offering_types || offeringTypesData || []
+        if (Array.isArray(types)) {
+          setGlobalOfferingTypes(
+            types.map((t: { id: string; code: string; name: string }) => ({
+              id: t.id,
+              code: (t.code || "").toLowerCase(),
+              name: t.name || t.code,
+            }))
+          )
+        }
+      }
+
       setInstancesFranchises(instancesData.franchises || [])
 
       const categories: CatalogCategory[] = catalogData.categories || catalogData || []
       setCatalogCategories(Array.isArray(categories) ? categories : [])
 
-      if (viewMode === "global" && franchisesListRes) {
+      if (franchisesListRes.ok) {
         const list = await franchisesListRes.json()
         if (Array.isArray(list)) {
           setAllFranchiseList(
@@ -237,37 +248,6 @@ function ProgramsPageContent() {
             }))
           )
         }
-        setLocationFranchiseMeta(null)
-      } else if (viewMode === "location" && locationFromUrl) {
-        const fromInstances = (instancesData.franchises || [])[0] as InstancesLocation | undefined
-        if (franchisesListRes?.ok) {
-          const one = await franchisesListRes.json()
-          if (one?.id) {
-            setLocationFranchiseMeta({
-              id: fromInstances?.id ?? one.id,
-              code: (fromInstances?.code || one.code || locationFromUrl).toLowerCase(),
-              name: fromInstances?.name || one.name || locationFromUrl,
-            })
-          } else if (fromInstances) {
-            setLocationFranchiseMeta({
-              id: fromInstances.id,
-              code: fromInstances.code,
-              name: fromInstances.name,
-            })
-          }
-        } else if (fromInstances) {
-          setLocationFranchiseMeta({
-            id: fromInstances.id,
-            code: fromInstances.code,
-            name: fromInstances.name,
-          })
-        } else {
-          setLocationFranchiseMeta({
-            id: locationFromUrl,
-            code: locationFromUrl,
-            name: locationFromUrl,
-          })
-        }
       }
     } catch (err) {
       console.error("Error loading programs page:", err)
@@ -277,29 +257,52 @@ function ProgramsPageContent() {
     } finally {
       setIsLoading(false)
     }
-  }, [locationFromUrl, viewMode])
+  }, [])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
   const selectedFranchiseId = useMemo(() => {
-    if (viewMode === "location" && locationFranchiseMeta) {
-      return locationFranchiseMeta.id
-    }
-    if (locationFromUrl) {
-      const f = allFranchiseList.find((x) => x.code === locationFromUrl)
-      if (f) return f.id
-      const fromData = instancesFranchises.find((x) => x.code === locationFromUrl)
-      if (fromData) return fromData.id
-    }
+    if (!locationFromUrl) return "all"
+    const f = allFranchiseList.find((x) => x.code === locationFromUrl)
+    if (f) return f.id
+    const fromData = instancesFranchises.find((x) => x.code === locationFromUrl)
+    if (fromData) return fromData.id
     return "all"
-  }, [viewMode, locationFranchiseMeta, locationFromUrl, allFranchiseList, instancesFranchises])
+  }, [locationFromUrl, allFranchiseList, instancesFranchises])
 
   const sortedCatalog = useMemo(
     () => sortCatalogCategories(catalogCategories),
     [catalogCategories]
   )
+
+  const visibleOfferingTypeOptions = useMemo(
+    () =>
+      sortOfferingTypeOptions(
+        collectOfferingTypesFromInstances(instancesFranchises, selectedFranchiseId),
+        globalOfferingTypes
+      ),
+    [instancesFranchises, selectedFranchiseId, globalOfferingTypes]
+  )
+
+  useEffect(() => {
+    if (offeringTypeFromUrl === "all") return
+    if (visibleOfferingTypeOptions.some((t) => t.code === offeringTypeFromUrl)) return
+    const params = new URLSearchParams()
+    if (locationFromUrl) params.set("location", locationFromUrl)
+    if (selectedProgramCategoryId !== "all") {
+      params.set("category", selectedProgramCategoryId)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `/programs?${qs}` : "/programs")
+  }, [
+    offeringTypeFromUrl,
+    visibleOfferingTypeOptions,
+    locationFromUrl,
+    selectedProgramCategoryId,
+    router,
+  ])
 
   const displayTree = useMemo(
     () =>
@@ -311,9 +314,10 @@ function ProgramsPageContent() {
           searchQuery,
           selectedAgeRange,
           selectedFranchiseId,
+          selectedOfferingTypeCode: offeringTypeFromUrl,
         },
-        viewMode,
-        locationFranchiseMeta
+        "global",
+        null
       ),
     [
       catalogCategories,
@@ -322,19 +326,18 @@ function ProgramsPageContent() {
       searchQuery,
       selectedAgeRange,
       selectedFranchiseId,
-      viewMode,
-      locationFranchiseMeta,
+      offeringTypeFromUrl,
     ]
   )
 
   const activeLocName = useMemo(() => {
-    if (viewMode !== "location") return null
+    if (!locationFromUrl) return null
     return (
-      locationFranchiseMeta?.name ||
+      allFranchiseList.find((f) => f.code === locationFromUrl)?.name ||
       instancesFranchises.find((f) => f.code === locationFromUrl)?.name ||
       null
     )
-  }, [viewMode, locationFranchiseMeta, instancesFranchises, locationFromUrl])
+  }, [locationFromUrl, allFranchiseList, instancesFranchises])
 
   const ageRangeOptions = [
     { value: "all", label: "All Ages" },
@@ -343,7 +346,11 @@ function ProgramsPageContent() {
     { value: "over_15", label: "15岁以上" },
   ]
 
-  const updateUrl = (next: { location?: string | null; programCategoryId?: string | null }) => {
+  const updateUrl = (next: {
+    location?: string | null
+    programCategoryId?: string | null
+    offeringType?: string | null
+  }) => {
     const params = new URLSearchParams()
     const loc = next.location !== undefined ? next.location : locationFromUrl
     const catId =
@@ -352,14 +359,14 @@ function ProgramsPageContent() {
         : selectedProgramCategoryId !== "all"
           ? selectedProgramCategoryId
           : null
+    const offeringType =
+      next.offeringType !== undefined ? next.offeringType : offeringTypeFromUrl
     if (loc) params.set("location", loc.toLowerCase())
     if (catId && catId !== "all") {
-      const cat = catalogCategories.find((c) => c.id === catId)
-      if (loc && cat?.name) {
-        params.set("program", cat.name)
-      } else {
-        params.set("category", catId)
-      }
+      params.set("category", catId)
+    }
+    if (offeringType && offeringType !== "all") {
+      params.set("offering_type", offeringType.toLowerCase())
     }
     const qs = params.toString()
     router.replace(qs ? `/programs?${qs}` : "/programs")
@@ -380,14 +387,20 @@ function ProgramsPageContent() {
     })
   }
 
+  const handleOfferingTypeChange = (typeCode: string) => {
+    updateUrl({
+      offeringType: typeCode === "all" ? null : typeCode,
+    })
+  }
+
   const clearAllFilters = () => {
     setSearchQuery("")
     setSelectedAgeRange("all")
     setSelectedProgramCategoryId("all")
-    updateUrl({ programCategoryId: null, location: locationFromUrl })
+    updateUrl({ programCategoryId: null, location: null, offeringType: null })
   }
 
-  const showLocationHeaders = viewMode === "global" && displayTree.length > 1
+  const showLocationHeaders = !locationFromUrl && displayTree.length > 1
   const totalSessions = displayTree.reduce((n, loc) => n + countSessionsInLocation(loc), 0)
 
   if (isLoading) {
@@ -457,56 +470,54 @@ function ProgramsPageContent() {
               />
             </div>
 
-            {viewMode === "global" && (
-              <div className="relative group w-full sm:flex-1 sm:min-w-0">
-                <button
-                  type="button"
-                  className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
-                >
-                  <span className="flex-1 min-w-0 truncate text-left">
-                    {locationFromUrl
-                      ? allFranchiseList.find((f) => f.code === locationFromUrl)?.name ?? "All locations"
-                      : "All locations"}
-                  </span>
-                  <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
-                </button>
-                <div className="absolute top-full left-0 pt-2 w-[min(320px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                  <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
-                    <div className="max-h-[min(320px,50vh)] overflow-y-auto py-2">
+            <div className="relative group w-full sm:flex-1 sm:min-w-0">
+              <button
+                type="button"
+                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
+              >
+                <span className="flex-1 min-w-0 truncate text-left">
+                  {locationFromUrl
+                    ? allFranchiseList.find((f) => f.code === locationFromUrl)?.name ?? "All locations"
+                    : "All locations"}
+                </span>
+                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
+              </button>
+              <div className="absolute top-full left-0 pt-2 w-[min(320px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
+                  <div className="max-h-[min(320px,50vh)] overflow-y-auto py-2">
+                    <button
+                      type="button"
+                      onClick={() => handleLocationChange("all")}
+                      className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
+                        !locationFromUrl ? "bg-slate-100 text-[#2563eb]" : "text-[#1e3a5f] hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                        <MapPin className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 font-medium">All locations</div>
+                    </button>
+                    {allFranchiseList.map((franchise) => (
                       <button
+                        key={franchise.id}
                         type="button"
-                        onClick={() => handleLocationChange("all")}
-                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
-                          !locationFromUrl ? "bg-slate-100 text-[#2563eb]" : "text-[#1e3a5f] hover:bg-slate-100"
+                        onClick={() => handleLocationChange(franchise.code)}
+                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
+                          locationFromUrl === franchise.code
+                            ? "bg-slate-100 text-[#2563eb]"
+                            : "text-[#1e3a5f] hover:bg-slate-100"
                         }`}
                       >
                         <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
                           <MapPin className="h-4 w-4" />
                         </div>
-                        <div className="flex-1 min-w-0 font-medium">All locations</div>
+                        <div className="flex-1 min-w-0 font-medium">{franchise.name}</div>
                       </button>
-                      {allFranchiseList.map((franchise) => (
-                        <button
-                          key={franchise.id}
-                          type="button"
-                          onClick={() => handleLocationChange(franchise.code)}
-                          className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
-                            locationFromUrl === franchise.code
-                              ? "bg-slate-100 text-[#2563eb]"
-                              : "text-[#1e3a5f] hover:bg-slate-100"
-                          }`}
-                        >
-                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                            <MapPin className="h-4 w-4" />
-                          </div>
-                          <div className="flex-1 min-w-0 font-medium">{franchise.name}</div>
-                        </button>
-                      ))}
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="relative group w-full sm:flex-1 sm:min-w-0">
               <button
@@ -553,6 +564,59 @@ function ProgramsPageContent() {
                           <BookOpen className="h-4 w-4" />
                         </div>
                         <div className="flex-1 min-w-0 font-medium">{cat.display_name || cat.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative group w-full sm:flex-1 sm:min-w-0">
+              <button
+                type="button"
+                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
+              >
+                <span className="flex-1 min-w-0 truncate text-left">
+                  {offeringTypeFromUrl === "all"
+                    ? "All types"
+                    : visibleOfferingTypeOptions.find((t) => t.code === offeringTypeFromUrl)?.name ||
+                      globalOfferingTypes.find((t) => t.code === offeringTypeFromUrl)?.name ||
+                      offeringTypeFromUrl}
+                </span>
+                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
+              </button>
+              <div className="absolute top-full left-0 pt-2 w-[min(280px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
+                  <div className="max-h-[min(320px,50vh)] overflow-y-auto py-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOfferingTypeChange("all")}
+                      className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
+                        offeringTypeFromUrl === "all"
+                          ? "bg-slate-100 text-[#2563eb]"
+                          : "text-[#1e3a5f] hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                        <Layers className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 font-medium">All types</div>
+                    </button>
+                    {visibleOfferingTypeOptions.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => handleOfferingTypeChange(type.code)}
+                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
+                          offeringTypeFromUrl === type.code
+                            ? "bg-slate-100 text-[#2563eb]"
+                            : "text-[#1e3a5f] hover:bg-slate-100"
+                        }`}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                          <Layers className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0 font-medium">{type.name}</div>
                       </button>
                     ))}
                   </div>
@@ -623,10 +687,7 @@ function ProgramsPageContent() {
                         (n, a) => n + a.sessions.length,
                         0
                       )
-                      const locCode =
-                        viewMode === "location"
-                          ? locationFromUrl
-                          : location.code
+                      const locCode = locationFromUrl || location.code
 
                       return (
                         <div key={program.id} className="space-y-6">
@@ -690,7 +751,7 @@ function ProgramsPageContent() {
                 <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Sessions</h2>
                 <p className="text-slate-500 max-w-md mx-auto mb-4">
                   We couldn&apos;t find sessions matching your filters
-                  {activeLocName ? ` at ${activeLocName}` : ""}. Try another program, age range, or clear
+                  {activeLocName ? ` at ${activeLocName}` : ""}. Try another program, offering type, age range, or clear
                   filters.
                 </p>
                 <p className="text-slate-400 text-sm max-w-sm mx-auto mb-8">
