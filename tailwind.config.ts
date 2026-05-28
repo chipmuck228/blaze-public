@@ -10,8 +10,9 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        sans: ["var(--font-roboto)"],
         montserrat: ["var(--font-montserrat)", "sans-serif"],
-        roboto: ["Roboto", "sans-serif"],
+        roboto: ["var(--font-roboto)", "sans-serif"],
       },
       colors: {
         background: "hsl(var(--background))",

@@ -1,9 +1,14 @@
+@import "@fontsource-variable/roboto/wght.css";
+@import "@fontsource-variable/montserrat/wght.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    --font-roboto: "Roboto Variable", Roboto, ui-sans-serif, system-ui, sans-serif;
+    --font-montserrat: "Montserrat Variable", Montserrat, ui-sans-serif, system-ui, sans-serif;
     /* Brand Colors - Light Mode */
     --background: 210 40% 98%;    /* #f8f9fa equivalent */
     --foreground: 222 47% 11%;    /* Slate 900 */
