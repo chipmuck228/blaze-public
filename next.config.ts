@@ -27,7 +27,13 @@ const nextConfig: NextConfig = {
         port: "",
         pathname: "/**",
       },
-      // Amilia / legacy camp offering posters (offerings-camp.xlsx import)
+      // Amilia / camp offering posters (RackCDN per-tenant subdomains)
+      {
+        protocol: "https",
+        hostname: "**.ssl.cf2.rackcdn.com",
+        port: "",
+        pathname: "/**",
+      },
       {
         protocol: "https",
         hostname: "*.ssl.cf2.rackcdn.com",
