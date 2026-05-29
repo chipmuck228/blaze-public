@@ -55,5 +55,6 @@ local.properties
 # Documentation, SQL scripts and PDFs (excluded from repository, including all subdirectories)
 **/*.md
 !_archive/**/*.md
+!scripts/design/**/*.md
 **/*.sql
 **/*.pdf
