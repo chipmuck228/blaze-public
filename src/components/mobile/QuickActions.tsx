@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { BookOpen, MapPin, User } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { PUBLIC_USER_AUTH_ENABLED } from '@/lib/public-user-auth'
 
 interface QuickAction {
   id: string
@@ -29,21 +30,25 @@ export function QuickActions() {
     },
     {
       id: 'choose-location',
-      title: 'Choose Location',
+      title: 'Choose Campus',
       description: 'Find programs near you',
       icon: MapPin,
       href: '/locations',
     },
-    {
-      id: 'my-courses',
-      title: status === 'authenticated' ? 'My Courses' : 'Sign In',
-      description: status === 'authenticated'
-        ? 'View your enrollments'
-        : 'Sign in to view your courses',
-      icon: User,
-      href: status === 'authenticated' ? '/profile' : '/login',
-      requireAuth: false,
-    },
+    ...(PUBLIC_USER_AUTH_ENABLED
+      ? ([
+          {
+            id: 'my-courses',
+            title: status === 'authenticated' ? 'My Courses' : 'Sign In',
+            description: status === 'authenticated'
+              ? 'View your enrollments'
+              : 'Sign in to view your courses',
+            icon: User,
+            href: status === 'authenticated' ? '/profile' : '/login',
+            requireAuth: false,
+          },
+        ] as QuickAction[])
+      : []),
   ]
 
   const handleClick = (action: QuickAction) => {

@@ -76,7 +76,7 @@ export function LocationProgramsByCategory({
 
         {programsGroupedByCategory.length === 0 ? (
           <p className="text-center text-slate-500 dark:text-slate-400 text-sm py-8">
-            Programs at this location are coming soon.
+            Programs at this campus are coming soon.
           </p>
         ) : (
           <div
@@ -130,6 +130,7 @@ export function LocationProgramsByCategory({
                               fill
                               className="object-cover group-hover:scale-105 transition-transform duration-300"
                               sizes="(max-width: 1024px) 50vw, 360px"
+                              loading="lazy"
                             />
                             {isFeatured && (
                               <span className="absolute top-2 left-2 inline-flex items-center gap-1 bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full text-xs font-bold">

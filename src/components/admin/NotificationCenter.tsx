@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { toast } from "sonner"
+import { adminToast } from "@/lib/admin-toast"
 import { useRouter } from "next/navigation"
 
 interface Notification {
@@ -129,7 +129,7 @@ export function NotificationCenter() {
       fetchNotifications()
     } catch (error: any) {
       console.error("Error marking notification as read:", error)
-      toast.error("Failed to mark notification as read")
+      adminToast.error("Failed to mark notification as read")
     }
   }
 
@@ -140,10 +140,10 @@ export function NotificationCenter() {
       })
       if (!response.ok) throw new Error("Failed to mark all as read")
       fetchNotifications()
-      toast.success("All notifications marked as read")
+      adminToast.success("All notifications marked as read")
     } catch (error: any) {
       console.error("Error marking all as read:", error)
-      toast.error("Failed to mark all notifications as read")
+      adminToast.error("Failed to mark all notifications as read")
     }
   }
 
@@ -152,7 +152,7 @@ export function NotificationCenter() {
     const allIds = notifications.map(n => n.id)
     setDismissedNotifications(prev => new Set([...prev, ...allIds]))
     setNotifications([])
-    toast.success("Notifications cleared")
+    adminToast.success("Notifications cleared")
   }
 
   const handleNotificationClick = (notification: Notification) => {

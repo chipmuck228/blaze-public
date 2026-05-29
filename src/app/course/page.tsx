@@ -163,7 +163,7 @@ function CoursePageContent() {
                 Year-Round Learning | Structured Pathways | Skill Development
               </p>
               <p className="text-base text-gray-400 max-w-xl leading-relaxed mb-8">
-                Empowering students through STEM mastery {activeLocName ? `in ${activeLocName}` : 'across our all locations'}. Build foundational skills, advance through structured pathways, and prepare for competitive robotics.
+                Empowering students through STEM mastery {activeLocName ? `in ${activeLocName}` : 'across all our campuses'}. Build foundational skills, advance through structured pathways, and prepare for competitive robotics.
               </p>
               <div className="flex flex-wrap gap-4">
                 <Button 
@@ -332,7 +332,7 @@ function CoursePageContent() {
                   <div className="text-center py-24">
                     <MapPin className="w-16 h-16 text-slate-200 mx-auto mb-6" />
                     <h2 className="text-2xl font-bold text-slate-900 mb-2">No Courses Scheduled</h2>
-                    <p className="text-slate-500">There are currently no regular courses scheduled {activeLocName ? `for the ${activeLocName} location` : 'at any of our locations'}. Try checking another location!</p>
+                    <p className="text-slate-500">There are currently no regular courses scheduled {activeLocName ? `for the ${activeLocName} campus` : 'at any of our campuses'}. Try checking another campus!</p>
                   </div>
                 )}
               </>

@@ -189,7 +189,7 @@ export default function JourneyExplorePage() {
             <div className="bg-slate-100 dark:bg-slate-800/50 p-12 rounded-3xl border border-slate-200 dark:border-slate-700">
               <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Ready to Explore?</h2>
               <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xl mx-auto">
-                Find beginner programs—camps, courses, and workshops—at a location near you and take the first step on your robotics journey.
+                Find beginner programs—camps, courses, and workshops—at a campus near you and take the first step on your robotics journey.
               </p>
               <Button
                 size="lg"

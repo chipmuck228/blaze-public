@@ -341,9 +341,9 @@ function ProgramsPageContent() {
 
   const ageRangeOptions = [
     { value: "all", label: "All Ages" },
-    { value: "under_9", label: "9岁以下" },
-    { value: "9_15", label: "9-15 岁" },
-    { value: "over_15", label: "15岁以上" },
+    { value: "under_9", label: "Under 9" },
+    { value: "9_15", label: "9-15" },
+    { value: "over_15", label: "Over 15" },
   ]
 
   const updateUrl = (next: {
@@ -446,10 +446,10 @@ function ProgramsPageContent() {
               Programs {activeLocName ? `in ${activeLocName}` : "Across Blaze"}
             </h1>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto mb-4">
-              Discover robotics pathways by location, program, activity, and bookable sessions.
+              Discover robotics pathways by campus, program, activity, and bookable sessions.
             </p>
             <p className="text-slate-500 text-sm max-w-xl mx-auto">
-              Browse by <strong className="text-slate-400">location</strong>, then{" "}
+              Browse by <strong className="text-slate-400">campus</strong>, then{" "}
               <strong className="text-slate-400">program</strong> (learning track),{" "}
               <strong className="text-slate-400">activity</strong> (term or season), and{" "}
               <strong className="text-slate-400">sessions</strong> you can enroll in below.
@@ -477,8 +477,8 @@ function ProgramsPageContent() {
               >
                 <span className="flex-1 min-w-0 truncate text-left">
                   {locationFromUrl
-                    ? allFranchiseList.find((f) => f.code === locationFromUrl)?.name ?? "All locations"
-                    : "All locations"}
+                    ? allFranchiseList.find((f) => f.code === locationFromUrl)?.name ?? "All campuses"
+                    : "All campuses"}
                 </span>
                 <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
               </button>
@@ -495,7 +495,7 @@ function ProgramsPageContent() {
                       <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
                         <MapPin className="h-4 w-4" />
                       </div>
-                      <div className="flex-1 min-w-0 font-medium">All locations</div>
+                      <div className="flex-1 min-w-0 font-medium">All campuses</div>
                     </button>
                     {allFranchiseList.map((franchise) => (
                       <button
@@ -665,7 +665,7 @@ function ProgramsPageContent() {
           <div className="max-w-7xl mx-auto">
             {displayTree.length > 0 && totalSessions > 0 && (
               <p className="text-slate-500 text-sm text-center mb-10 max-w-2xl mx-auto">
-                Results are grouped by location, program, and activity. Each card is a bookable session—tap for
+                Results are grouped by campus, program, and activity. Each card is a bookable session—tap for
                 schedule, price, and enrollment.
               </p>
             )}
@@ -756,7 +756,7 @@ function ProgramsPageContent() {
                 </p>
                 <p className="text-slate-400 text-sm max-w-sm mx-auto mb-8">
                   Programs are learning tracks; activities are terms or seasons; sessions are the classes you
-                  can book. Pick a location in the navbar or filter above to narrow results.
+                  can book. Pick a campus in the navbar or filter above to narrow results.
                 </p>
                 <button
                   type="button"

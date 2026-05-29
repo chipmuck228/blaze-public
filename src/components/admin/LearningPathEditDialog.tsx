@@ -25,6 +25,7 @@ import { Loader2, Plus, X, GripVertical } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { LearningPathWithDetails, LearningPathCourse } from "@/lib/db"
+import { adminToast, getErrorMessage } from "@/lib/admin-toast"
 
 type LearningPath = Partial<Pick<LearningPathWithDetails, 'id' | 'created_at' | 'updated_at'>> & 
   Omit<LearningPathWithDetails, 'id' | 'created_at' | 'updated_at' | 'courses'> & {
@@ -186,13 +187,18 @@ export function LearningPathEditDialog({
 
       if (response.ok) {
         onPathUpdated()
+        adminToast.success(path ? "Learning path updated" : "Learning path created")
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to save learning path")
+        adminToast.error("Failed to save learning path", {
+          description: getErrorMessage(error.error),
+        })
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving learning path:", error)
-      alert(error.message || "Failed to save learning path")
+      adminToast.error("Failed to save learning path", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsLoading(false)
     }

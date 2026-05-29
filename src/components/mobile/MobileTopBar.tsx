@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { BlazeLogoIcon } from '@/components/Icons'
 import { usePlatform } from '@/hooks/usePlatform'
 import { MobileBackButton } from '@/components/mobile/MobileBackButton'
+import { PUBLIC_USER_AUTH_ENABLED } from '@/lib/public-user-auth'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +77,8 @@ export function MobileTopBar() {
           </Button>
 
           {/* 用户菜单 */}
-          {status === 'authenticated' && session?.user ? (
+          {PUBLIC_USER_AUTH_ENABLED ? (
+            status === 'authenticated' && session?.user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9">
@@ -147,7 +149,8 @@ export function MobileTopBar() {
               <LogIn className="h-4 w-4 mr-2" />
               Sign In
             </Button>
-          )}
+          )
+          ) : null}
         </div>
       </div>
     </header>

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { ADMIN_ENROLLMENTS_ENABLED } from "@/lib/admin-features"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -43,6 +45,7 @@ import { Search, MoreVertical, Eye, Loader2, Calendar, DollarSign, Users, Shoppi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { adminToast, getErrorMessage } from "@/lib/admin-toast"
 
 interface Enrollment {
   id: string
@@ -114,6 +117,7 @@ interface EnrollmentStats {
 }
 
 export default function EnrollmentsManagementPage() {
+  const router = useRouter()
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [filteredEnrollments, setFilteredEnrollments] = useState<Enrollment[]>([])
   const [stats, setStats] = useState<EnrollmentStats | null>(null)
@@ -190,6 +194,12 @@ export default function EnrollmentsManagementPage() {
   useEffect(() => {
     applyFilters()
   }, [enrollments, statusFilter, paymentStatusFilter, searchQuery])
+
+  useEffect(() => {
+    if (!ADMIN_ENROLLMENTS_ENABLED) {
+      router.replace("/admin")
+    }
+  }, [router])
 
   const applyFilters = () => {
     let filtered = [...enrollments]
@@ -297,7 +307,9 @@ export default function EnrollmentsManagementPage() {
     if (!selectedEnrollment) return
 
     if (!editReason.trim()) {
-      alert("Please provide a reason for the status change")
+      adminToast.warning("Reason required", {
+        description: "Please provide a reason for the status change.",
+      })
       return
     }
 
@@ -325,16 +337,29 @@ export default function EnrollmentsManagementPage() {
         fetchStats()
         // 重新获取详情和历史
         await handleViewDetails(data.enrollment)
+        adminToast.success("Enrollment updated")
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to update enrollment")
+        adminToast.error("Failed to update enrollment", {
+          description: getErrorMessage(error.error),
+        })
       }
     } catch (error) {
       console.error("Error updating enrollment:", error)
-      alert("Failed to update enrollment")
+      adminToast.error("Failed to update enrollment", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsSaving(false)
     }
+  }
+
+  if (!ADMIN_ENROLLMENTS_ENABLED) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (

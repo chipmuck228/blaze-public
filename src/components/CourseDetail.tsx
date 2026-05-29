@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -468,6 +469,10 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
   // 检查用户是否可以注册（先修条件和已注册状态）
   useEffect(() => {
     const checkEnrollmentStatus = async () => {
+      if (!PUBLIC_USER_AUTH_ENABLED) {
+        setEnrollmentStatus(null);
+        return;
+      }
       if (!session?.user || !course.id) {
         setEnrollmentStatus(null);
         return;
@@ -510,6 +515,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
   // 处理注册按钮点击
   const handleEnrollClick = () => {
+    if (!PUBLIC_USER_AUTH_ENABLED) return;
     if (!session?.user) {
       router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
       return;
@@ -517,7 +523,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
     // 如果没有实例，提示用户
     if (instances.length === 0) {
-      alert('No available instances for this course at the selected location.');
+      alert('No available instances for this course at the selected campus.');
       return;
     }
 
@@ -559,6 +565,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
   // 添加到购物车
   const handleAddToCart = async (instanceId?: string) => {
+    if (!PUBLIC_USER_AUTH_ENABLED) return;
     // 检查用户是否登录
     if (!session?.user) {
       // 保存当前URL（包括查询参数）作为回调地址
@@ -670,6 +677,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
 
   // 加入等待列表
   const handleJoinWaitlist = async (instanceId: string, studentId?: string, studentName?: string) => {
+    if (!PUBLIC_USER_AUTH_ENABLED) return;
     // 检查用户是否登录
     if (!session?.user) {
       // 保存当前URL（包括查询参数）作为回调地址
@@ -926,7 +934,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
   return (
     <div className="bg-slate-50 min-h-screen pb-24">
       {/* Sticky Header for Mobile/Quick Nav */}
-      {currentInstance && (
+      {currentInstance && PUBLIC_USER_AUTH_ENABLED && (
         <div className="bg-white border-b border-slate-200 sticky top-20 z-40 px-4 py-3 shadow-sm md:hidden flex justify-between items-center">
           <span className="font-bold text-slate-900 truncate pr-4">{displayCourse.name}</span>
           <button 
@@ -1026,6 +1034,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                   <div className="text-5xl font-black text-white mb-2">${basePrice.toFixed(2)}</div>
                   )}
                   <p className="text-slate-400 text-sm mb-6">{isFull ? 'Waitlist Only' : `${availableSpots} spots remaining`}</p>
+                  {PUBLIC_USER_AUTH_ENABLED ? (
                   <button 
                     onClick={() => handleAddToCart(currentInstance.id)}
                     disabled={
@@ -1047,6 +1056,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                       'Book Your Spot'
                     )}
                   </button>
+                  ) : null}
                </div>
              )}
           </div>
@@ -1216,6 +1226,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                   ) : (
                   <div className="text-4xl font-black text-slate-900 mb-2">${basePrice.toFixed(2)}</div>
                   )}
+                  {PUBLIC_USER_AUTH_ENABLED ? (
                   <button 
                     onClick={() => handleAddToCart(currentInstance.id)}
                     disabled={
@@ -1237,6 +1248,7 @@ export const CourseDetail = ({ course }: CourseDetailProps) => {
                       'Book Now'
                     )}
                   </button>
+                  ) : null}
               </div>
             )}
 

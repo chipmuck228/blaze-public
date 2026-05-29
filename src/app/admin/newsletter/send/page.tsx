@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Loader2, Send, Clock, CheckCircle, XCircle } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface NewsletterTemplate {
   id: string
@@ -130,7 +130,7 @@ export default function NewsletterSendPage() {
       setTemplates(activeTemplates)
     } catch (error: any) {
       console.error("Error fetching templates:", error)
-      toast.error("Failed to load templates")
+      adminToast.error("Failed to load templates")
     } finally {
       setIsLoading(false)
     }
@@ -150,7 +150,7 @@ export default function NewsletterSendPage() {
 
   const handleTestSend = async () => {
     if (!selectedTemplateId || !testEmail) {
-      toast.error("Please select a template and enter a test email")
+      adminToast.error("Please select a template and enter a test email")
       return
     }
 
@@ -174,11 +174,13 @@ export default function NewsletterSendPage() {
         throw new Error(data.error || "Failed to send test email")
       }
 
-      toast.success("Test email sent successfully!")
+      adminToast.success("Test email sent")
       setTestEmail("")
     } catch (error: any) {
       console.error("Error sending test email:", error)
-      toast.error(error.message || "Failed to send test email")
+      adminToast.error("Failed to send test email", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsSending(false)
     }
@@ -186,16 +188,19 @@ export default function NewsletterSendPage() {
 
   const handleSend = async () => {
     if (!selectedTemplateId) {
-      toast.error("Please select a template")
+      adminToast.error("Please select a template")
       return
     }
 
     if (sendMode === "schedule" && !scheduledAt) {
-      toast.error("Please select a scheduled time")
+      adminToast.error("Please select a scheduled time")
       return
     }
 
-    if (!confirm(`Are you sure you want to ${sendMode === "now" ? "send" : "schedule"} this newsletter?`)) {
+    if (!(await adminConfirm({
+      title: sendMode === "now" ? "Send this newsletter?" : "Schedule this newsletter?",
+      confirmLabel: sendMode === "now" ? "Send" : "Schedule",
+    }))) {
       return
     }
 
@@ -244,11 +249,13 @@ export default function NewsletterSendPage() {
         })
         // 启动 SSE 监听发送进度
         startSSEListener(data.campaign_id)
-        toast.success("Newsletter sending started! Progress will be shown below.")
+        adminToast.success("Newsletter sending started", {
+          description: "Progress will be shown below.",
+        })
       } else {
-        toast.success(
-          `Newsletter scheduled for ${new Date(scheduledAt).toLocaleString()}`
-        )
+        adminToast.success("Newsletter scheduled", {
+          description: `Scheduled for ${new Date(scheduledAt).toLocaleString()}`,
+        })
         // 重置表单
         setSelectedTemplateId("")
         setCustomSubject("")
@@ -258,7 +265,9 @@ export default function NewsletterSendPage() {
       }
     } catch (error: any) {
       console.error("Error sending newsletter:", error)
-      toast.error(error.message || `Failed to ${sendMode === "now" ? "send" : "schedule"} newsletter`)
+      adminToast.error(`Failed to ${sendMode === "now" ? "send" : "schedule"} newsletter`, {
+        description: getErrorMessage(error),
+      })
       setIsSending(false)
       setSendingProgress(null)
     }
@@ -338,7 +347,9 @@ export default function NewsletterSendPage() {
       eventSource.close()
       eventSourceRef.current = null
       setIsSending(false)
-      toast.error("Connection to progress stream lost. Check notifications for completion status.")
+      adminToast.error("Connection to progress stream lost", {
+        description: "Check notifications for completion status.",
+      })
     }
   }
 

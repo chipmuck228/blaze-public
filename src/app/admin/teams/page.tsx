@@ -38,6 +38,7 @@ import {
 } from "lucide-react"
 import { TeamEditDialog } from "@/components/admin/TeamEditDialog"
 import Image from "next/image"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface TeamMember {
   id: string
@@ -143,7 +144,10 @@ function TeamsManagementPageContent() {
   }
 
   const handleDelete = async (teamId: string) => {
-    if (!confirm("Are you sure you want to delete this team member?")) {
+    if (!(await adminConfirm({
+      title: "Delete this team member?",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -155,13 +159,18 @@ function TeamsManagementPageContent() {
       if (response.ok) {
         setTeams(teams.filter((team) => team.id !== teamId))
         setFilteredTeams(filteredTeams.filter((team) => team.id !== teamId))
+        adminToast.success("Team member deleted")
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete team member")
+        adminToast.error("Failed to delete team member", {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error deleting team member:", error)
-      alert("Failed to delete team member")
+      adminToast.error("Failed to delete team member", {
+        description: getErrorMessage(error),
+      })
     }
   }
 

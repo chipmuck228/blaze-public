@@ -3,8 +3,8 @@
 import { MapPin, ArrowRight, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import { useRef } from "react"
-import Image from "next/image"
 import type { FeaturedSession } from "@/lib/featured-sessions"
+import { FeaturedSessionCard } from "@/components/FeaturedSessionCard"
 
 interface LocationHeroProps {
   heroTitle: string
@@ -158,50 +158,8 @@ export function LocationHero({
               className="flex gap-6 overflow-x-auto pb-8 snap-x snap-mandatory scrollbar-hide -mr-4 lg:-mr-0 pr-4 lg:pr-0"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              {sessions.map((session) => (
-                <Link
-                  key={session.id}
-                  href={session.href}
-                  className="min-w-[300px] w-[300px] md:min-w-[340px] md:w-[340px] snap-start bg-white rounded-3xl overflow-hidden shadow-xl cursor-pointer group hover:shadow-2xl transition-all duration-300 flex flex-col h-full flex-shrink-0 hover:-translate-y-2"
-                >
-                  <div className="relative overflow-hidden shrink-0 h-48">
-                    {session.poster_url ? (
-                      <Image
-                        src={session.poster_url}
-                        alt={session.title}
-                        fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        sizes="(max-width: 768px) 300px, 340px"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#1e3a5f] to-[#2d4a6f]">
-                        <span className="text-white/80 text-4xl font-bold">
-                          {session.title.charAt(0)}
-                        </span>
-                      </div>
-                    )}
-                    {session.category && (
-                      <div className="absolute top-4 left-4">
-                        <span className="bg-[#2563eb] text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
-                          {session.category.display_name || session.category.name}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-6 flex flex-col flex-grow">
-                    <h4 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
-                      {session.title}
-                    </h4>
-                    <p className="text-slate-600 text-sm leading-relaxed flex-grow line-clamp-3 mb-4">
-                      {session.description ||
-                        `Explore ${session.title} with hands-on robotics and coding experiences.`}
-                    </p>
-                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100">
-                      <span className="text-xs text-slate-500">View session</span>
-                      <ArrowRight className="h-5 w-5 text-[#2563eb] group-hover:translate-x-1 transition-transform flex-shrink-0" />
-                    </div>
-                  </div>
-                </Link>
+              {sessions.map((session, index) => (
+                <FeaturedSessionCard key={session.id} session={session} index={index} />
               ))}
             </div>
           )}

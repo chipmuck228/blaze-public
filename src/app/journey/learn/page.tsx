@@ -166,7 +166,7 @@ export default function JourneyLearnPage() {
             <div className="bg-slate-100 dark:bg-slate-800/50 p-12 rounded-3xl border border-slate-200 dark:border-slate-700">
               <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Ready to Learn?</h2>
               <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-xl mx-auto">
-                Browse courses at your location and take the next step on your robotics journey.
+                Browse courses at your campus and take the next step on your robotics journey.
               </p>
               <Button
                 size="lg"

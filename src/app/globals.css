@@ -510,21 +510,10 @@ body {
   max-width: 100vw;
 }
 
-/* 优化图片在移动端的显示 */
+/* 优化图片在移动端的显示（勿对 fill/object-cover 强制 height:auto，避免卡片图塌陷） */
 @media (max-width: 768px) {
-  img {
+  img:not([data-nimg="fill"]) {
     max-width: 100%;
-    height: auto;
-  }
-
-  /* 图片懒加载优化 */
-  img[loading="lazy"] {
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  img[loading="lazy"].loaded {
-    opacity: 1;
   }
 }
 

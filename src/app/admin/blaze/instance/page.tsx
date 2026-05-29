@@ -18,8 +18,27 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, Loader2, RefreshCcw, Calendar, Clock, Users, DollarSign, MapPin, Edit, Trash2 } from "lucide-react"
+import {
+  Search,
+  Plus,
+  Loader2,
+  RefreshCcw,
+  Calendar,
+  Clock,
+  Users,
+  DollarSign,
+  Edit,
+  Trash2,
+  Building2,
+  MapPin,
+  FolderTree,
+  Layers,
+  ChevronRight,
+} from "lucide-react"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import { cn } from "@/lib/utils"
 
 interface Instance {
   id: string
@@ -82,6 +101,107 @@ interface Franchise {
   id: string
   code: string
   name: string
+}
+
+const HIERARCHY_BADGE_STYLES = {
+  campus: "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-800",
+  location: "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800",
+  program: "bg-violet-50 text-violet-800 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+  activity: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
+} as const
+
+/** Card outer border by offering type code (0=Sun … 6=Sat for course day badges). */
+const OFFERING_TYPE_BORDER: Record<string, string> = {
+  camp: "border-orange-400 dark:border-orange-600",
+  course: "border-indigo-400 dark:border-indigo-600",
+  workshop: "border-rose-400 dark:border-rose-600",
+  competition: "border-teal-400 dark:border-teal-600",
+  default: "border-muted-foreground/25",
+}
+
+function getOfferingTypeCode(instance: Instance): string {
+  return instance.offering?.offering_type?.code?.toLowerCase() ?? ""
+}
+
+function getDaysOfWeek(instance: Instance): number[] {
+  const normalize = (values: unknown[]) =>
+    [...values]
+      .map((d) => (typeof d === "string" ? parseInt(d, 10) : Number(d)))
+      .filter((d) => !Number.isNaN(d))
+      .sort((a, b) => a - b)
+
+  if (Array.isArray(instance.days_of_week) && instance.days_of_week.length > 0) {
+    return normalize(instance.days_of_week)
+  }
+  const schedule = instance.instance_data_ext?.schedule as { days_of_week?: unknown[] } | undefined
+  if (Array.isArray(schedule?.days_of_week) && schedule.days_of_week.length > 0) {
+    return normalize(schedule.days_of_week)
+  }
+  return []
+}
+
+function CourseDaysOfWeekBadges({ days }: { days: number[] }) {
+  if (days.length === 0) return null
+  return (
+    <span className="inline-flex items-center gap-0.5 shrink-0" title="Days of week (0=Sun, 1=Mon, …)">
+      {days.map((day) => (
+        <Badge
+          key={day}
+          variant="outline"
+          className="h-4 min-w-[1rem] px-1 py-0 text-[10px] font-semibold tabular-nums justify-center rounded-sm border-indigo-300/80 text-indigo-800 bg-indigo-50/80 dark:border-indigo-700 dark:text-indigo-200 dark:bg-indigo-950/50"
+        >
+          {day}
+        </Badge>
+      ))}
+    </span>
+  )
+}
+
+function HierarchyBadge({
+  icon: Icon,
+  label,
+  className,
+}: {
+  icon: typeof Building2
+  label: string
+  className: string
+}) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn("gap-1 px-1.5 py-0 text-[11px] font-normal leading-tight max-w-[14rem] truncate", className)}
+    >
+      <Icon className="h-3 w-3 shrink-0 opacity-80" strokeWidth={1.5} />
+      <span className="truncate">{label}</span>
+    </Badge>
+  )
+}
+
+function SessionHierarchyBadges({ instance }: { instance: Instance }) {
+  const campusName = instance.program?.franchise?.name ?? "N/A"
+  const locationName = instance.campus?.display_name ?? instance.campus?.name ?? "N/A"
+  const programName = instance.program?.category?.display_name ?? instance.program?.category?.name ?? "N/A"
+  const activityName = instance.program?.display_name ?? instance.program?.name ?? "N/A"
+
+  const items = [
+    { key: "campus", icon: Building2, label: campusName, style: HIERARCHY_BADGE_STYLES.campus },
+    { key: "location", icon: MapPin, label: locationName, style: HIERARCHY_BADGE_STYLES.location },
+    { key: "program", icon: FolderTree, label: programName, style: HIERARCHY_BADGE_STYLES.program },
+    { key: "activity", icon: Layers, label: activityName, style: HIERARCHY_BADGE_STYLES.activity },
+  ] as const
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+      {items.map((item, index) => (
+        <div key={item.key} className="flex items-center gap-1 min-w-0">
+          {index > 0 ? (
+            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60" strokeWidth={1.5} />
+          ) : null}
+          <HierarchyBadge icon={item.icon} label={item.label} className={item.style} />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function BlazeInstanceManagementPage() {
@@ -173,7 +293,11 @@ export default function BlazeInstanceManagementPage() {
   }
 
   const handleDeleteInstance = async (instanceId: string) => {
-    if (!confirm("Are you sure you want to delete this instance?")) {
+    if (!(await adminConfirm({
+      title: "Delete this instance?",
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -184,13 +308,18 @@ export default function BlazeInstanceManagementPage() {
 
       if (response.ok) {
         fetchInstances()
+        adminToast.success("Instance deleted")
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete instance")
+        adminToast.error("Failed to delete instance", {
+          description: getErrorMessage(data.error, "Failed to delete instance"),
+        })
       }
     } catch (error) {
       console.error("Error deleting instance:", error)
-      alert("Failed to delete instance")
+      adminToast.error("Failed to delete instance", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -239,14 +368,14 @@ export default function BlazeInstanceManagementPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Instance Management</h1>
+          <h1 className="text-3xl font-bold">{adminUiLabels.instance.singular} Management</h1>
           <p className="text-muted-foreground mt-2">
-            Manage course instances across all programs
+            Manage bookable sessions across all activities
           </p>
         </div>
         <Button onClick={() => handleCreateInstance()}>
           <Plus className="mr-2 h-4 w-4" />
-          Create Instance
+          Create {adminUiLabels.instance.singular}
         </Button>
       </div>
 
@@ -262,7 +391,7 @@ export default function BlazeInstanceManagementPage() {
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search instances..."
+                  placeholder={`Search ${adminUiLabels.instance.plural.toLowerCase()}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-8"
@@ -270,13 +399,13 @@ export default function BlazeInstanceManagementPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium mb-2 block">Franchise</label>
+              <label className="text-sm font-medium mb-2 block">{adminUiLabels.franchise.singular}</label>
               <Select value={selectedFranchiseFilter} onValueChange={setSelectedFranchiseFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Franchises" />
+                  <SelectValue placeholder={`All ${adminUiLabels.franchise.plural}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Franchises</SelectItem>
+                  <SelectItem value="all">All {adminUiLabels.franchise.plural}</SelectItem>
                   {franchises.map((f) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.name}
@@ -286,13 +415,13 @@ export default function BlazeInstanceManagementPage() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium mb-2 block">Program</label>
+              <label className="text-sm font-medium mb-2 block">{adminUiLabels.program.singular}</label>
               <Select value={selectedProgramFilter} onValueChange={setSelectedProgramFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Programs" />
+                  <SelectValue placeholder={`All ${adminUiLabels.program.plural}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Programs</SelectItem>
+                  <SelectItem value="all">All {adminUiLabels.program.plural}</SelectItem>
                   {programs.map((program) => (
                     <SelectItem key={program.id} value={program.id}>
                       {program.display_name}
@@ -325,9 +454,9 @@ export default function BlazeInstanceManagementPage() {
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Instances</CardTitle>
+              <CardTitle>{adminUiLabels.instance.plural}</CardTitle>
               <CardDescription>
-                {filteredInstances.length} instance{filteredInstances.length !== 1 ? "s" : ""} found
+                {filteredInstances.length} {adminUiLabels.instance.singular.toLowerCase()}{filteredInstances.length !== 1 ? "s" : ""} found
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={fetchInstances}>
@@ -343,99 +472,84 @@ export default function BlazeInstanceManagementPage() {
             </div>
           ) : filteredInstances.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              No instances found
+              No {adminUiLabels.instance.plural.toLowerCase()} found
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {filteredInstances.map((instance) => {
                 const price = instance.price_override ?? instance.offering?.base_price ?? 0
                 const currency = instance.offering?.currency ?? "USD"
+                const offeringTypeCode = getOfferingTypeCode(instance)
+                const borderClass =
+                  OFFERING_TYPE_BORDER[offeringTypeCode] ?? OFFERING_TYPE_BORDER.default
+                const isCourse = offeringTypeCode === "course"
+                const daysOfWeek = isCourse ? getDaysOfWeek(instance) : []
 
                 return (
-                  <Card key={instance.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold">
+                  <Card
+                    key={instance.id}
+                    className={cn("hover:shadow-sm transition-shadow border", borderClass)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-semibold text-foreground truncate">
                               {instance.offering?.name || "Unknown Offering"}
                             </h3>
-                            <Badge className={getStatusColor(instance.status)}>
+                            <Badge className={cn("text-[10px] px-1.5 py-0 font-normal", getStatusColor(instance.status))}>
                               {instance.status}
                             </Badge>
-                            {instance.offering?.offering_type && (
-                              <Badge variant="outline">
+                            {instance.offering?.offering_type ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                                 {instance.offering.offering_type.name}
                               </Badge>
-                            )}
+                            ) : null}
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                {formatDate(instance.start_date)} - {formatDate(instance.end_date)}
-                              </span>
-                            </div>
-                            {instance.start_time && instance.end_time && (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Clock className="h-4 w-4" />
-                                <span>
-                                  {formatTime(instance.start_time)} - {formatTime(instance.end_time)}
-                                </span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Users className="h-4 w-4" />
-                              <span>
-                                {instance.current_students} / {instance.max_students ?? "∞"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <DollarSign className="h-4 w-4" />
-                              <span>
-                                {currency} {price.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
+                          <SessionHierarchyBadges instance={instance} />
 
-                          <div className="mt-4 space-y-1 text-sm text-muted-foreground">
-                            <div>
-                              <strong>Program:</strong> {instance.program?.display_name}
-                            </div>
-                            {instance.program?.category && (
-                              <div>
-                                <strong>Category:</strong> {instance.program.category.display_name}
-                              </div>
-                            )}
-                            {instance.program?.franchise && (
-                              <div>
-                                <strong>Franchise:</strong> {instance.program.franchise.name}
-                              </div>
-                            )}
-                            {instance.campus && (
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-4 w-4" />
-                                <span>{instance.campus.display_name}</span>
-                              </div>
-                            )}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] leading-tight text-muted-foreground">
+                            <span className="inline-flex items-center gap-1 shrink-0">
+                              <Calendar className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                              {formatDate(instance.start_date)} – {formatDate(instance.end_date)}
+                            </span>
+                            {instance.start_time && instance.end_time ? (
+                              <span className="inline-flex items-center gap-1 shrink-0">
+                                <Clock className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                                {formatTime(instance.start_time)} – {formatTime(instance.end_time)}
+                              </span>
+                            ) : null}
+                            {isCourse ? <CourseDaysOfWeekBadges days={daysOfWeek} /> : null}
+                            <span className="inline-flex items-center gap-1 shrink-0">
+                              <Users className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                              {instance.current_students}/{instance.max_students ?? "∞"}
+                            </span>
+                            <span className="inline-flex items-center gap-1 shrink-0">
+                              <DollarSign className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                              {currency} {price.toFixed(2)}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="flex gap-2 ml-4">
+                        <div className="flex shrink-0 gap-0.5">
                           <Button
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 bg-transparent hover:bg-muted/60 text-muted-foreground hover:text-foreground"
                             onClick={() => handleEditInstance(instance)}
+                            aria-label={`Edit ${adminUiLabels.instance.singular}`}
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4" strokeWidth={1.5} />
                           </Button>
                           <Button
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                             onClick={() => handleDeleteInstance(instance.id)}
+                            aria-label={`Delete ${adminUiLabels.instance.singular}`}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
                           </Button>
                         </div>
                       </div>

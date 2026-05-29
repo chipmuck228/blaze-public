@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Loader2, Trash2, BarChart3, TrendingDown } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 import {
   LineChart,
   Line,
@@ -189,7 +189,7 @@ export default function NewsletterSubscribersPage() {
       setTotalPages(data.totalPages || 0)
     } catch (error: any) {
       console.error("Error fetching subscribers:", error)
-      toast.error("Failed to load subscribers")
+      adminToast.error("Failed to load subscribers")
     } finally {
       setIsLoading(false)
     }
@@ -235,7 +235,7 @@ export default function NewsletterSubscribersPage() {
       setStatisticsData(data)
     } catch (error: any) {
       console.error("Error fetching statistics:", error)
-      toast.error("Failed to load statistics")
+      adminToast.error("Failed to load statistics")
     } finally {
       setIsStatisticsLoading(false)
     }
@@ -281,14 +281,17 @@ export default function NewsletterSubscribersPage() {
       setUnsubscribeData(data)
     } catch (error: any) {
       console.error("Error fetching unsubscribe statistics:", error)
-      toast.error("Failed to load unsubscribe statistics")
+      adminToast.error("Failed to load unsubscribe statistics")
     } finally {
       setIsUnsubscribeLoading(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this subscriber?")) {
+    if (!(await adminConfirm({
+      title: "Remove this subscriber?",
+      confirmLabel: "Remove",
+    }))) {
       return
     }
 
@@ -302,11 +305,11 @@ export default function NewsletterSubscribersPage() {
         throw new Error(error.error || "Failed to delete subscriber")
       }
 
-      toast.success("Subscriber removed successfully")
+      adminToast.success("Subscriber removed successfully")
       fetchSubscribers()
     } catch (error: any) {
       console.error("Error deleting subscriber:", error)
-      toast.error(error.message || "Failed to remove subscriber")
+      adminToast.error(error.message || "Failed to remove subscriber")
     }
   }
 

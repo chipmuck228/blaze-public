@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -174,6 +175,7 @@ export const Courses = () => {
   };
 
   const handleEnroll = async (courseId: string) => {
+    if (!PUBLIC_USER_AUTH_ENABLED) return;
     // 检查用户是否登录
     if (!session?.user) {
       router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
@@ -373,6 +375,7 @@ export const Courses = () => {
                     </CardDescription>
                   )}
                   <div className="mt-auto space-y-2">
+                    {PUBLIC_USER_AUTH_ENABLED ? (
                     <Button
                       variant="default"
                       className="w-full"
@@ -381,6 +384,7 @@ export const Courses = () => {
                       <BookOpen className="mr-2 h-4 w-4" />
                       Enroll
                     </Button>
+                    ) : null}
                     <Button
                       variant="ghost"
                       className="w-full justify-center group"
@@ -677,6 +681,7 @@ export const Courses = () => {
             {/* Footer Section with action buttons */}
             {courseDetails && (
               <div className="px-6 py-4 border-t bg-muted/30 space-y-2">
+                {PUBLIC_USER_AUTH_ENABLED ? (
                 <Button
                   className="w-full"
                   onClick={() => handleEnroll(courseDetails.id)}
@@ -684,6 +689,7 @@ export const Courses = () => {
                   <BookOpen className="mr-2 h-4 w-4" />
                   Enroll Now
                 </Button>
+                ) : null}
                 {courseDetails.slug ? (
                   <Button
                     variant="outline"

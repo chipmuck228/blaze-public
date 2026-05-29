@@ -56,6 +56,7 @@ import {
   Upload,
   ExternalLink,
 } from "lucide-react"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface ResourceCategory {
   id: string
@@ -228,34 +229,48 @@ export default function BlazeResourcesManagementPage() {
       })
       if (!res.ok) {
         const err = await res.json()
-        alert(err.error || "Failed to save category")
+        adminToast.error("Failed to save category", {
+          description: getErrorMessage(err.error),
+        })
         return
       }
       await fetchCategories()
       setIsCategoryDialogOpen(false)
       setEditingCategory(null)
+      adminToast.success(editingCategory ? "Category updated" : "Category created")
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to save")
+      adminToast.error("Failed to save category", {
+        description: getErrorMessage(e),
+      })
     } finally {
       setIsCategorySubmitting(false)
     }
   }
 
   const deleteCategory = async (id: string) => {
-    if (!confirm("Delete this category? This will fail if it has resources.")) return
+    if (!(await adminConfirm({
+      title: "Delete this category?",
+      description: "This will fail if it has resources.",
+      confirmLabel: "Delete",
+    }))) return
     try {
       const res = await fetch(`/api/admin/resources/v2/categories/${id}`, {
         method: "DELETE",
       })
       if (!res.ok) {
         const err = await res.json()
-        alert(err.error || "Failed to delete")
+        adminToast.error("Failed to delete category", {
+          description: getErrorMessage(err.error),
+        })
         return
       }
       await fetchCategories()
       if (selectedCategoryId === id) setSelectedCategoryId("")
+      adminToast.success("Category deleted")
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to delete")
+      adminToast.error("Failed to delete category", {
+        description: getErrorMessage(e),
+      })
     }
   }
 
@@ -339,32 +354,45 @@ export default function BlazeResourcesManagementPage() {
       })
       if (!res.ok) {
         const err = await res.json()
-        alert(err.error || "Failed to save resource")
+        adminToast.error("Failed to save resource", {
+          description: getErrorMessage(err.error),
+        })
         return
       }
       if (selectedCategoryId) await fetchResources(selectedCategoryId)
       setIsResourceDialogOpen(false)
       setEditingResource(null)
       setDocumentFile(null)
+      adminToast.success(editingResource ? "Resource updated" : "Resource created")
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to save")
+      adminToast.error("Failed to save resource", {
+        description: getErrorMessage(e),
+      })
     } finally {
       setIsResourceSubmitting(false)
     }
   }
 
   const deleteResource = async (id: string) => {
-    if (!confirm("Delete this resource?")) return
+    if (!(await adminConfirm({
+      title: "Delete this resource?",
+      confirmLabel: "Delete",
+    }))) return
     try {
       const res = await fetch(`/api/admin/resources/v2/${id}`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json()
-        alert(err.error || "Failed to delete")
+        adminToast.error("Failed to delete resource", {
+          description: getErrorMessage(err.error),
+        })
         return
       }
       if (selectedCategoryId) await fetchResources(selectedCategoryId)
+      adminToast.success("Resource deleted")
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to delete")
+      adminToast.error("Failed to delete resource", {
+        description: getErrorMessage(e),
+      })
     }
   }
 

@@ -39,7 +39,7 @@ import {
   Filter,
   X,
 } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, getErrorMessage } from "@/lib/admin-toast"
 import {
   PieChart,
   Pie,
@@ -178,7 +178,7 @@ function FailedSendsPageContent() {
       setTotalPages(data.totalPages || 0)
     } catch (error: any) {
       console.error("Error fetching failed sends:", error)
-      toast.error("Failed to load failed sends")
+      adminToast.error("Failed to load failed sends")
     } finally {
       setIsLoading(false)
     }
@@ -212,7 +212,7 @@ function FailedSendsPageContent() {
       setStats(data)
     } catch (error: any) {
       console.error("Error fetching stats:", error)
-      toast.error("Failed to load statistics")
+      adminToast.error("Failed to load statistics")
     } finally {
       setIsLoadingStats(false)
     }
@@ -292,7 +292,7 @@ function FailedSendsPageContent() {
   const handleRetry = async (sendIds?: string[]) => {
     const idsToRetry = sendIds || Array.from(selectedIds)
     if (idsToRetry.length === 0) {
-      toast.error("Please select at least one failed send to retry")
+      adminToast.error("Please select at least one failed send to retry")
       return
     }
 
@@ -314,7 +314,7 @@ function FailedSendsPageContent() {
       const data = await response.json()
 
       if (data.success && data.task_id) {
-        toast.success(
+        adminToast.success(
           `Retry task created (ID: ${data.task_id.substring(0, 8)}...). You will be notified when it completes.`,
           { duration: 5000 }
         )
@@ -322,13 +322,13 @@ function FailedSendsPageContent() {
         // 开始轮询任务状态，完成后刷新通知
         pollTaskStatus(data.task_id)
       } else {
-        toast.error("Failed to create retry task")
+        adminToast.error("Failed to create retry task")
       }
 
       setSelectedIds(new Set())
     } catch (error: any) {
       console.error("Error creating retry task:", error)
-      toast.error(error.message || "Failed to create retry task")
+      adminToast.error(error.message || "Failed to create retry task")
     } finally {
       setIsRetrying(false)
     }
@@ -395,7 +395,7 @@ function FailedSendsPageContent() {
   useEffect(() => {
     const taskId = searchParams?.get("task_id")
     if (taskId) {
-      toast.info(`Viewing task: ${taskId.substring(0, 8)}...`)
+      adminToast.info(`Viewing task: ${taskId.substring(0, 8)}...`)
       // 刷新数据以显示最新状态
       fetchFailedSends()
       fetchStats()
@@ -603,7 +603,7 @@ function FailedSendsPageContent() {
               if (allRetryableIds.length > 0) {
                 handleRetry(allRetryableIds)
               } else {
-                toast.info("No retryable emails found")
+                adminToast.info("No retryable emails found")
               }
             }}
             disabled={isRetrying}

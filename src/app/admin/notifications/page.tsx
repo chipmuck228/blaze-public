@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { toast } from "sonner"
+import { adminToast } from "@/lib/admin-toast"
 import { useRouter } from "next/navigation"
 
 interface Notification {
@@ -77,7 +77,7 @@ function NotificationsPageContent() {
       setUnreadCount(data.unread_count || 0)
     } catch (error: any) {
       console.error("Error fetching notifications:", error)
-      toast.error("Failed to load notifications")
+      adminToast.error("Failed to load notifications")
     } finally {
       setIsLoading(false)
     }
@@ -94,11 +94,11 @@ function NotificationsPageContent() {
         method: "PUT",
       })
       if (!response.ok) throw new Error("Failed to mark as read")
-      toast.success("Notification marked as read")
+      adminToast.success("Notification marked as read")
       fetchNotifications()
     } catch (error: any) {
       console.error("Error marking notification as read:", error)
-      toast.error("Failed to mark notification as read")
+      adminToast.error("Failed to mark notification as read")
     } finally {
       setIsMarkingRead(null)
     }
@@ -110,11 +110,11 @@ function NotificationsPageContent() {
         method: "PUT",
       })
       if (!response.ok) throw new Error("Failed to mark all as read")
-      toast.success("All notifications marked as read")
+      adminToast.success("All notifications marked as read")
       fetchNotifications()
     } catch (error: any) {
       console.error("Error marking all as read:", error)
-      toast.error("Failed to mark all notifications as read")
+      adminToast.error("Failed to mark all notifications as read")
     }
   }
 

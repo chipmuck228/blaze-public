@@ -16,7 +16,7 @@ import { EmptyState } from '@/components/admin/traffic/EmptyState'
 import { ErrorState } from '@/components/admin/traffic/ErrorState'
 import { exportToCSV } from '@/lib/traffic-export'
 import { useTrafficSSE } from '@/hooks/useTrafficSSE'
-import { toast } from 'sonner'
+import { adminToast } from '@/lib/admin-toast'
 
 interface TrafficSSEData {
   visits: number
@@ -282,10 +282,10 @@ export default function TrafficPage() {
         browsers: browsers?.browsers,
         operatingSystems: operatingSystems?.operating_systems,
       })
-      toast.success('Data exported successfully')
+      adminToast.success('Data exported successfully')
     } catch (error: any) {
       console.error('Error exporting data:', error)
-      toast.error('Failed to export data')
+      adminToast.error('Failed to export data')
     } finally {
       setIsExporting(false)
     }

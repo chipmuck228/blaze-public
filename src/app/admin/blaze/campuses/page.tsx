@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface BlazeCampus {
   id: string
@@ -141,7 +143,11 @@ export default function BlazeCampusesManagementPage() {
   }
 
   const handleDelete = async (campusId: string) => {
-    if (!confirm("Are you sure you want to delete this campus? This will fail if there are existing instances using it.")) {
+    if (!(await adminConfirm({
+      title: "Delete this campus?",
+      description: "This will fail if there are existing instances using it.",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -152,13 +158,18 @@ export default function BlazeCampusesManagementPage() {
 
       if (response.ok) {
         fetchCampuses()
+        adminToast.success("Campus deleted")
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete campus")
+        adminToast.error("Failed to delete campus", {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error deleting campus:", error)
-      alert("Failed to delete campus")
+      adminToast.error("Failed to delete campus", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -241,13 +252,18 @@ export default function BlazeCampusesManagementPage() {
         fetchCampuses()
         setEditingCampusId(null)
         setAddingNew(false)
+        adminToast.success(editingCampusId ? "Campus updated" : "Campus created")
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to save campus")
+        adminToast.error("Failed to save campus", {
+          description: getErrorMessage(error.error),
+        })
       }
     } catch (error) {
       console.error("Error saving campus:", error)
-      alert("Failed to save campus")
+      adminToast.error("Failed to save campus", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -282,14 +298,14 @@ export default function BlazeCampusesManagementPage() {
   const renderInlineForm = (_campus: BlazeCampus | null) => (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="space-y-2">
-        <Label htmlFor={`${formId}-franchise_id`}>Franchise *</Label>
+        <Label htmlFor={`${formId}-franchise_id`}>{adminUiLabels.franchise.singular} *</Label>
         <Select
           value={formData.franchise_id}
           onValueChange={(value) => setFormData({ ...formData, franchise_id: value })}
           required
         >
           <SelectTrigger id={`${formId}-franchise_id`}>
-            <SelectValue placeholder={isLoadingFranchises ? "Loading..." : "Select franchise"} />
+            <SelectValue placeholder={isLoadingFranchises ? "Loading..." : `Select ${adminUiLabels.franchise.singular.toLowerCase()}`} />
           </SelectTrigger>
           <SelectContent>
             {franchises.map((f) => (
@@ -305,7 +321,7 @@ export default function BlazeCampusesManagementPage() {
             id={`${formId}-name`}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Campus name"
+            placeholder={`${adminUiLabels.campus.singular} name`}
             required
           />
         </div>
@@ -408,9 +424,9 @@ export default function BlazeCampusesManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Blaze Campuses Management</h1>
+        <h1 className="text-3xl font-bold">Blaze {adminUiLabels.campus.plural} Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage campuses (where courses are held) using the new Blaze system
+          Manage physical locations (where sessions are held) using the Blaze system
         </p>
       </div>
 
@@ -418,16 +434,16 @@ export default function BlazeCampusesManagementPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Campuses</CardTitle>
+              <CardTitle>{adminUiLabels.campus.plural}</CardTitle>
               <CardDescription>
-                A list of all campuses in the Blaze system
+                A list of all locations in the Blaze system
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search campuses..."
+                  placeholder={`Search ${adminUiLabels.campus.plural.toLowerCase()}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 w-64"
@@ -435,7 +451,7 @@ export default function BlazeCampusesManagementPage() {
               </div>
               <Button onClick={handleAdd}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Campus
+                Add {adminUiLabels.campus.singular}
               </Button>
             </div>
           </div>
@@ -455,14 +471,14 @@ export default function BlazeCampusesManagementPage() {
             </div>
           ) : filteredCampuses.length === 0 && !addingNew ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No campuses found matching your search." : "No campuses found."}
+              {searchQuery ? `No ${adminUiLabels.campus.plural.toLowerCase()} found matching your search.` : `No ${adminUiLabels.campus.plural.toLowerCase()} found.`}
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {addingNew && (
                 <Card className="border-dashed">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">New Campus</CardTitle>
+                    <CardTitle className="text-lg">New {adminUiLabels.campus.singular}</CardTitle>
                     <CardDescription>Fill in the form and save</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -475,7 +491,7 @@ export default function BlazeCampusesManagementPage() {
                   {editingCampusId === campus.id ? (
                     <>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-lg">Edit Campus</CardTitle>
+                        <CardTitle className="text-lg">Edit {adminUiLabels.campus.singular}</CardTitle>
                         <CardDescription>{campus.display_name}</CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -503,7 +519,7 @@ export default function BlazeCampusesManagementPage() {
                       <CardContent className="space-y-2 pt-0 text-sm">
                         {getFranchiseLabel(campus) !== "N/A" && (
                           <p className="text-muted-foreground">
-                            <span className="font-medium text-foreground">Franchise:</span> {getFranchiseLabel(campus)}
+                            <span className="font-medium text-foreground">{adminUiLabels.franchise.singular}:</span> {getFranchiseLabel(campus)}
                           </p>
                         )}
                         {formatAddress(campus) !== "N/A" && (

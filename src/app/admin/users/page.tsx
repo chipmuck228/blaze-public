@@ -36,6 +36,7 @@ import { Search, MoreVertical, Edit, Trash2, Mail, CheckCircle2, UserPlus, Plus,
 import { UserEditDialog } from "@/components/admin/UserEditDialog"
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog"
 import Link from "next/link"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface User {
   id: string
@@ -129,15 +130,16 @@ export default function UsersManagementPage() {
   }
 
   const handleDelete = async (user: User) => {
-    // 检查是否有关联的 Teams 记录
     const hasTeamProfile = user.has_team_profile || false
-    
-    let confirmMessage = "Are you sure you want to delete this user?"
-    if (hasTeamProfile) {
-      confirmMessage += "\n\n⚠️ WARNING: This will also delete the associated team profile due to CASCADE constraint. This action cannot be undone."
-    }
 
-    if (!confirm(confirmMessage)) {
+    const confirmed = await adminConfirm({
+      title: "Delete this user?",
+      description: hasTeamProfile
+        ? "This will also delete the associated team profile. This action cannot be undone."
+        : "This action cannot be undone.",
+      confirmLabel: "Delete",
+    })
+    if (!confirmed) {
       return
     }
 
@@ -151,21 +153,25 @@ export default function UsersManagementPage() {
       if (response.ok) {
         setUsers(users.filter((u) => u.id !== user.id))
         
-        // 显示删除结果
         if (data.deletedTeamsCount > 0) {
-          alert(`User deleted successfully.\n\n${data.deletedTeamsCount} team profile(s) were also deleted.`)
+          adminToast.success("User deleted", {
+            description: `${data.deletedTeamsCount} team profile(s) were also deleted.`,
+          })
         } else {
-          alert("User deleted successfully.")
+          adminToast.success("User deleted")
         }
       } else {
-        // 显示详细的错误信息
         const errorMessage = data.error || "Failed to delete user"
         console.error("Delete user error:", errorMessage)
-        alert(`Failed to delete user: ${errorMessage}\n\nPlease check:\n1. RLS policies allow DELETE operation\n2. User is not referenced by other tables\n3. You have admin permissions`)
+        adminToast.error("Failed to delete user", {
+          description: `${errorMessage}. Check RLS policies, foreign key references, and admin permissions.`,
+        })
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error deleting user:", error)
-      alert(`Failed to delete user: ${error.message || "Unknown error"}\n\nPlease check the browser console for details.`)
+      adminToast.error("Failed to delete user", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -387,14 +393,18 @@ export default function UsersManagementPage() {
                                       method: "POST",
                                     })
                                     if (response.ok) {
-                                      alert("Invitation resent successfully!")
+                                      adminToast.success("Invitation resent")
                                       fetchUsers()
                                     } else {
                                       const data = await response.json()
-                                      alert(data.error || "Failed to resend invitation")
+                                      adminToast.error("Failed to resend invitation", {
+                                        description: getErrorMessage(data.error),
+                                      })
                                     }
                                   } catch (error) {
-                                    alert("Failed to resend invitation")
+                                    adminToast.error("Failed to resend invitation", {
+                                      description: getErrorMessage(error),
+                                    })
                                   }
                                 }}
                               >

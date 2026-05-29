@@ -216,7 +216,7 @@ function CampsPageContent() {
               </div>
               <div className="bg-[#38bdf8]/10 backdrop-blur p-6 rounded-3xl border border-white/10">
                 <Building2 className="text-[#38bdf8] w-10 h-10 mb-4" />
-                <h3 className="text-white font-bold text-lg mb-1">{activeLocName || 'All'} Locations</h3>
+                <h3 className="text-white font-bold text-lg mb-1">{activeLocName || 'All'} Campuses</h3>
                 <p className="text-gray-400 text-xs">Certified Instructors & 1:1 Kits</p>
               </div>
             </div>
@@ -336,7 +336,7 @@ function CampsPageContent() {
                   <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex-grow">
                       <h3 className="text-xl font-bold text-slate-900 mb-2">The One-Day Robotics Immersion</h3>
-                      <p className="text-slate-500 text-sm">A full day of building, testing, and competing at one of our locations. Includes foundational coding and hands-on hardware assembly.</p>
+                      <p className="text-slate-500 text-sm">A full day of building, testing, and competing at one of our campuses. Includes foundational coding and hands-on hardware assembly.</p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-3xl font-black text-slate-900 mb-2">$145</p>

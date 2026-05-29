@@ -9,6 +9,7 @@ import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Search, Filter, ArrowRight, Sparkles, MapPin, X, Calendar, Clock, Users, BookOpen } from "lucide-react";
 import Image from "next/image";
+import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth";
 
 interface Course {
   id: string;
@@ -228,6 +229,7 @@ export const AllCourses = () => {
   };
 
   const handleEnroll = async (instanceId: string) => {
+    if (!PUBLIC_USER_AUTH_ENABLED) return;
     if (!session?.user) {
       router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname + window.location.search));
       return;
@@ -581,6 +583,7 @@ export const AllCourses = () => {
                                                   View Details
                                                 </a>
                                               </Button>
+                                              {PUBLIC_USER_AUTH_ENABLED ? (
                                               <Button
                                                 size="sm"
                                                 className="flex-1 text-xs"
@@ -595,6 +598,7 @@ export const AllCourses = () => {
                                                   'Enroll'
                                                 )}
                                               </Button>
+                                              ) : null}
                                               </div>
                                             </div>
                                           </div>
@@ -647,7 +651,7 @@ export const AllCourses = () => {
                       Find courses near you
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Select your location to see available classes and schedules
+                      Select your campus to see available classes and schedules
                     </p>
                   </div>
                 </div>
@@ -658,10 +662,10 @@ export const AllCourses = () => {
                       onValueChange={handleLocationChange}
                     >
                       <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Select location" />
+                        <SelectValue placeholder="Select campus" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Locations</SelectItem>
+                        <SelectItem value="all">All Campuses</SelectItem>
                         {franchises
                           .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '' && f.code && typeof f.code === 'string' && f.code.trim() !== '')
                           .map((f) => (
@@ -695,17 +699,17 @@ export const AllCourses = () => {
             {!franchise && !isLoadingFranchises && franchises.length > 0 && (
               <div className="flex items-center gap-4">
                 <label className="text-sm font-medium whitespace-nowrap">
-                  Location:
+                  Campus:
                 </label>
                 <Select
                   value={franchise || "all"}
                   onValueChange={handleLocationChange}
                 >
                   <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="All Locations" />
+                    <SelectValue placeholder="All Campuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Locations</SelectItem>
+                    <SelectItem value="all">All Campuses</SelectItem>
                     {franchises
                       .filter((f) => f.id && typeof f.id === 'string' && f.id.trim() !== '' && f.code && typeof f.code === 'string' && f.code.trim() !== '')
                       .map((f) => (

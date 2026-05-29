@@ -40,6 +40,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Code, X, ChevronDown, ImageIcon } from "lucide-react"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface V2Franchise {
   id: string
@@ -263,7 +265,11 @@ export default function BlazeFranchisesManagementPage() {
     const franchise = franchises.find(f => f.id === franchiseId)
     if (!franchise) return
 
-    if (!confirm(`Are you sure you want to delete "${franchise.name}"? This will fail if there are categories, campuses, or programs using it.`)) {
+    if (!(await adminConfirm({
+      title: `Delete "${franchise.name}"?`,
+      description: "This will fail if there are programs, locations, or activities using it.",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -274,13 +280,18 @@ export default function BlazeFranchisesManagementPage() {
 
       if (response.ok) {
         fetchFranchises()
+        adminToast.success("Franchise deleted")
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete franchise")
+        adminToast.error("Failed to delete franchise", {
+          description: getErrorMessage(data.error, "Failed to delete franchise"),
+        })
       }
     } catch (error) {
       console.error("Error deleting franchise:", error)
-      alert("Failed to delete franchise")
+      adminToast.error("Failed to delete franchise", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -729,13 +740,18 @@ export default function BlazeFranchisesManagementPage() {
         setIsEditDialogOpen(false)
         setEditingFranchise(null)
         clearPosterFile()
+        adminToast.success(editingFranchise ? "Franchise updated" : "Franchise created")
       } else {
         const error = await response.json()
-        alert(error.error || "Failed to save franchise")
+        adminToast.error("Failed to save franchise", {
+          description: getErrorMessage(error.error, "Failed to save franchise"),
+        })
       }
     } catch (error) {
       console.error("Error saving franchise:", error)
-      alert("Failed to save franchise")
+      adminToast.error("Failed to save franchise", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -752,9 +768,9 @@ export default function BlazeFranchisesManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">V2 Franchises Management</h1>
+        <h1 className="text-3xl font-bold">V2 {adminUiLabels.franchise.plural} Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage franchises (multi-tenant entities) using the V2 database schema
+          Manage campuses (multi-tenant branches) using the V2 database schema
         </p>
       </div>
 
@@ -762,16 +778,16 @@ export default function BlazeFranchisesManagementPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Franchises</CardTitle>
+              <CardTitle>{adminUiLabels.franchise.plural}</CardTitle>
               <CardDescription>
-                A list of all franchises in the V2 system
+                A list of all campuses in the V2 system
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search franchises..."
+                  placeholder={`Search ${adminUiLabels.franchise.plural.toLowerCase()}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 w-64"
@@ -779,7 +795,7 @@ export default function BlazeFranchisesManagementPage() {
               </div>
               <Button onClick={handleAdd}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Franchise
+                Add {adminUiLabels.franchise.singular}
               </Button>
             </div>
           </div>
@@ -799,7 +815,7 @@ export default function BlazeFranchisesManagementPage() {
             </div>
           ) : filteredFranchises.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? "No franchises found matching your search." : "No franchises found."}
+              {searchQuery ? `No ${adminUiLabels.franchise.plural.toLowerCase()} found matching your search.` : `No ${adminUiLabels.franchise.plural.toLowerCase()} found.`}
             </div>
           ) : (
             <div className="rounded-md border">
@@ -883,9 +899,9 @@ export default function BlazeFranchisesManagementPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle>{editingFranchise ? "Edit Franchise" : "Add New Franchise"}</DialogTitle>
+            <DialogTitle>{editingFranchise ? `Edit ${adminUiLabels.franchise.singular}` : `Add New ${adminUiLabels.franchise.singular}`}</DialogTitle>
             <DialogDescription>
-              {editingFranchise ? "Update franchise information" : "Create a new franchise"}
+              {editingFranchise ? `Update ${adminUiLabels.franchise.singular.toLowerCase()} information` : `Create a new ${adminUiLabels.franchise.singular.toLowerCase()}`}
             </DialogDescription>
           </DialogHeader>
 
@@ -959,13 +975,13 @@ export default function BlazeFranchisesManagementPage() {
                     <Card>
                       <CardHeader className="py-3">
                         <CardTitle className="text-sm font-medium">Poster</CardTitle>
-                        <CardDescription className="text-xs">Franchise poster image. JPEG, PNG or WebP, max 5MB. Uploaded when you save.</CardDescription>
+                        <CardDescription className="text-xs">{adminUiLabels.franchise.singular} poster image. JPEG, PNG or WebP, max 5MB. Uploaded when you save.</CardDescription>
                       </CardHeader>
                       <CardContent className="pt-0">
                         <PosterUploadField
                           id="franchise_poster"
                           label="Poster image"
-                          hint="Optional. Upload happens when you save the franchise."
+                          hint={`Optional. Upload happens when you save the ${adminUiLabels.franchise.singular.toLowerCase()}.`}
                           previewSrc={posterPreviewUrl || (editingFranchise && formData.poster_url && !posterFile ? (formData.poster_url as string) : null) || null}
                           onFileChange={handlePosterFileChange}
                           onClear={clearPosterFile}
@@ -1573,9 +1589,9 @@ export default function BlazeFranchisesManagementPage() {
                     Saving...
                   </>
                 ) : editingFranchise ? (
-                  "Update Franchise"
+                  `Update ${adminUiLabels.franchise.singular}`
                 ) : (
-                  "Create Franchise"
+                  `Create ${adminUiLabels.franchise.singular}`
                 )}
               </Button>
             </DialogFooter>

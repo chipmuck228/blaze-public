@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePlatform } from '@/hooks/usePlatform'
+import { PUBLIC_USER_AUTH_ENABLED } from '@/lib/public-user-auth'
 
 interface NavItem {
   id: string
@@ -32,6 +33,10 @@ export function AppBottomNavigation() {
 
   // 获取购物车数量
   useEffect(() => {
+    if (!PUBLIC_USER_AUTH_ENABLED) {
+      setCartCount(0)
+      return
+    }
     if (status === 'authenticated' && session?.user) {
       const fetchCartCount = async () => {
         try {
@@ -70,27 +75,35 @@ export function AppBottomNavigation() {
       icon: BookOpen,
       href: '/course-catalog',
     },
-    {
-      id: 'my-courses',
-      label: 'My Courses',
-      icon: ShoppingCart,
-      href: '/profile',
-      badge: cartCount > 0 ? cartCount : undefined,
-      requireAuth: true,
-    },
+    ...(PUBLIC_USER_AUTH_ENABLED
+      ? ([
+          {
+            id: 'my-courses',
+            label: 'My Courses',
+            icon: ShoppingCart,
+            href: '/profile',
+            badge: cartCount > 0 ? cartCount : undefined,
+            requireAuth: true,
+          },
+        ] as NavItem[])
+      : []),
     {
       id: 'locations',
-      label: 'Locations',
+      label: 'Campuses',
       icon: MapPin,
       href: '/locations',
     },
-    {
-      id: 'profile',
-      label: 'Profile',
-      icon: User,
-      href: '/profile',
-      requireAuth: false, // 未登录时显示，点击跳转到登录页
-    },
+    ...(PUBLIC_USER_AUTH_ENABLED
+      ? ([
+          {
+            id: 'profile',
+            label: 'Profile',
+            icon: User,
+            href: '/profile',
+            requireAuth: false,
+          },
+        ] as NavItem[])
+      : []),
   ]
 
   const isActive = (href: string) => {
@@ -101,6 +114,7 @@ export function AppBottomNavigation() {
   }
 
   const handleClick = (item: NavItem, e: React.MouseEvent) => {
+    if (!PUBLIC_USER_AUTH_ENABLED) return
     if (item.requireAuth && status !== 'authenticated') {
       e.preventDefault()
       router.push('/login')

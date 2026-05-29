@@ -40,7 +40,8 @@ import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { marked } from "marked"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
 import { cn } from "@/lib/utils"
 
 /** Convert stored value to HTML for the WYSIWYG editor. If value looks like HTML, return as-is; else treat as Markdown and convert. */
@@ -345,40 +346,39 @@ export default function BlazeOfferingsManagementPage() {
     const name = offeringName ?? offering?.name ?? "this offering"
 
     if (
-      !confirm(
-        `Delete "${name}"?\n\nThis cannot be undone. Deletion fails if any instances still use this offering.`
-      )
+      !(await adminConfirm({
+        title: `Delete "${name}"?`,
+        description: `This cannot be undone. Deletion fails if any ${adminUiLabels.instance.plural.toLowerCase()} still use this offering.`,
+        confirmLabel: "Delete",
+      }))
     ) {
       return
     }
 
-    const deletePromise = fetch(`/api/admin/offering/v2/${offeringId}`, {
-      method: "DELETE",
-    }).then(async (response) => {
+    try {
+      const response = await fetch(`/api/admin/offering/v2/${offeringId}`, {
+        method: "DELETE",
+      })
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || "Failed to delete offering")
       }
-      return response
-    })
-
-    toast.promise(deletePromise, {
-      loading: "Deleting offering...",
-      success: () => {
-        if (editingOffering?.id === offeringId) {
-          setIsEditDialogOpen(false)
-          setEditingOffering(null)
-        }
-        fetchOfferings()
-        return "Offering deleted successfully"
-      },
-      error: (err: Error) => err.message || "Failed to delete offering",
-    })
+      if (editingOffering?.id === offeringId) {
+        setIsEditDialogOpen(false)
+        setEditingOffering(null)
+      }
+      fetchOfferings()
+      adminToast.success("Offering deleted")
+    } catch (err) {
+      adminToast.error("Failed to delete offering", {
+        description: getErrorMessage(err, "Failed to delete offering"),
+      })
+    }
   }
 
   const handleEdit = async (offering: V2Offering) => {
     if (offering.status === 'archived') {
-      toast.error("Cannot edit archived offerings.")
+      adminToast.error("Cannot edit archived offerings")
       return
     }
     setEditingOffering(offering)
@@ -539,7 +539,9 @@ export default function BlazeOfferingsManagementPage() {
           setUploadedPosterUrl(null)
         }
         const error = await response.json()
-        toast.error(error.error || "Failed to save offering")
+        adminToast.error("Failed to save offering", {
+          description: getErrorMessage(error.error, "Failed to save offering"),
+        })
       }
     } catch (error) {
       // 如果发生错误，删除已上传的 poster
@@ -554,7 +556,9 @@ export default function BlazeOfferingsManagementPage() {
         setUploadedPosterUrl(null)
       }
       console.error("Error saving offering:", error)
-      toast.error("Failed to save offering")
+      adminToast.error("Failed to save offering", {
+        description: getErrorMessage(error, "Failed to save offering"),
+      })
     } finally {
       setIsSubmitting(false)
       setIsUploadingPoster(false)
@@ -858,16 +862,16 @@ export default function BlazeOfferingsManagementPage() {
                   <div className="space-y-4">
                     <Card>
                       <CardHeader className="py-3">
-                        <CardTitle className="text-sm font-medium">Category &amp; type</CardTitle>
-                        <CardDescription className="text-xs">Category and offering type cannot be changed after creation.</CardDescription>
+                        <CardTitle className="text-sm font-medium">{adminUiLabels.category.singular} &amp; type</CardTitle>
+                        <CardDescription className="text-xs">{adminUiLabels.category.singular} and offering type cannot be changed after creation.</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3 pt-0">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <Label htmlFor="category_id" className="text-xs">Category *</Label>
+                            <Label htmlFor="category_id" className="text-xs">{adminUiLabels.category.singular} *</Label>
                             <Select value={formData.category_id || ""} onValueChange={(value) => setFormData({ ...formData, category_id: value })} required disabled={isLoadingCategories || !!editingOffering}>
                               <SelectTrigger id="category_id" className="h-9">
-                                <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Select category"} />
+                                <SelectValue placeholder={isLoadingCategories ? "Loading..." : `Select ${adminUiLabels.category.singular.toLowerCase()}`} />
                               </SelectTrigger>
                               <SelectContent>
                                 {categories.filter((cat: { id: string; name: string; display_name: string; is_active?: boolean }) => cat.is_active !== false).map((category) => (

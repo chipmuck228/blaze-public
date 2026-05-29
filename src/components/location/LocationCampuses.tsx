@@ -90,14 +90,14 @@ export function LocationCampuses({ campuses, displayName }: LocationCampusesProp
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Our Campuses</h2>
         <p className="text-slate-300 text-sm md:text-base mb-10 max-w-2xl">
-          {displayName} has {campuses.length} campus{campuses.length > 1 ? "es" : ""}. Visit us at the
-          locations below.
+          {displayName} has {campuses.length} location{campuses.length > 1 ? "s" : ""}. Visit us at these
+          locations.
         </p>
 
         <div className="flex flex-col gap-10">
           {campuses.map((campus) => {
             const address = formatAddress(campus)
-            const name = campus.display_name || campus.name || "Campus"
+            const name = campus.display_name || campus.name || "Location"
             const mapsSearchUrl = address
               ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
               : null

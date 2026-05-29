@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Loader2, Eye, X, CheckCircle2, Clock, Send, AlertCircle, Ban } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface Campaign {
   id: string
@@ -96,7 +96,7 @@ export default function NewsletterCampaignsPage() {
       setTotalPages(data.totalPages || 0)
     } catch (error: any) {
       console.error("Error fetching campaigns:", error)
-      toast.error("Failed to load campaigns")
+      adminToast.error("Failed to load campaigns")
     } finally {
       setIsLoading(false)
     }
@@ -116,14 +116,17 @@ export default function NewsletterCampaignsPage() {
       setCampaignStats(data.stats)
     } catch (error: any) {
       console.error("Error fetching campaign details:", error)
-      toast.error("Failed to load campaign details")
+      adminToast.error("Failed to load campaign details")
     } finally {
       setIsLoadingDetails(false)
     }
   }
 
   const handleCancel = async (campaignId: string) => {
-    if (!confirm("Are you sure you want to cancel this scheduled campaign?")) {
+    if (!(await adminConfirm({
+      title: "Cancel this scheduled campaign?",
+      confirmLabel: "Cancel campaign",
+    }))) {
       return
     }
 
@@ -137,11 +140,11 @@ export default function NewsletterCampaignsPage() {
         throw new Error(error.error || "Failed to cancel campaign")
       }
 
-      toast.success("Campaign cancelled successfully")
+      adminToast.success("Campaign cancelled successfully")
       fetchCampaigns()
     } catch (error: any) {
       console.error("Error cancelling campaign:", error)
-      toast.error(error.message || "Failed to cancel campaign")
+      adminToast.error(error.message || "Failed to cancel campaign")
     }
   }
 

@@ -6,7 +6,10 @@ export interface FeaturedSession {
   description: string | null
   poster_url: string | null
   href: string
+  /** Web Campus — `v2_franchise` */
   franchise: { code: string; name: string } | null
+  /** Web Location — `v2_campus` physical site */
+  webLocation: { name: string; display_name: string } | null
   category: { name: string; display_name: string } | null
 }
 
@@ -14,6 +17,12 @@ export const FEATURED_INSTANCE_SELECT = `
   id,
   start_date,
   start_time,
+  campus_id,
+  campus:v2_campus(
+    id,
+    name,
+    display_name
+  ),
   program:v2_program!inner(
     id,
     name,
@@ -79,6 +88,7 @@ export function mapInstanceRowToFeaturedSession(row: any): FeaturedSession | nul
   if (!category?.name) return null
 
   const franchiseCode = franchise?.code ?? null
+  const campus = Array.isArray(row.campus) ? row.campus[0] : row.campus
 
   return {
     id: row.id,
@@ -90,6 +100,12 @@ export function mapInstanceRowToFeaturedSession(row: any): FeaturedSession | nul
     href: buildInstanceDetailHref(row.id, category.name, franchiseCode),
     franchise: franchise
       ? { code: franchise.code ?? "", name: franchise.name ?? "" }
+      : null,
+    webLocation: campus
+      ? {
+          name: campus.name ?? "",
+          display_name: campus.display_name ?? campus.name ?? "",
+        }
       : null,
     category: {
       name: category.name,

@@ -42,10 +42,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Calendar, Eye, Clock, Users, DollarSign, MapPin, X, AlertTriangle, Save, Star, ImageIcon, Info } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, getErrorMessage } from "@/lib/admin-toast"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
 import { iterateInstanceSchemaFieldsForDisplay } from "@/lib/instance-schema"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
 
 interface BlazeProgram {
   id: string
@@ -313,14 +314,18 @@ export default function BlazeProgramsManagementPage() {
           setIsEditDialogOpen(false)
           setEditingProgram(null)
         }
-        toast.success("Program deleted successfully")
+        adminToast.success(`${adminUiLabels.program.singular} deleted successfully`)
       } else {
         const data = await response.json()
-        toast.error(data.error || "Failed to delete program")
+        adminToast.error("Failed to delete program", {
+          description: data.error || undefined,
+        })
       }
     } catch (error) {
       console.error("Error deleting program:", error)
-      toast.error("Failed to delete program")
+      adminToast.error("Failed to delete program", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsDeletingProgram(false)
     }
@@ -445,7 +450,9 @@ export default function BlazeProgramsManagementPage() {
           clearPosterFile()
         } else {
           const error = await response.json()
-          toast.error(error.error || "Failed to save program")
+          adminToast.error("Failed to save program", {
+            description: error.error || undefined,
+          })
         }
         return
       }
@@ -471,11 +478,15 @@ export default function BlazeProgramsManagementPage() {
         clearPosterFile()
       } else {
         const error = await response.json()
-        toast.error(error.error || "Failed to save program")
+        adminToast.error("Failed to save program", {
+          description: error.error || undefined,
+        })
       }
     } catch (error: any) {
       console.error("Error saving program:", error)
-      toast.error(error?.message || "Failed to save program")
+      adminToast.error("Failed to save program", {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -521,11 +532,15 @@ export default function BlazeProgramsManagementPage() {
         closeModal()
       } else {
         const error = await response.json()
-        toast.error(error.error || "Failed to delete instance")
+        adminToast.error("Failed to delete instance", {
+          description: error.error || undefined,
+        })
       }
     } catch (error) {
       console.error("Error deleting instance:", error)
-      toast.error("Failed to delete instance")
+      adminToast.error("Failed to delete instance", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -565,11 +580,13 @@ export default function BlazeProgramsManagementPage() {
         closeModal()
       } else {
         const error = await response.json()
-        toast.error(error.error || "Failed to update instance")
+        adminToast.error("Failed to update instance", {
+          description: error.error || undefined,
+        })
       }
     } catch (error) {
       console.error("Error updating instance:", error)
-      toast.error("Failed to update instance")
+      adminToast.error("Failed to update instance")
     } finally {
       setIsUpdating(false)
     }
@@ -654,9 +671,9 @@ export default function BlazeProgramsManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Programs (V2)</h1>
+        <h1 className="text-3xl font-bold">{adminUiLabels.program.plural} (V2)</h1>
         <p className="text-muted-foreground mt-2 max-w-2xl">
-          Programs are the operational units that combine a <strong>Franchise</strong> and a subscribed <strong>Category</strong> with a time range (e.g. &quot;Spring 2026 Session&quot;). Under each program you create <strong>Instances</strong>—the actual bookable classes (date, time, campus, offering, capacity) that parents see and enroll in.
+          {adminUiLabels.program.plural} are the operational units that combine a <strong>{adminUiLabels.franchise.singular}</strong> and a subscribed <strong>{adminUiLabels.category.singular}</strong> with a time range (e.g. &quot;Spring 2026 Session&quot;). Under each activity you create <strong>{adminUiLabels.instance.plural}</strong>—the actual bookable classes (date, time, location, offering, capacity) that parents see and enroll in.
         </p>
       </div>
 
@@ -667,9 +684,9 @@ export default function BlazeProgramsManagementPage() {
               <Info className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0 space-y-1">
-              <CardTitle className="text-base">How Programs fit in the V2 model</CardTitle>
+              <CardTitle className="text-base">How {adminUiLabels.program.plural} fit in the V2 model</CardTitle>
               <CardDescription className="text-sm leading-relaxed">
-                <strong>Category</strong> (global) — A learning theme or level (e.g. Beginner Robotics, Competition Prep). Franchises subscribe to categories in &quot;Franchise Subscriptions&quot;. &bull; <strong>Program</strong> — A session or term under one franchise and one category, with start/end dates (e.g. &quot;Spring 2026 Robotics&quot;). &bull; <strong>Instance</strong> — A concrete class tied to an Offering: schedule, campus, capacity, and price. Users enroll in instances.
+                <strong>{adminUiLabels.category.singular}</strong> (global) — A learning theme or level (e.g. Beginner Robotics, Competition Prep). Campuses subscribe to programs in &quot;{adminUiLabels.franchise.singular} Subscriptions&quot;. &bull; <strong>{adminUiLabels.program.singular}</strong> — A season or term under one campus and one program, with start/end dates (e.g. &quot;Spring 2026 Robotics&quot;). &bull; <strong>{adminUiLabels.instance.singular}</strong> — A concrete class tied to an Offering: schedule, location, capacity, and price. Users enroll in sessions.
               </CardDescription>
             </div>
           </div>
@@ -680,9 +697,9 @@ export default function BlazeProgramsManagementPage() {
         <CardHeader>
           <div className="space-y-4">
             <div>
-              <CardTitle>Programs by Franchise &amp; Category</CardTitle>
+              <CardTitle>{adminUiLabels.program.plural} by {adminUiLabels.franchise.singular} &amp; {adminUiLabels.category.singular}</CardTitle>
               <CardDescription>
-                Programs are grouped by franchise and their subscribed categories. Use search and franchise filter to find a program; expand a category to add or edit programs and their instances.
+                Activities are grouped by campus and their subscribed programs. Use search and campus filter to find an activity; expand a program to add or edit activities and their sessions.
               </CardDescription>
             </div>
             <div className="flex items-center justify-between flex-wrap gap-4">
@@ -690,7 +707,7 @@ export default function BlazeProgramsManagementPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search programs..."
+                    placeholder={`Search ${adminUiLabels.program.plural.toLowerCase()}...`}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 w-64"
@@ -698,10 +715,10 @@ export default function BlazeProgramsManagementPage() {
                 </div>
                 <Select value={selectedFranchiseFilter} onValueChange={setSelectedFranchiseFilter}>
                   <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by franchise" />
+                    <SelectValue placeholder={`Filter by ${adminUiLabels.franchise.singular.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Franchises</SelectItem>
+                    <SelectItem value="all">All {adminUiLabels.franchise.plural}</SelectItem>
                     {franchises.map((franchise) => (
                       <SelectItem key={franchise.id} value={franchise.id}>
                         {franchise.name}
@@ -711,7 +728,7 @@ export default function BlazeProgramsManagementPage() {
                 </Select>
                 <Button onClick={handleAdd}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Program
+                  Add {adminUiLabels.program.singular}
                 </Button>
               </div>
             </div>
@@ -733,11 +750,11 @@ export default function BlazeProgramsManagementPage() {
           ) : hierarchyData.length === 0 ? (
             <div className="text-center py-12 space-y-4">
               <p className="text-muted-foreground max-w-md mx-auto">
-                No franchises or programs to show. Make sure franchises exist and have subscribed to at least one category in <strong>Franchise Subscriptions</strong> (Categories page). Then use <strong>Add Program</strong> to create a program for a franchise and category; after saving, add instances to open classes for enrollment.
+                No campuses or activities to show. Make sure campuses exist and have subscribed to at least one program in <strong>{adminUiLabels.franchise.singular} Subscriptions</strong> ({adminUiLabels.category.plural} page). Then use <strong>Add {adminUiLabels.program.singular}</strong> to create an activity for a campus and program; after saving, add sessions to open classes for enrollment.
               </p>
               <Button variant="outline" onClick={handleAdd}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Program
+                Add {adminUiLabels.program.singular}
               </Button>
             </div>
           ) : (() => {
@@ -761,11 +778,11 @@ export default function BlazeProgramsManagementPage() {
                 return (
                   <div className="text-center py-12 space-y-4">
                     <p className="text-muted-foreground max-w-md mx-auto">
-                      No programs match the current search or franchise filter. Try changing the filter or search term, or <strong>Add Program</strong> to create one.
+                      No {adminUiLabels.program.plural.toLowerCase()} match the current search or {adminUiLabels.franchise.singular.toLowerCase()} filter. Try changing the filter or search term, or <strong>Add {adminUiLabels.program.singular}</strong> to create one.
                     </p>
                     <Button variant="outline" onClick={handleAdd}>
                       <Plus className="h-4 w-4 mr-2" />
-                      Add Program
+                      Add {adminUiLabels.program.singular}
                     </Button>
                   </div>
                 )
@@ -780,11 +797,11 @@ export default function BlazeProgramsManagementPage() {
                           {franchise.name}
                         </CardTitle>
                         <Badge variant="secondary" className="text-sm">
-                          {franchise.categories.length} Categor{franchise.categories.length !== 1 ? 'ies' : 'y'}
+                          {franchise.categories.length} {adminUiLabels.category.singular}{franchise.categories.length !== 1 ? 's' : ''}
                         </Badge>
                       </div>
                       <CardDescription>
-                        Code: {franchise.code}. Programs under this franchise&apos;s subscribed categories; expand a category to manage programs and instances.
+                        Code: {franchise.code}. Activities under this campus&apos;s subscribed programs; expand a program to manage activities and sessions.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -800,7 +817,7 @@ export default function BlazeProgramsManagementPage() {
                                   <span className="text-xs text-muted-foreground mt-1">{category.name}</span>
                                 </div>
                                 <Badge variant="outline" className="text-sm shrink-0">
-                                  {category.programs.length} Program{category.programs.length !== 1 ? 's' : ''}
+                                  {category.programs.length} {adminUiLabels.program.singular}{category.programs.length !== 1 ? 's' : ''}
                                 </Badge>
                               </div>
                             </AccordionTrigger>
@@ -892,7 +909,7 @@ export default function BlazeProgramsManagementPage() {
                                           {/* Display Instances */}
                                           <div className="flex items-center justify-between mb-2">
                                             <p className="text-sm font-medium text-muted-foreground">
-                                              Instances ({programItem.instances?.length || 0}) — bookable classes (offering, schedule, campus, capacity)
+                                              {adminUiLabels.instance.plural} ({programItem.instances?.length || 0}) — bookable classes (offering, schedule, location, capacity)
                                             </p>
                                             <Button
                                               size="sm"
@@ -904,7 +921,7 @@ export default function BlazeProgramsManagementPage() {
                                               }}
                                             >
                                               <Plus className="mr-2 h-4 w-4" />
-                                              Add Instance
+                                              Add {adminUiLabels.instance.singular}
                                             </Button>
                                           </div>
                                           {programItem.instances && programItem.instances.length > 0 ? (
@@ -981,7 +998,7 @@ export default function BlazeProgramsManagementPage() {
                                               </div>
                                             </div>
                                           ) : (
-                                            <p className="text-sm text-muted-foreground italic">No instances yet. Add an instance to open a class for enrollment (choose an offering, dates, campus, and capacity).</p>
+                                            <p className="text-sm text-muted-foreground italic">No {adminUiLabels.instance.plural.toLowerCase()} yet. Add a {adminUiLabels.instance.singular.toLowerCase()} to open a class for enrollment (choose an offering, dates, location, and capacity).</p>
                                           )}
                                           <div className="mt-4 pt-4 border-t">
                                             <Button
@@ -998,7 +1015,7 @@ export default function BlazeProgramsManagementPage() {
                                               className="w-full"
                                             >
                                               <Calendar className="mr-2 h-4 w-4" />
-                                              Add Instance
+                                              Add {adminUiLabels.instance.singular}
                                             </Button>
                                           </div>
                                         </CardContent>
@@ -1022,11 +1039,11 @@ export default function BlazeProgramsManagementPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle>{editingProgram ? "Edit Program" : "Add New Program"}</DialogTitle>
+            <DialogTitle>{editingProgram ? `Edit ${adminUiLabels.program.singular}` : `Add New ${adminUiLabels.program.singular}`}</DialogTitle>
             <DialogDescription>
               {editingProgram
-                ? "Update program name, dates, poster, and status. Franchise and category cannot be changed after creation."
-                : "A program defines a session or term (e.g. Spring 2026) under one franchise and one subscribed category. Set the date range and display options; you can add instances (bookable classes) after saving."}
+                ? `Update activity name, dates, poster, and status. ${adminUiLabels.franchise.singular} and ${adminUiLabels.category.singular.toLowerCase()} cannot be changed after creation.`
+                : `An activity defines a season or term (e.g. Spring 2026) under one campus and one subscribed program. Set the date range and display options; you can add sessions (bookable classes) after saving.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1034,13 +1051,13 @@ export default function BlazeProgramsManagementPage() {
             <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
               <Card>
                 <CardHeader className="py-3">
-                  <CardTitle className="text-sm font-medium">Franchise &amp; Category</CardTitle>
-                  <CardDescription className="text-xs">Programs belong to one franchise and one of its subscribed categories. This choice cannot be changed after creation. If a category is missing, subscribe to it in the Categories page under &quot;Franchise Subscriptions&quot;.</CardDescription>
+                  <CardTitle className="text-sm font-medium">{adminUiLabels.franchise.singular} &amp; {adminUiLabels.category.singular}</CardTitle>
+                  <CardDescription className="text-xs">Activities belong to one campus and one of its subscribed programs. This choice cannot be changed after creation. If a program is missing, subscribe to it in the {adminUiLabels.category.plural} page under &quot;{adminUiLabels.franchise.singular} Subscriptions&quot;.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="franchise_id" className="text-xs">Franchise <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="franchise_id" className="text-xs">{adminUiLabels.franchise.singular} <span className="text-red-500">*</span></Label>
                       <Select
                         value={formData.franchise_id}
                         onValueChange={(value) => {
@@ -1054,7 +1071,7 @@ export default function BlazeProgramsManagementPage() {
                         disabled={!!editingProgram}
                       >
                         <SelectTrigger id="franchise_id" className="h-9">
-                          <SelectValue placeholder="Select a franchise" />
+                          <SelectValue placeholder={`Select a ${adminUiLabels.franchise.singular.toLowerCase()}`} />
                         </SelectTrigger>
                         <SelectContent>
                           {franchises
@@ -1068,7 +1085,7 @@ export default function BlazeProgramsManagementPage() {
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="category_id" className="text-xs">Category <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="category_id" className="text-xs">{adminUiLabels.category.singular} <span className="text-red-500">*</span></Label>
                       <Select
                         value={formData.category_id}
                         onValueChange={(value) =>
@@ -1078,7 +1095,7 @@ export default function BlazeProgramsManagementPage() {
                         disabled={!formData.franchise_id || isLoadingCategories || !!editingProgram}
                       >
                         <SelectTrigger id="category_id" className="h-9">
-                          <SelectValue placeholder={isLoadingCategories ? "Loading..." : formData.franchise_id ? "Select a category" : "Select franchise first"} />
+                          <SelectValue placeholder={isLoadingCategories ? "Loading..." : formData.franchise_id ? `Select a ${adminUiLabels.category.singular.toLowerCase()}` : `Select ${adminUiLabels.franchise.singular.toLowerCase()} first`} />
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map((category) => (
@@ -1091,7 +1108,7 @@ export default function BlazeProgramsManagementPage() {
                     </div>
                   </div>
                   {!formData.franchise_id && (
-                    <p className="text-xs text-muted-foreground">Select a franchise first.</p>
+                    <p className="text-xs text-muted-foreground">Select a {adminUiLabels.franchise.singular.toLowerCase()} first.</p>
                   )}
                 </CardContent>
               </Card>
@@ -1137,7 +1154,7 @@ export default function BlazeProgramsManagementPage() {
                       id="description"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Program description"
+                      placeholder={`${adminUiLabels.program.singular} description`}
                       rows={3}
                       className="resize-none text-sm"
                     />
@@ -1148,13 +1165,13 @@ export default function BlazeProgramsManagementPage() {
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm font-medium">Poster</CardTitle>
-                  <CardDescription className="text-xs">Program poster image. JPEG, PNG or WebP, max 5MB. Uploaded when you save.</CardDescription>
+                  <CardDescription className="text-xs">{adminUiLabels.program.singular} poster image. JPEG, PNG or WebP, max 5MB. Uploaded when you save.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <PosterUploadField
                     id="program_poster"
                     label="Poster image"
-                    hint="Optional. Upload happens when you save the program."
+                    hint={`Optional. Upload happens when you save the ${adminUiLabels.program.singular.toLowerCase()}.`}
                     previewSrc={posterPreviewUrl || (editingProgram && formData.poster_url && !posterFile ? (formData.poster_url as string) : null) || null}
                     onFileChange={handlePosterFileChange}
                     onClear={clearPosterFile}
@@ -1283,9 +1300,9 @@ export default function BlazeProgramsManagementPage() {
                     Saving...
                   </>
                 ) : editingProgram ? (
-                  "Update Program"
+                  `Update ${adminUiLabels.program.singular}`
                 ) : (
-                  "Create Program"
+                  `Create ${adminUiLabels.program.singular}`
                 )}
               </Button>
               </div>
@@ -1320,7 +1337,7 @@ export default function BlazeProgramsManagementPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    Delete Program
+                    Delete {adminUiLabels.program.singular}
                   </h2>
                   <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                     You are about to delete{" "}
@@ -1332,15 +1349,15 @@ export default function BlazeProgramsManagementPage() {
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
                     {programToDelete.instanceCount != null && programToDelete.instanceCount > 0 ? (
                       <>
-                        This program has{" "}
+                        This activity has{" "}
                         <span className="font-medium text-destructive">
-                          {programToDelete.instanceCount} instance
+                          {programToDelete.instanceCount} {adminUiLabels.instance.singular.toLowerCase()}
                           {programToDelete.instanceCount !== 1 ? "s" : ""}
                         </span>
-                        . Remove all instances before deleting the program.
+                        . Remove all sessions before deleting the activity.
                       </>
                     ) : (
-                      <>If this program has instances, the delete will fail and you&apos;ll need to remove them first.</>
+                      <>If this activity has sessions, the delete will fail and you&apos;ll need to remove them first.</>
                     )}
                   </p>
                 </div>
@@ -1386,9 +1403,9 @@ export default function BlazeProgramsManagementPage() {
             <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-2xl font-black text-slate-900">
-                  {modalMode === 'view' && 'Instance Details'}
-                  {modalMode === 'edit' && 'Edit Instance'}
-                  {modalMode === 'delete' && 'Delete Instance'}
+                  {modalMode === 'view' && `${adminUiLabels.instance.singular} Details`}
+                  {modalMode === 'edit' && `Edit ${adminUiLabels.instance.singular}`}
+                  {modalMode === 'delete' && `Delete ${adminUiLabels.instance.singular}`}
                 </h2>
                 <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mt-1">
                   ID: {selectedInstance.id.substring(0, 8)}...
@@ -1421,7 +1438,7 @@ export default function BlazeProgramsManagementPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Instance Information</h3>
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">{adminUiLabels.instance.singular} Information</h3>
                     
                     <div className="space-y-3">
                       <div className="flex justify-between items-center py-3 border-b border-slate-50">
@@ -1541,7 +1558,7 @@ export default function BlazeProgramsManagementPage() {
                         <div className="flex justify-between items-center py-3 border-b border-slate-50">
                           <div className="flex items-center gap-2">
                             <MapPin className="h-4 w-4 text-slate-400" />
-                            <span className="text-sm text-slate-500">Campus</span>
+                            <span className="text-sm text-slate-500">{adminUiLabels.campus.singular}</span>
                           </div>
                           <span className="font-bold text-slate-900">
                             {selectedInstance.campus.display_name || selectedInstance.campus.name}
@@ -1560,7 +1577,7 @@ export default function BlazeProgramsManagementPage() {
                 <form onSubmit={handleInstanceUpdate} className="space-y-6">
                   <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100 mb-6">
                     <p className="text-xs text-blue-700 font-semibold italic">
-                      Note: Only supplementary details can be edited online. To change the program or offering, please contact support.
+                      Note: Only supplementary details can be edited online. To change the activity or offering, please contact support.
                     </p>
                   </div>
                   
@@ -1613,16 +1630,16 @@ export default function BlazeProgramsManagementPage() {
 
                     {/* Campus */}
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Campus</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{adminUiLabels.campus.singular}</label>
                       <Select
                         value={editFormData.campus_id ? editFormData.campus_id : "__none__"}
                         onValueChange={(value) => setEditFormData({ ...editFormData, campus_id: value === "__none__" ? null : value })}
                       >
                         <SelectTrigger className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
-                          <SelectValue placeholder="Select a campus" />
+                          <SelectValue placeholder={`Select a ${adminUiLabels.campus.singular.toLowerCase()}`} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__">No Campus</SelectItem>
+                          <SelectItem value="__none__">No {adminUiLabels.campus.singular}</SelectItem>
                           {campuses.map((campus) => (
                             <SelectItem key={campus.id} value={campus.id}>
                               {campus.display_name || campus.name}
@@ -1727,7 +1744,7 @@ export default function BlazeProgramsManagementPage() {
                         className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
                       />
                       <label htmlFor="is_active" className="text-sm font-bold text-slate-600 cursor-pointer">
-                        Instance is active
+                        {adminUiLabels.instance.singular} is active
                       </label>
                     </div>
                   </div>
@@ -1796,7 +1813,7 @@ export default function BlazeProgramsManagementPage() {
                       onClick={handleInstanceDelete}
                       className="w-full py-4 px-6 rounded-2xl bg-red-600 text-white font-bold hover:bg-red-500 shadow-xl shadow-red-500/20 transition-all"
                     >
-                      Delete Instance
+                      Delete {adminUiLabels.instance.singular}
                     </button>
                     <button 
                       onClick={closeModal}

@@ -174,6 +174,8 @@ export const Categories = () => {
                       src={category.poster_url}
                       alt=""
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
                   </>
@@ -211,7 +213,7 @@ export const Categories = () => {
                   <p className="text-slate-500 text-sm mb-4 line-clamp-2">{category.description}</p>
                 ) : (
                   <p className="text-slate-500 text-sm mb-4 line-clamp-2">
-                    Explore {category.display_name} programs at our locations.
+                    Explore {category.display_name} programs at our campuses.
                   </p>
                 )}
 

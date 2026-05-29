@@ -110,7 +110,7 @@ export default function Home() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // 加载公开 v2 franchises（含 program_count、campus_count），用于首页 Location 列表
+  // 加载公开 v2 franchises（program_count = Web Program / v2_category；campus_count = Web Location / v2_campus）
   useEffect(() => {
     const fetchFranchises = async () => {
       try {
@@ -208,7 +208,7 @@ export default function Home() {
         >
           {isLoadingFranchises ? (
             <div className="py-12 text-center text-muted-foreground">
-              Loading locations...
+              Loading campuses...
             </div>
           ) : franchisesError ? (
             <div className="py-12 text-center text-destructive">
@@ -216,7 +216,7 @@ export default function Home() {
             </div>
           ) : franchises.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
-              No locations are currently available. Please check back later.
+              No campuses are currently available. Please check back later.
             </div>
           ) : (
             (() => {
@@ -233,10 +233,10 @@ export default function Home() {
                   {/* Left Section - Header */}
                   <div className="space-y-4">
                     <h2 className="text-4xl md:text-4xl lg:text-5xl font-bold leading-tight text-foreground">
-                      Our Locations
+                      Our Campuses
                     </h2>
                     <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
-                      We currently offer programs at multiple locations. Select the campus closest to you to see local programs, schedules, and contact information.
+                      We currently offer programs at multiple campuses. Select the campus closest to you to see local programs, schedules, and contact information.
                     </p>
                   </div>
 
@@ -263,7 +263,7 @@ export default function Home() {
                           {franchiseCards.map((fr) => {
                             const href = `/locations/${encodeURIComponent(fr.code)}`;
                             const programLabel = fr.programCount === 1 ? "1 program" : `${fr.programCount} programs`;
-                            const campusLabel = fr.campusCount === 1 ? "1 campus" : `${fr.campusCount} campuses`;
+                            const locationLabel = fr.campusCount === 1 ? "1 location" : `${fr.campusCount} locations`;
 
                             return (
                               <Link
@@ -279,6 +279,8 @@ export default function Home() {
                                         src={fr.posterUrl}
                                         alt=""
                                         className="w-full h-full object-cover"
+                                        loading="lazy"
+                                        decoding="async"
                                       />
                                     ) : (
                                       <div className="w-full h-full flex items-center justify-center bg-transparent transition-colors">
@@ -295,7 +297,7 @@ export default function Home() {
                                       </h4>
                                     </div>
                                     <p className="text-sm text-muted-foreground">
-                                      {programLabel} • {campusLabel}
+                                      {programLabel} • {locationLabel}
                                     </p>
                                   </div>
                                 </div>
@@ -330,7 +332,7 @@ export default function Home() {
                           </div>
                         ) : locations.length === 0 ? (
                           <div className="flex items-center justify-center h-[600px] border rounded-xl bg-muted/50">
-                            <p className="text-muted-foreground">No locations available</p>
+                            <p className="text-muted-foreground">No campuses available</p>
                           </div>
                         ) : (
                           <div className="border rounded-xl overflow-hidden bg-muted/50">

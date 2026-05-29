@@ -199,6 +199,8 @@ export const Testimonials = ({ franchiseCode, locationName }: TestimonialsProps 
                         src={testimonial.image_url}
                         alt={testimonial.name}
                         className="w-12 h-12 rounded-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                         onError={(e) => {
                           // 如果图片加载失败，隐藏图片并显示默认头像
                           const target = e.target as HTMLImageElement

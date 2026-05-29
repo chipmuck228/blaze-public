@@ -374,9 +374,9 @@ export default function RoboticsForBeginnersPage() {
                   <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span className="text-2xl font-black">1</span>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Find a Location</h3>
+                  <h3 className="text-xl font-bold mb-2">Find a Campus</h3>
                   <p className="text-blue-100">
-                    Choose from our locations across the region. All locations offer the Robotics for Beginners program.
+                    Choose from our campuses across the region. All campuses offer the Robotics for Beginners program.
                   </p>
                 </CardContent>
               </Card>

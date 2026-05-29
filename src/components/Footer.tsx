@@ -32,7 +32,7 @@ export const Footer = () => {
             </div>
           </div>
 
-          {/* Right side: Follow US and About in horizontal layout */}
+          {/* Right side: Follow US, Resources, and About */}
           <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 shrink-0">
           {/* Follow US */}
           <div className="flex flex-col gap-2 shrink-0">
@@ -90,9 +90,18 @@ export const Footer = () => {
             </div>
           </div>
 
-          {/* About */}
+          {/* Resources */}
           <div className="flex flex-col gap-2 shrink-0">
-            <h3 className="font-bold text-lg">About</h3>
+            <h3 className="font-bold text-lg">Resources</h3>
+            <div>
+              <a
+                rel="noreferrer noopener"
+                href="/resources"
+                className="opacity-60 hover:opacity-100"
+              >
+                Resource Library
+              </a>
+            </div>
             <div>
               <a
                 rel="noreferrer noopener"
@@ -102,6 +111,11 @@ export const Footer = () => {
                 Teacher Portal
               </a>
             </div>
+          </div>
+
+          {/* About */}
+          <div className="flex flex-col gap-2 shrink-0">
+            <h3 className="font-bold text-lg">About</h3>
 
             <div>
               <a

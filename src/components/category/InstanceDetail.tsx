@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth"
 import { InstanceRecommendations } from "@/components/category/InstanceRecommendations"
 import { MealCareServiceBlock } from "@/components/category/MealCareServiceBlock"
 import { flattenInstanceDataExtForDisplay, formatSchemaValueForDisplay, iterateInstanceSchemaFieldsForDisplay, type SchemaFieldDisplayConfig } from "@/lib/instance-schema"
@@ -128,16 +129,25 @@ export interface InstanceDetailData {
   amilia_link?: string | null
 }
 
-function enrollCtaProps(data: InstanceDetailData, franchiseCode?: string) {
+function enrollCtaProps(
+  data: InstanceDetailData,
+  franchiseCode?: string
+): { href: string; external: boolean } | null {
   const cartHref = `/enrollments/cart?instance_id=${data.id}${franchiseCode ? `&franchise=${franchiseCode}` : ""}`
   const amilia = data.amilia_link?.trim()
+  if (!PUBLIC_USER_AUTH_ENABLED) {
+    if (!data.is_full && amilia) {
+      return { href: amilia, external: true }
+    }
+    return null
+  }
   if (!data.is_full && amilia) {
     return {
       href: amilia,
-      external: true as const,
+      external: true,
     }
   }
-  return { href: cartHref, external: false as const }
+  return { href: cartHref, external: false }
 }
 
 function EnrollCta({
@@ -151,7 +161,9 @@ function EnrollCta({
   className?: string
   children: ReactNode
 }) {
-  const { href, external } = enrollCtaProps(data, franchiseCode)
+  const cta = enrollCtaProps(data, franchiseCode)
+  if (!cta) return null
+  const { href, external } = cta
   if (external) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={className}>

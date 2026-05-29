@@ -46,6 +46,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Eye, EyeOff, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from "lucide-react"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 interface V2Category {
   id: string
@@ -194,7 +196,11 @@ export default function BlazeCategoriesManagementPage() {
   }
 
   const handleDelete = async (categoryId: string) => {
-    if (!confirm("Are you sure you want to delete this category? This will fail if there are franchise subscriptions or programs using it.")) {
+    if (!(await adminConfirm({
+      title: `Delete this ${adminUiLabels.category.singular.toLowerCase()}?`,
+      description: "This will fail if there are campus subscriptions or activities using it.",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -205,13 +211,18 @@ export default function BlazeCategoriesManagementPage() {
 
       if (response.ok) {
         fetchCategories()
+        adminToast.success(`${adminUiLabels.category.singular} deleted`)
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete category")
+        adminToast.error(`Failed to delete ${adminUiLabels.category.singular.toLowerCase()}`, {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error deleting category:", error)
-      alert("Failed to delete category")
+      adminToast.error(`Failed to delete ${adminUiLabels.category.singular.toLowerCase()}`, {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -347,9 +358,12 @@ export default function BlazeCategoriesManagementPage() {
           setIsEditDialogOpen(false)
           setEditingCategory(null)
           clearPosterFile()
+          adminToast.success(`${adminUiLabels.category.singular} updated`)
         } else {
           const err = await response.json()
-          alert(err.error || "Failed to update category")
+          adminToast.error(`Failed to update ${adminUiLabels.category.singular.toLowerCase()}`, {
+            description: getErrorMessage(err.error),
+          })
         }
         return
       }
@@ -369,7 +383,9 @@ export default function BlazeCategoriesManagementPage() {
 
       if (!createRes.ok) {
         const err = await createRes.json()
-        alert(err.error || "Failed to create category")
+        adminToast.error(`Failed to create ${adminUiLabels.category.singular.toLowerCase()}`, {
+          description: getErrorMessage(err.error),
+        })
         return
       }
 
@@ -384,17 +400,22 @@ export default function BlazeCategoriesManagementPage() {
               body: JSON.stringify({ poster_url: posterUrl }),
             })
           }
-        } catch (uploadErr: any) {
-          alert("Category created but poster upload failed: " + (uploadErr.message || "Unknown error"))
+        } catch (uploadErr: unknown) {
+          adminToast.warning(`${adminUiLabels.category.singular} created`, {
+            description: `Poster upload failed: ${getErrorMessage(uploadErr, "Unknown error")}`,
+          })
         }
       }
       fetchCategories()
       setIsEditDialogOpen(false)
       setEditingCategory(null)
       clearPosterFile()
-    } catch (error: any) {
+      adminToast.success(`${adminUiLabels.category.singular} created`)
+    } catch (error: unknown) {
       console.error("Error saving category:", error)
-      alert(error?.message || "Failed to save category")
+      adminToast.error(`Failed to save ${adminUiLabels.category.singular.toLowerCase()}`, {
+        description: getErrorMessage(error),
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -402,7 +423,7 @@ export default function BlazeCategoriesManagementPage() {
 
   const handleSubscribe = async (categoryId: string) => {
     if (!selectedFranchise) {
-      alert("Please select a franchise first")
+      adminToast.warning("Select a franchise first")
       return
     }
 
@@ -421,29 +442,37 @@ export default function BlazeCategoriesManagementPage() {
 
       if (response.ok) {
         fetchFranchiseSubscriptions(selectedFranchise)
-        alert("Category subscribed successfully")
+        adminToast.success(`${adminUiLabels.category.singular} subscribed`)
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to subscribe category")
+        adminToast.error(`Failed to subscribe ${adminUiLabels.category.singular.toLowerCase()}`, {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error subscribing category:", error)
-      alert("Failed to subscribe category")
+      adminToast.error(`Failed to subscribe ${adminUiLabels.category.singular.toLowerCase()}`, {
+        description: getErrorMessage(error),
+      })
     }
   }
 
   const handleUnsubscribe = async (subscriptionId: string, categoryId: string) => {
-    if (!confirm("Are you sure you want to unsubscribe from this category? This will fail if there are programs using it.")) {
+    if (!(await adminConfirm({
+      title: "Unsubscribe from this category?",
+      description: "This will fail if there are programs using it.",
+      confirmLabel: "Unsubscribe",
+    }))) {
       return
     }
 
     if (!selectedFranchise) {
-      alert("Please select a franchise first")
+      adminToast.warning("Select a franchise first")
       return
     }
 
     if (!categoryId) {
-      alert("Invalid category ID")
+      adminToast.error("Invalid category ID")
       console.error("Category ID is missing:", { subscriptionId, categoryId })
       return
     }
@@ -458,14 +487,18 @@ export default function BlazeCategoriesManagementPage() {
 
       if (response.ok) {
         fetchFranchiseSubscriptions(selectedFranchise)
-        alert("Category unsubscribed successfully")
+        adminToast.success(`${adminUiLabels.category.singular} unsubscribed`)
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to unsubscribe category")
+        adminToast.error(`Failed to unsubscribe ${adminUiLabels.category.singular.toLowerCase()}`, {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error unsubscribing category:", error)
-      alert("Failed to unsubscribe category")
+      adminToast.error(`Failed to unsubscribe ${adminUiLabels.category.singular.toLowerCase()}`, {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -489,11 +522,15 @@ export default function BlazeCategoriesManagementPage() {
         fetchFranchiseSubscriptions(selectedFranchise)
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to update visibility")
+        adminToast.error("Failed to update visibility", {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error updating visibility:", error)
-      alert("Failed to update visibility")
+      adminToast.error("Failed to update visibility", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -517,11 +554,15 @@ export default function BlazeCategoriesManagementPage() {
         fetchFranchiseSubscriptions(selectedFranchise)
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to update display order")
+        adminToast.error("Failed to update display order", {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error updating display order:", error)
-      alert("Failed to update display order")
+      adminToast.error("Failed to update display order", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -542,16 +583,16 @@ export default function BlazeCategoriesManagementPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">V2 Categories Management</h1>
+        <h1 className="text-3xl font-bold">V2 {adminUiLabels.category.plural} Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage global categories and franchise subscriptions using the V2 database schema
+          Manage global programs and campus subscriptions using the V2 database schema
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "categories" | "subscriptions")}>
         <TabsList className="mb-4">
-          <TabsTrigger value="categories">Global Categories</TabsTrigger>
-          <TabsTrigger value="subscriptions">Franchise Subscriptions</TabsTrigger>
+          <TabsTrigger value="categories">Global {adminUiLabels.category.plural}</TabsTrigger>
+          <TabsTrigger value="subscriptions">{adminUiLabels.franchise.singular} Subscriptions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="categories">
@@ -559,16 +600,16 @@ export default function BlazeCategoriesManagementPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Global Categories</CardTitle>
+                  <CardTitle>Global {adminUiLabels.category.plural}</CardTitle>
                   <CardDescription>
-                    Manage global categories (not bound to any franchise)
+                    Manage global programs (not bound to any campus)
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search categories..."
+                      placeholder={`Search ${adminUiLabels.category.plural.toLowerCase()}...`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10 w-64"
@@ -576,7 +617,7 @@ export default function BlazeCategoriesManagementPage() {
                   </div>
                   <Button onClick={handleAdd}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Category
+                    Add {adminUiLabels.category.singular}
                   </Button>
                 </div>
               </div>
@@ -596,7 +637,7 @@ export default function BlazeCategoriesManagementPage() {
                 </div>
               ) : filteredCategories.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  {searchQuery ? "No categories found matching your search." : "No categories found."}
+                  {searchQuery ? `No ${adminUiLabels.category.plural.toLowerCase()} found matching your search.` : `No ${adminUiLabels.category.plural.toLowerCase()} found.`}
                 </div>
               ) : (
                 <div className="rounded-md border">
@@ -685,15 +726,15 @@ export default function BlazeCategoriesManagementPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Franchise Category Subscriptions</CardTitle>
+                  <CardTitle>{adminUiLabels.franchise.singular} {adminUiLabels.category.singular} Subscriptions</CardTitle>
                   <CardDescription>
-                    Manage which categories each franchise subscribes to
+                    Manage which programs each campus subscribes to
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={selectedFranchise} onValueChange={setSelectedFranchise}>
                     <SelectTrigger className="w-[250px]">
-                      <SelectValue placeholder="Select a franchise" />
+                      <SelectValue placeholder={`Select a ${adminUiLabels.franchise.singular.toLowerCase()}`} />
                     </SelectTrigger>
                     <SelectContent>
                       {franchises.map((franchise) => (
@@ -709,7 +750,7 @@ export default function BlazeCategoriesManagementPage() {
             <CardContent>
               {!selectedFranchise ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  Please select a franchise to view subscriptions
+                  Please select a {adminUiLabels.franchise.singular.toLowerCase()} to view subscriptions
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -717,7 +758,7 @@ export default function BlazeCategoriesManagementPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Category</TableHead>
+                          <TableHead>{adminUiLabels.category.singular}</TableHead>
                           <TableHead>Display Order</TableHead>
                           <TableHead>Visible</TableHead>
                           <TableHead>Actions</TableHead>
@@ -791,12 +832,12 @@ export default function BlazeCategoriesManagementPage() {
 
                   {franchiseSubscriptions.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
-                      No subscriptions yet. Subscribe to categories below.
+                      No subscriptions yet. Subscribe to programs below.
                     </div>
                   )}
 
                   <div className="border-t pt-4">
-                    <h3 className="text-lg font-semibold mb-4">Available Categories to Subscribe</h3>
+                    <h3 className="text-lg font-semibold mb-4">Available {adminUiLabels.category.plural} to Subscribe</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {getUnsubscribedCategories().map((category) => (
                         <Card key={category.id}>
@@ -822,7 +863,7 @@ export default function BlazeCategoriesManagementPage() {
                     </div>
                     {getUnsubscribedCategories().length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
-                        All active categories are already subscribed.
+                        All active programs are already subscribed.
                       </div>
                     )}
                   </div>
@@ -837,9 +878,9 @@ export default function BlazeCategoriesManagementPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle>{editingCategory ? "Edit Category" : "Add New Category"}</DialogTitle>
+            <DialogTitle>{editingCategory ? `Edit ${adminUiLabels.category.singular}` : `Add New ${adminUiLabels.category.singular}`}</DialogTitle>
             <DialogDescription>
-              {editingCategory ? "Update global category information" : "Create a new global category"}
+              {editingCategory ? `Update global ${adminUiLabels.category.singular.toLowerCase()} information` : `Create a new global ${adminUiLabels.category.singular.toLowerCase()}`}
             </DialogDescription>
           </DialogHeader>
 
@@ -882,7 +923,7 @@ export default function BlazeCategoriesManagementPage() {
                       id="description"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Category description"
+                      placeholder={`${adminUiLabels.category.singular} description`}
                       rows={3}
                       className="resize-none"
                     />
@@ -1001,9 +1042,9 @@ export default function BlazeCategoriesManagementPage() {
                     Saving...
                   </>
                 ) : editingCategory ? (
-                  "Update Category"
+                  `Update ${adminUiLabels.category.singular}`
                 ) : (
-                  "Create Category"
+                  `Create ${adminUiLabels.category.singular}`
                 )}
               </Button>
             </DialogFooter>

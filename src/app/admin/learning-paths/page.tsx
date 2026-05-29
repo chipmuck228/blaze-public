@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw } from "lucide-react"
 import { LearningPathEditDialog } from "@/components/admin/LearningPathEditDialog"
 import { LearningPathWithDetails } from "@/lib/db"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
 type LearningPath = LearningPathWithDetails
 
@@ -80,7 +81,11 @@ export default function LearningPathsManagementPage() {
   }, [searchQuery, paths])
 
   const handleDelete = async (pathId: string) => {
-    if (!confirm("Are you sure you want to delete this learning path? This action cannot be undone.")) {
+    if (!(await adminConfirm({
+      title: "Delete this learning path?",
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -90,14 +95,19 @@ export default function LearningPathsManagementPage() {
       })
 
       if (response.ok) {
-        fetchPaths() // Refresh the list
+        fetchPaths()
+        adminToast.success("Learning path deleted")
       } else {
         const data = await response.json()
-        alert(data.error || "Failed to delete learning path")
+        adminToast.error("Failed to delete learning path", {
+          description: getErrorMessage(data.error),
+        })
       }
     } catch (error) {
       console.error("Error deleting learning path:", error)
-      alert("Failed to delete learning path")
+      adminToast.error("Failed to delete learning path", {
+        description: getErrorMessage(error),
+      })
     }
   }
 

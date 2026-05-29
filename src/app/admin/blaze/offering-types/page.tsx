@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from "react"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 import ReactMarkdown from "react-markdown"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +33,7 @@ import { Search, Edit, Trash2, Plus, Loader2, RefreshCcw, Save, X, AlertTriangle
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { SchemaEditor } from "@/components/admin/SchemaEditor"
 import { cn } from "@/lib/utils"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
 
 interface V2OfferingType {
   id: string
@@ -228,19 +230,28 @@ export default function BlazeOfferingTypesManagementPage() {
   const handleDelete = async (typeId: string) => {
     const type = offeringTypes.find((t) => t.id === typeId)
     if (!type) return
-    if (!confirm(`Delete "${type.name}"? This will fail if any offerings use this type.`)) return
+    if (!(await adminConfirm({
+      title: `Delete "${type.name}"?`,
+      description: "This will fail if any offerings use this type.",
+      confirmLabel: "Delete",
+    }))) return
 
     try {
       const res = await fetch(`/api/admin/offering-types/v2/${typeId}`, { method: "DELETE" })
       if (res.ok) {
         if (editingId === typeId) cancelEdit()
         fetchOfferingTypes()
+        adminToast.success("Offering type deleted")
       } else {
         const data = await res.json()
-        alert(data.error || "Failed to delete")
+        adminToast.error("Failed to delete offering type", {
+          description: getErrorMessage(data.error, "Failed to delete"),
+        })
       }
-    } catch {
-      alert("Failed to delete offering type")
+    } catch (error) {
+      adminToast.error("Failed to delete offering type", {
+        description: getErrorMessage(error),
+      })
     }
   }
 
@@ -355,7 +366,7 @@ export default function BlazeOfferingTypesManagementPage() {
                     <Label htmlFor="new_is_active" className="cursor-pointer">Active</Label>
                   </div>
                   <div className="space-y-2 min-w-[200px]">
-                    <Label>Instance detail page role</Label>
+                    <Label>{adminUiLabels.instance.singular} detail page role</Label>
                     <Select
                       value={formData.portal_service_role || PORTAL_SERVICE_ROLE_NONE}
                       onValueChange={(v) => setFormData({ ...formData, portal_service_role: v === PORTAL_SERVICE_ROLE_NONE ? "" : v })}
@@ -371,7 +382,7 @@ export default function BlazeOfferingTypesManagementPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Used on C-end instance detail for Meal/Care blocks. Independent of code.</p>
+                    <p className="text-xs text-muted-foreground">Used on C-end {adminUiLabels.instance.singular.toLowerCase()} detail for Meal/Care blocks. Independent of code.</p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -383,7 +394,7 @@ export default function BlazeOfferingTypesManagementPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Instance schema (JSON)</Label>
+                  <Label>{adminUiLabels.instance.singular} schema (JSON)</Label>
                   <SchemaEditor
                     value={instanceSchemaJson}
                     onChange={setInstanceSchemaJson}
@@ -474,7 +485,7 @@ export default function BlazeOfferingTypesManagementPage() {
                             </div>
                           </div>
                           <div className="space-y-2 max-w-xs">
-                            <Label>Instance detail page role</Label>
+                            <Label>{adminUiLabels.instance.singular} detail page role</Label>
                             <Select
                               value={formData.portal_service_role || PORTAL_SERVICE_ROLE_NONE}
                               onValueChange={(v) => setFormData({ ...formData, portal_service_role: v === PORTAL_SERVICE_ROLE_NONE ? "" : v })}
@@ -520,7 +531,7 @@ export default function BlazeOfferingTypesManagementPage() {
                             </div>
                           </div>
                           <div className="space-y-2 min-h-0 flex flex-col">
-                            <Label>Instance schema</Label>
+                            <Label>{adminUiLabels.instance.singular} schema</Label>
                             <div className="min-h-[180px]">
                               <SchemaEditor
                                 value={instanceSchemaJson}
@@ -608,7 +619,7 @@ export default function BlazeOfferingTypesManagementPage() {
                             </div>
                           </div>
                           <div className="space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground">Instance schema (instance_data_ext)</p>
+                            <p className="text-xs font-medium text-muted-foreground">{adminUiLabels.instance.singular} schema (instance_data_ext)</p>
                             <div className="rounded-md border bg-muted/30 p-2 overflow-auto max-h-48 text-xs font-mono">
                               <ReactMarkdown
                                 components={{

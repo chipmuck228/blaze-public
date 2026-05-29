@@ -23,9 +23,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink } from "lucide-react";
+import { Menu, LogOut, User, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url";
+import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth";
 
   // Navbar 统一深蓝色（与白底搭配）
   const NAV_TEXT = "text-[#1e3a5f]";
@@ -152,34 +153,38 @@ interface RouteProps {
     }
   }
 
-  /** Desktop location dropdown: franchise poster; mobile / fallback: MapPin */
-  function FranchiseLocationIcon({
-    franchise,
-    variant,
-  }: {
-    franchise: FranchiseGroup;
-    variant: "desktop" | "mobile";
-  }) {
-    const iconClass = "h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500";
-    if (variant === "desktop") {
-      const poster = normalizeRemoteImageUrl(franchise.poster_url);
-      if (poster) {
-        return (
-          <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-slate-100">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={poster} alt="" className="w-full h-full object-cover" />
-          </div>
-        );
-      }
+  /** Campuses dropdown: franchise poster, MapPin fallback */
+  function FranchiseLocationIcon({ franchise }: { franchise: FranchiseGroup }) {
+    const poster = normalizeRemoteImageUrl(franchise.poster_url);
+    if (poster) {
+      return (
+        <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-slate-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={poster}
+            alt=""
+            className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      );
     }
-    return <MapPin className={iconClass} />;
+    return (
+      <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <MapPin className="h-4 w-4 text-primary" strokeWidth={1} />
+      </div>
+    );
+  }
+
+  function AboutMenuIcon({ icon: Icon }: { icon: LucideIcon }) {
+    return <Icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={1} />;
   }
   
   export const Navbar = () => {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [isLocationsOpen, setIsLocationsOpen] = useState<boolean>(false);
     const [isProgramsOpen, setIsProgramsOpen] = useState<boolean>(false);
-    const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
     const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
     const [cartCount, setCartCount] = useState<number>(0);
     const [waitlistCount, setWaitlistCount] = useState<number>(0);
@@ -192,9 +197,15 @@ interface RouteProps {
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false);
     const [franchiseFromUrl, setFranchiseFromUrl] = useState<string | null>(null);
+    const [hasMounted, setHasMounted] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const { data: session, status } = useSession();
+
+    // Avoid SSR/client mismatch for NextAuth session UI
+    useEffect(() => {
+      setHasMounted(true);
+    }, []);
 
     // 从 URL 中获取 franchise 参数；保持用户选择的 location（除首页外）
     useEffect(() => {
@@ -270,6 +281,7 @@ interface RouteProps {
 
     // Fetch cart count, waitlist count, credits, and student account status when user is logged in
     useEffect(() => {
+      if (!PUBLIC_USER_AUTH_ENABLED) return;
       if (status === 'authenticated' && session?.user) {
         const fetchUserData = async () => {
           try {
@@ -418,6 +430,123 @@ interface RouteProps {
 
     const isActive = (path: string) => pathname === path;
     const isLocationActive = pathname?.startsWith('/locations/');
+    const showAuthLoading = PUBLIC_USER_AUTH_ENABLED && (!hasMounted || status === "loading");
+
+    const desktopAuthControl = !PUBLIC_USER_AUTH_ENABLED ? null : showAuthLoading ? (
+      <div className="h-9 w-9 flex items-center justify-center" aria-hidden>
+        <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+      </div>
+    ) : session ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            className="relative h-9 w-9 rounded-full text-[#1e3a5f] hover:bg-slate-100"
+          >
+            <Avatar className="h-9 w-9">
+              <AvatarImage src={session.user?.image || undefined} />
+              <AvatarFallback className="bg-[#1e3a5f] text-white">
+                {getUserInitials(session.user?.name)}
+              </AvatarFallback>
+            </Avatar>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          className="w-56 bg-white border border-slate-200 shadow-xl text-[#1e3a5f]"
+          align="end"
+        >
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none text-[#1e3a5f]">
+                {session.user?.name}
+              </p>
+              <p className="text-xs leading-none text-slate-500">{session.user?.email}</p>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator className="bg-slate-200" />
+          <DropdownMenuItem asChild className="cursor-pointer">
+            <Link href="/profile" className="flex items-center">
+              <User className="mr-2 h-4 w-4" />
+              <span>Profile</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild className="cursor-pointer">
+            <Link href="/portal" className="flex items-center">
+              <LayoutDashboard className="mr-2 h-4 w-4" />
+              <span>My Account</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-slate-200" />
+          <DropdownMenuItem
+            className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-slate-100"
+            onClick={handleSignOut}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Sign Out</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : (
+      <Button
+        className="bg-[#1e3a5f] text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-[#2d4a6f] transition-all"
+        asChild
+      >
+        <Link href="/login">Sign In / Sign Up</Link>
+      </Button>
+    );
+
+    const mobileAuthControl = showAuthLoading ? (
+      <div className="w-full h-9 flex items-center justify-center" aria-hidden>
+        <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+      </div>
+    ) : session ? (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 p-3 rounded-md bg-slate-50 mb-2">
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={session.user?.image || undefined} />
+            <AvatarFallback className="bg-[#1e3a5f] text-white">
+              {getUserInitials(session.user?.name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate text-[#1e3a5f]">{session.user?.name}</p>
+            <p className="text-xs text-slate-500 truncate">{session.user?.email}</p>
+          </div>
+        </div>
+        <Button variant="outline" className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100" asChild>
+          <Link href="/profile" onClick={() => setIsOpen(false)}>
+            <User className="mr-2 h-4 w-4" />
+            Profile
+          </Link>
+        </Button>
+        <Button variant="outline" className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100" asChild>
+          <Link href="/portal" onClick={() => setIsOpen(false)}>
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            My Account
+          </Link>
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full justify-start bg-white border-slate-200 text-red-600 hover:text-red-700 hover:bg-slate-100"
+          onClick={() => {
+            handleSignOut();
+            setIsOpen(false);
+          }}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign Out
+        </Button>
+      </div>
+    ) : (
+      <Button
+        className="w-full bg-[#1e3a5f] text-white px-6 py-3 rounded-md font-bold text-base hover:bg-[#2d4a6f]"
+        asChild
+      >
+        <Link href="/login" onClick={() => setIsOpen(false)}>
+          Sign In / Sign Up
+        </Link>
+      </Button>
+    );
 
     return (
       <nav className={`bg-white ${NAV_TEXT} fixed top-0 z-50 w-full shadow-md`}>
@@ -449,7 +578,7 @@ interface RouteProps {
                     </>
                   ) : (
                     <>
-                      <span>Locations</span>
+                      <span>Campuses</span>
                     </>
                   )}
                   <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
@@ -461,7 +590,7 @@ interface RouteProps {
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
-                          placeholder="Search locations..."
+                          placeholder="Search campuses..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           className="pl-9 bg-slate-50 border-slate-200 text-[#1e3a5f] placeholder:text-slate-400"
@@ -476,7 +605,7 @@ interface RouteProps {
                         </div>
                       ) : filteredFranchiseGroups.length === 0 ? (
                         <div className="text-center py-8 text-sm text-slate-500">
-                          {searchQuery ? 'No locations found' : 'No locations available'}
+                          {searchQuery ? 'No campuses found' : 'No campuses available'}
                         </div>
                       ) : (
                         <div className="py-2">
@@ -498,7 +627,7 @@ interface RouteProps {
                                 className={`block px-4 py-3 text-sm transition-colors border-b border-slate-100 last:border-0 ${isFranchiseActive ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                               >
                                 <div className="flex items-start gap-3">
-                                  <FranchiseLocationIcon franchise={franchise} variant="desktop" />
+                                  <FranchiseLocationIcon franchise={franchise} />
                                   <div className="flex-1 min-w-0">
                                     <div className="font-medium">{franchise.name}</div>
                                     {fullAddress && (
@@ -582,51 +711,6 @@ interface RouteProps {
                 </div>
               </div>
 
-              {/* Resources Dropdown */}
-              <div className="relative group h-full flex items-center">
-                <button 
-                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${pathname === '/resources' || pathname?.startsWith('/teacher-portal') ? NAV_ACTIVE : NAV_TEXT}`}
-                >
-                  <span>Resources</span>
-                  <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
-                </button>
-                
-                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
-                  <div className={`${DROPDOWN_BG} rounded-xl overflow-hidden`}>
-                    <div className="py-2">
-                      <Link
-                        href="/resources"
-                        className={`block px-4 py-3 text-sm transition-colors border-b border-slate-100 ${pathname === '/resources' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium">Resource Library</div>
-                            <div className="text-xs text-slate-500 mt-1">
-                              Software, manuals, and guides
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/teacher-portal/login"
-                        className={`block px-4 py-3 text-sm transition-colors ${pathname?.startsWith('/teacher-portal') ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium">Teacher Portal</div>
-                            <div className="text-xs text-slate-500 mt-1">
-                              Instructor workspace and tools
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* About Dropdown */}
               <div className="relative group h-full flex items-center">
                 <button
@@ -642,21 +726,21 @@ interface RouteProps {
                         href="/about/teams"
                         className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors border-b border-slate-100 ${pathname === '/about/teams' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                       >
-                        <Users className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                        <AboutMenuIcon icon={Users} />
                         <span className="font-medium">Teams</span>
                       </Link>
                       <Link
                         href="/about/careers"
                         className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors border-b border-slate-100 ${pathname === '/about/careers' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                       >
-                        <Briefcase className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                        <AboutMenuIcon icon={Briefcase} />
                         <span className="font-medium">Careers</span>
                       </Link>
                       <Link
                         href="/faq"
                         className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${pathname === '/faq' ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
                       >
-                        <HelpCircle className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                        <AboutMenuIcon icon={HelpCircle} />
                         <span className="font-medium">FAQ</span>
                       </Link>
                     </div>
@@ -691,81 +775,13 @@ interface RouteProps {
               </a>
 
               {/* User Menu (cart and mode toggle hidden) */}
-              {status === "loading" ? (
-                <div className="h-9 w-9 flex items-center justify-center">
-                  <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : session ? (
-                <>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="relative h-9 w-9 rounded-full text-[#1e3a5f] hover:bg-slate-100"
-                      >
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage
-                            src={session.user?.image || undefined}
-                          />
-                          <AvatarFallback className="bg-[#1e3a5f] text-white">
-                            {getUserInitials(session.user?.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      className="w-56 bg-white border border-slate-200 shadow-xl text-[#1e3a5f]"
-                      align="end"
-                      forceMount
-                    >
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none text-[#1e3a5f]">
-                            {session.user?.name}
-                          </p>
-                          <p className="text-xs leading-none text-slate-500">
-                            {session.user?.email}
-                          </p>
-                        </div>
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-slate-200" />
-                      <DropdownMenuItem asChild className="cursor-pointer">
-                        <Link href="/profile" className="flex items-center">
-                          <User className="mr-2 h-4 w-4" />
-                          <span>Profile</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="cursor-pointer">
-                        <Link href="/portal" className="flex items-center">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          <span>My Account</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-slate-200" />
-                      <DropdownMenuItem
-                        className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-slate-100"
-                        onClick={handleSignOut}
-                      >
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Sign Out</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : (
-                <Button 
-                  className="bg-[#1e3a5f] text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-[#2d4a6f] transition-all"
-                  asChild
-                >
-                  <Link href="/login">Sign In / Sign Up</Link>
-                </Button>
-              )}
+              {desktopAuthControl}
             </div>
 
             {/* Mobile Menu Button (cart and mode toggle hidden) */}
             <div className="md:hidden flex items-center gap-2">
-              {status === "loading" ? (
-                <div className="h-9 w-9 flex items-center justify-center">
+              {PUBLIC_USER_AUTH_ENABLED && showAuthLoading ? (
+                <div className="h-9 w-9 flex items-center justify-center" aria-hidden>
                   <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : null}
@@ -789,29 +805,30 @@ interface RouteProps {
                 >
                   <div className="flex items-center gap-2">
                     {currentLocationLabel && <MapPin className="w-5 h-5" />}
-                    <span>{currentLocationLabel || 'Locations'}</span>
+                    <span>{currentLocationLabel || 'Campuses'}</span>
                   </div>
                   <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isLocationsOpen ? 'rotate-180' : ''}`} />
                 </button>
-                <div className={`overflow-hidden transition-all duration-200 ${isLocationsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className={`overflow-hidden transition-all duration-200 ${isLocationsOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                   <div className="pl-4 space-y-1 bg-slate-50 rounded-lg mt-1 mb-2 py-2">
                     <div className="relative px-3 mb-2">
                       <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
-                        placeholder="Search locations..."
+                        placeholder="Search campuses..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 bg-white border-slate-200 text-[#1e3a5f] placeholder:text-slate-400"
                       />
                     </div>
 
+                    <div className="max-h-[min(50vh,calc(100vh-14rem))] overflow-y-auto overscroll-contain space-y-1 pr-1">
                     {isLoadingFranchises ? (
                       <div className="flex items-center justify-center py-4">
                         <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                       </div>
                     ) : filteredFranchiseGroups.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-slate-500">
-                        {searchQuery ? 'No locations found' : 'No locations available'}
+                        {searchQuery ? 'No campuses found' : 'No campuses available'}
                       </div>
                     ) : (
                       filteredFranchiseGroups.map((franchise) => {
@@ -835,8 +852,8 @@ interface RouteProps {
                             }}
                             className={`block px-3 py-3 text-sm font-medium rounded-md ${isFranchiseActive ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
                           >
-                            <div className="flex items-start gap-2">
-                              <FranchiseLocationIcon franchise={franchise} variant="mobile" />
+                            <div className="flex items-start gap-3">
+                              <FranchiseLocationIcon franchise={franchise} />
                               <div className="flex-1 min-w-0">
                                 <div>{franchise.name}</div>
                                 {fullAddress && (
@@ -850,6 +867,7 @@ interface RouteProps {
                         );
                       })
                     )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -918,57 +936,6 @@ interface RouteProps {
                 </div>
               </div>
 
-              {/* Mobile Resources Accordion */}
-              <div>
-                <button
-                  onClick={() => setIsResourcesOpen(!isResourcesOpen)}
-                  className="flex items-center justify-between w-full px-3 py-4 text-base font-medium text-gray-300 hover:text-white hover:bg-slate-800 rounded-md"
-                >
-                  <span>Resources</span>
-                  <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isResourcesOpen ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`overflow-hidden transition-all duration-200 ${isResourcesOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="pl-4 space-y-1 bg-slate-900/50 rounded-lg mt-1 mb-2 py-2">
-                    <Link
-                      href="/resources"
-                      onClick={() => {
-                        setIsOpen(false);
-                        setIsResourcesOpen(false);
-                      }}
-                      className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/resources' ? 'text-[#38bdf8]' : 'text-gray-400 hover:text-white'}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div>Resource Library</div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Software, manuals, and guides
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                    <Link
-                      href="/teacher-portal/login"
-                      onClick={() => {
-                        setIsOpen(false);
-                        setIsResourcesOpen(false);
-                      }}
-                      className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname?.startsWith('/teacher-portal') ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500" />
-                        <div className="flex-1 min-w-0">
-                          <div>Teacher Portal</div>
-                          <div className="text-xs text-slate-500 mt-1">
-                            Instructor workspace and tools
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
               {/* Mobile About Accordion */}
               <div>
                 <button
@@ -980,23 +947,17 @@ interface RouteProps {
                 </button>
                 <div className={`overflow-hidden transition-all duration-200 ${isAboutOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
                   <div className="pl-4 space-y-1 bg-slate-50 rounded-lg mt-1 mb-2 py-2">
-                    <Link href="/about/teams" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/about/teams' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 flex-shrink-0" />
-                        <span>Teams</span>
-                      </div>
+                    <Link href="/about/teams" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-md ${pathname === '/about/teams' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
+                      <AboutMenuIcon icon={Users} />
+                      <span>Teams</span>
                     </Link>
-                    <Link href="/about/careers" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/about/careers' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 flex-shrink-0" />
-                        <span>Careers</span>
-                      </div>
+                    <Link href="/about/careers" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-md ${pathname === '/about/careers' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
+                      <AboutMenuIcon icon={Briefcase} />
+                      <span>Careers</span>
                     </Link>
-                    <Link href="/faq" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`block px-3 py-3 text-sm font-medium rounded-md ${pathname === '/faq' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
-                      <div className="flex items-center gap-2">
-                        <HelpCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>FAQ</span>
-                      </div>
+                    <Link href="/faq" onClick={() => { setIsOpen(false); setIsAboutOpen(false); }} className={`flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-md ${pathname === '/faq' ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}>
+                      <AboutMenuIcon icon={HelpCircle} />
+                      <span>FAQ</span>
                     </Link>
                   </div>
                 </div>
@@ -1033,69 +994,9 @@ interface RouteProps {
               </div>
 
               {/* User Section */}
-              <div className="pt-4 border-t border-slate-200">
-                {status === "loading" ? (
-                  <div className="w-full h-9 flex items-center justify-center">
-                    <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : session ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 p-3 rounded-md bg-slate-50 mb-2">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage
-                          src={session.user?.image || undefined}
-                        />
-                        <AvatarFallback className="bg-[#1e3a5f] text-white">
-                          {getUserInitials(session.user?.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate text-[#1e3a5f]">
-                          {session.user?.name}
-                        </p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {session.user?.email}
-                        </p>
-                      </div>
-                    </div>
-                    <Button variant="outline" className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100" asChild>
-                      <Link href="/profile" onClick={() => setIsOpen(false)}>
-                        <User className="mr-2 h-4 w-4" />
-                        Profile
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start bg-white border-slate-200 text-[#1e3a5f] hover:bg-slate-100" asChild>
-                      <Link href="/portal" onClick={() => setIsOpen(false)}>
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        My Account
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start bg-white border-slate-200 text-red-600 hover:text-red-700 hover:bg-slate-100"
-                      onClick={() => {
-                        handleSignOut();
-                        setIsOpen(false);
-                      }}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Sign Out
-                    </Button>
-                  </div>
-                ) : (
-                  <Button 
-                    className="w-full bg-[#1e3a5f] text-white px-6 py-3 rounded-md font-bold text-base hover:bg-[#2d4a6f]"
-                    asChild
-                  >
-                    <Link
-                      href="/login"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      Sign In / Sign Up
-                    </Link>
-                  </Button>
-                )}
-              </div>
+              {PUBLIC_USER_AUTH_ENABLED ? (
+                <div className="pt-4 border-t border-slate-200">{mobileAuthControl}</div>
+              ) : null}
             </div>
           )}
         </div>

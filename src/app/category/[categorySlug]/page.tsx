@@ -225,9 +225,9 @@ function CategoryPageContent() {
 
   const ageRangeOptions = [
     { value: "all", label: "All Ages" },
-    { value: "under_9", label: "9岁以下" },
-    { value: "9_15", label: "9-15岁" },
-    { value: "over_15", label: "15岁以上" },
+    { value: "under_9", label: "Under 9" },
+    { value: "9_15", label: "9-15" },
+    { value: "over_15", label: "Over 15" },
   ]
 
   const hierarchicalData = useMemo(() => {
@@ -420,7 +420,7 @@ function CategoryPageContent() {
           </div>
         </section>
 
-        {/* Filters: Search, All locations, All Ages — equal width on sm+, stacked on small screens */}
+        {/* Filters: Search, All campuses, All Ages — equal width on sm+, stacked on small screens */}
         <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-20">
           <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch min-w-0">
             <div className="relative flex-1 min-w-0">
@@ -443,8 +443,8 @@ function CategoryPageContent() {
                     <span className="flex items-center gap-2 truncate">
                       <MapPin className="w-4 h-4 shrink-0 text-slate-500" />
                       {locationSlug
-                        ? allFranchises.find((f) => f.code === locationSlug)?.name ?? "All locations"
-                        : "All locations"}
+                        ? allFranchises.find((f) => f.code === locationSlug)?.name ?? "All campuses"
+                        : "All campuses"}
                     </span>
                     <ChevronDown className="w-4 h-4 shrink-0 opacity-60" />
                   </Button>
@@ -459,7 +459,7 @@ function CategoryPageContent() {
                   >
                     {!locationSlug && <Check className="w-4 h-4 text-[#2563eb]" />}
                     {locationSlug && <span className="w-4" />}
-                    <span>All locations</span>
+                    <span>All campuses</span>
                   </DropdownMenuItem>
                   {allFranchises.map((f) => (
                     <DropdownMenuItem
@@ -681,7 +681,7 @@ function CategoryPageContent() {
                     href="/locations"
                     className="inline-flex items-center gap-2 border-2 border-slate-300 text-slate-700 px-6 py-3 rounded-full font-bold hover:bg-slate-50"
                   >
-                    View locations
+                    View campuses
                   </Link>
                 </div>
               </div>

@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
@@ -19,183 +18,115 @@ import {
   LayoutDashboard,
   Shield,
   UserCircle,
-  // BookOpen, // Legacy - not used
   FolderTree,
-  List,
-  // Tag, // Not used
-  // Link as LinkIcon, // Not used
-  Calendar,
-  MapPin,
-  ChevronLeft,
-  ChevronRight,
+  Layers,
+  CalendarDays,
   History,
   ShoppingCart,
   Package,
-  Network,
+  Building2,
   Mail,
   Send,
   FileText,
   BarChart3,
   AlertCircle,
-  // Route, // Legacy - not used
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
   Shapes,
-  Sparkles,
+  LayoutGrid,
+  MessageSquareQuote,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { ADMIN_ENROLLMENTS_ENABLED } from "@/lib/admin-features"
+import type { LucideIcon } from "lucide-react"
 
 interface MenuItem {
   title: string
   href: string
-  icon: any
+  icon: LucideIcon
   badge?: string
 }
 
-const menuItems = [
-  {
-    title: "Dashboard",
-    href: "/admin",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "User Management",
-    href: "/admin/users",
-    icon: Users,
-  },
-  {
-    title: "Enrollments",
-    href: "/admin/enrollments",
-    icon: ShoppingCart,
-  },
-  {
-    title: "Team Management",
-    href: "/admin/teams",
-    icon: UserCircle,
-  },
-  {
-    title: "Traffic",
-    href: "/admin/traffic",
-    icon: BarChart3,
-  },
-  {
-    title: "Admin Guide",
-    href: "/admin/guide",
-    icon: Settings,
-  },
+const menuItems: MenuItem[] = [
+  { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { title: "User Management", href: "/admin/users", icon: Users },
+  ...(ADMIN_ENROLLMENTS_ENABLED
+    ? [{ title: "Enrollments", href: "/admin/enrollments", icon: ShoppingCart }]
+    : []),
+  { title: "Team Management", href: "/admin/teams", icon: UserCircle },
+  { title: "Traffic", href: "/admin/traffic", icon: BarChart3 },
+  { title: "Admin Guide", href: "/admin/guide", icon: Settings },
 ]
 
-// Legacy menu items - Hidden, using v2 tables instead
-// const courseMenuItems = [
-//   {
-//     title: "Programs",
-//     href: "/admin/series",
-//     icon: List,
-//   },
-//   {
-//     title: "Offerings",
-//     href: "/admin/offerings",
-//     icon: Package,
-//   },
-// ]
-
-// const settingsMenuItems = [
-//   {
-//     title: "Categories",
-//     href: "/admin/categories",
-//     icon: FolderTree,
-//   },
-//   {
-//     title: "Campuses",
-//     href: "/admin/locations",
-//     icon: MapPin,
-//   },
-//   {
-//     title: "Franchises",
-//     href: "/admin/franchises",
-//     icon: Network,
-//   },
-//   {
-//     title: "Learning Paths",
-//     href: "/admin/learning-paths",
-//     icon: Route,
-//   },
-//   {
-//     title: "Offering Types",
-//     href: "/admin/offering-types",
-//     icon: Shapes,
-//   },
-// ]
-
-const newsletterMenuItems = [
-  {
-    title: "Subscribers",
-    href: "/admin/newsletter/subscribers",
-    icon: Mail,
-  },
-  {
-    title: "Templates",
-    href: "/admin/newsletter/templates",
-    icon: FileText,
-  },
-  {
-    title: "Send Newsletter",
-    href: "/admin/newsletter/send",
-    icon: Send,
-  },
-  {
-    title: "Campaigns",
-    href: "/admin/newsletter/campaigns",
-    icon: History,
-  },
-  {
-    title: "Failed Sends",
-    href: "/admin/newsletter/failed-sends",
-    icon: AlertCircle,
-  },
+const newsletterMenuItems: MenuItem[] = [
+  { title: "Subscribers", href: "/admin/newsletter/subscribers", icon: Mail },
+  { title: "Templates", href: "/admin/newsletter/templates", icon: FileText },
+  { title: "Send Newsletter", href: "/admin/newsletter/send", icon: Send },
+  { title: "Campaigns", href: "/admin/newsletter/campaigns", icon: History },
+  { title: "Failed Sends", href: "/admin/newsletter/failed-sends", icon: AlertCircle },
 ]
 
-const blazeContentMenuItems = [
+const blazeContentMenuItems: MenuItem[] = [
   {
-    title: "Campuses",
+    title: adminUiLabels.campus.plural,
     href: "/admin/blaze/campuses",
     icon: MapPin,
   },
   {
-    title: "Programs",
+    title: adminUiLabels.program.plural,
     href: "/admin/blaze/programs",
-    icon: List,
-    
+    icon: Layers,
   },
   {
-    title: "Instances",
+    title: adminUiLabels.instance.plural,
     href: "/admin/blaze/instance",
-    icon: Calendar,
-    
+    icon: CalendarDays,
   },
   {
-    title: "Offerings",
+    title: adminUiLabels.offering.plural,
     href: "/admin/blaze/offerings",
     icon: Package,
+  },
+  {
+    title: "Testimonials",
+    href: "/admin/testimonials",
+    icon: MessageSquareQuote,
   },
 ]
 
 const blazeSettingsMenuItems: MenuItem[] = [
   {
-    title: "Franchises",
+    title: adminUiLabels.franchise.plural,
     href: "/admin/blaze/franchises",
-    icon: Network,
+    icon: Building2,
   },
   {
-    title: "Categories",
+    title: adminUiLabels.category.plural,
     href: "/admin/blaze/categories",
     icon: FolderTree,
   },
   {
-    title: "Offering Types",
+    title: adminUiLabels.offeringType.plural,
     href: "/admin/blaze/offering-types",
     icon: Shapes,
   },
 ]
+
+function isPathActive(pathname: string | null, href: string): boolean {
+  if (href === "/admin") return pathname === href
+  return pathname === href || (pathname?.startsWith(href + "/") ?? false)
+}
+
+function navButtonClass(isActive: boolean, collapsed: boolean) {
+  return cn(
+    "w-full text-sm font-medium text-foreground",
+    collapsed ? "justify-center px-0" : "justify-start",
+    isActive ? "bg-secondary text-foreground" : "hover:bg-muted"
+  )
+}
 
 interface AdminSidebarProps {
   onNavigate?: () => void
@@ -212,319 +143,138 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
     router.refresh()
   }
 
-  // Legacy menu items are hidden - using v2 tables instead
-  // const isAnyCoursePageActive = courseMenuItems.some(
-  //   (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-  // )
-
-  // const isAnySettingsPageActive = settingsMenuItems.some(
-  //   (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-  // )
-
-  // 检查是否有任何 Newsletter 相关的页面是活动的
-  const isAnyNewsletterPageActive = newsletterMenuItems.some(
-    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
+  const isAnyNewsletterPageActive = newsletterMenuItems.some((item) =>
+    isPathActive(pathname, item.href)
+  )
+  const isAnyBlazeContentPageActive = blazeContentMenuItems.some((item) =>
+    isPathActive(pathname, item.href)
+  )
+  const isAnyBlazeSettingsPageActive = blazeSettingsMenuItems.some((item) =>
+    isPathActive(pathname, item.href)
   )
 
-  // 检查是否有任何 Blaze Content 相关的页面是活动的
-  const isAnyBlazeContentPageActive = blazeContentMenuItems.some(
-    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-  )
+  const renderNavItem = (item: MenuItem, collapsed: boolean) => {
+    const Icon = item.icon
+    const isActive = isPathActive(pathname, item.href)
 
-  // 检查是否有任何 Blaze Settings 相关的页面是活动的
-  const isAnyBlazeSettingsPageActive = blazeSettingsMenuItems.some(
-    (item) => pathname === item.href || pathname?.startsWith(item.href + "/")
-  )
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={collapsed ? item.title : undefined}
+        onClick={onNavigate}
+      >
+        <Button variant="ghost" className={navButtonClass(isActive, collapsed)}>
+          <Icon className={cn("h-4 w-4 shrink-0 text-muted-foreground", !collapsed && "mr-2")} />
+          {!collapsed && <span className="truncate">{item.title}</span>}
+          {!collapsed && item.badge ? (
+            <Badge variant="secondary" className="ml-auto text-xs">
+              {item.badge}
+            </Badge>
+          ) : null}
+        </Button>
+      </Link>
+    )
+  }
+
+  const renderAccordionSection = (
+    value: string,
+    title: string,
+    icon: LucideIcon,
+    items: MenuItem[],
+    defaultOpen: boolean
+  ) => {
+    const SectionIcon = icon
+
+    if (isCollapsed) {
+      return <div className="space-y-1">{items.map((item) => renderNavItem(item, true))}</div>
+    }
+
+    return (
+      <Accordion type="single" collapsible defaultValue={defaultOpen ? value : undefined} className="w-full">
+        <AccordionItem value={value} className="border-none">
+          <AccordionTrigger className="rounded-md px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted hover:no-underline [&[data-state=open]>svg]:rotate-180">
+            <div className="flex items-center gap-2">
+              <SectionIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span>{title}</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pb-0 pt-1">
+            <div className="space-y-1 border-l border-border/60 pl-3 ml-2">
+              {items.map((item) => renderNavItem(item, false))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    )
+  }
 
   return (
-    <aside className={cn(
-      "border-r bg-card h-screen flex flex-col transition-all duration-300",
-      isCollapsed ? "w-16" : "w-64"
-    )}>
+    <aside
+      className={cn(
+        "border-r bg-card h-screen flex flex-col transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
+      )}
+    >
       <div className="p-6 border-b relative">
-        <div className={cn(
-          "flex items-center gap-2 transition-opacity",
-          isCollapsed && "justify-center"
-        )}>
+        <div className={cn("flex items-center gap-2 transition-opacity", isCollapsed && "justify-center")}>
           <Shield className="h-6 w-6 text-primary shrink-0" />
-          {!isCollapsed && <h1 className="text-xl font-bold">Admin Panel</h1>}
+          {!isCollapsed && <h1 className="text-xl font-bold text-foreground">Admin Panel</h1>}
         </div>
-        {/* 只在非移动端显示折叠按钮 */}
         <Button
           variant="ghost"
           size="icon"
-          className={cn(
-            "absolute top-4 right-2 h-8 w-8 hidden md:flex",
-            isCollapsed && "right-1"
-          )}
+          className={cn("absolute top-4 right-2 h-8 w-8 hidden md:flex", isCollapsed && "right-1")}
           onClick={() => setIsCollapsed(!isCollapsed)}
         >
-          {isCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
+          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
       </div>
-      
+
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map((item) => {
-          const Icon = item.icon
-          // For Dashboard (/admin), only highlight when pathname exactly matches
-          // For other items, check exact match or if pathname starts with the href
-          const isActive = item.href === "/admin" 
-            ? pathname === item.href
-            : pathname === item.href || pathname?.startsWith(item.href + "/")
-          
-          return (
-            <Link 
-              key={item.href} 
-              href={item.href} 
-              title={isCollapsed ? item.title : undefined}
-              onClick={onNavigate}
-            >
-              <Button
-                variant={isActive ? "secondary" : "ghost"}
-                className={cn(
-                  "w-full font-medium",
-                  isCollapsed ? "justify-center px-0" : "justify-start",
-                  isActive && "bg-secondary"
-                )}
-              >
-                <Icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-                {!isCollapsed && item.title}
-              </Button>
-            </Link>
-          )
-        })}
+        {menuItems.map((item) => renderNavItem(item, isCollapsed))}
 
-        {/* Legacy Content Admin menu - Hidden, using Blaze Content Admin instead */}
-        {/* Legacy Settings menu - Hidden, using Blaze Settings instead */}
-
-        {/* Newsletter 可展开菜单 */}
-        {!isCollapsed ? (
-          <Accordion type="single" collapsible defaultValue={isAnyNewsletterPageActive ? "newsletter" : undefined} className="w-full">
-            <AccordionItem value="newsletter" className="border-none">
-              <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                <div className="flex items-center gap-2 w-full">
-                  <Mail className="h-4 w-4" />
-                  <span className="text-sm font-medium pl-2">Newsletter Admin</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-0 pt-2">
-                <div className="space-y-1 pl-6">
-                  {newsletterMenuItems.map((item) => {
-                    const Icon = item.icon
-                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                    
-                    return (
-                      <Link 
-                        key={item.href} 
-                        href={item.href}
-                        onClick={onNavigate}
-                      >
-                        <Button
-                          variant={isActive ? "secondary" : "ghost"}
-                          className={cn(
-                            "w-full justify-start text-sm",
-                            isActive && "bg-secondary"
-                          )}
-                        >
-                          <Icon className="mr-2 h-4 w-4" />
-                          {item.title}
-                        </Button>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        ) : (
-          <div className="space-y-1">
-            {newsletterMenuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-              
-              return (
-                <Link 
-                  key={item.href} 
-                  href={item.href} 
-                  title={item.title}
-                  onClick={onNavigate}
-                >
-                  <Button
-                    variant={isActive ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-center px-0",
-                      isActive && "bg-secondary"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </Button>
-                </Link>
-              )
-            })}
-          </div>
+        {renderAccordionSection(
+          "newsletter",
+          "Newsletter Admin",
+          Mail,
+          newsletterMenuItems,
+          isAnyNewsletterPageActive
         )}
 
-        {/* Blaze Content Admin 可展开菜单 */}
-        {!isCollapsed ? (
-          <Accordion type="single" collapsible defaultValue={isAnyBlazeContentPageActive ? "blaze-content" : undefined} className="w-full">
-            <AccordionItem value="blaze-content" className="border-none">
-              <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                <div className="flex items-center gap-2 w-full">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium pl-2 text-primary">Blaze Content Admin</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-0 pt-2">
-                <div className="space-y-1 pl-6">
-                  {blazeContentMenuItems.map((item) => {
-                    const Icon = item.icon
-                    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                    
-                    return (
-                      <Link 
-                        key={item.href} 
-                        href={item.href}
-                        onClick={onNavigate}
-                      >
-                        <Button
-                          variant={isActive ? "secondary" : "ghost"}
-                          className={cn(
-                            "w-full justify-start text-sm",
-                            isActive && "bg-secondary"
-                          )}
-                        >
-                          <Icon className="mr-2 h-4 w-4 text-primary" />
-                          {item.title}
-                        </Button>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        ) : (
-          <div className="space-y-1">
-            {blazeContentMenuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-              
-              return (
-                <Link 
-                  key={item.href} 
-                  href={item.href} 
-                  title={item.title}
-                  onClick={onNavigate}
-                >
-                  <Button
-                    variant={isActive ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-center px-0",
-                      isActive && "bg-secondary"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 text-primary" />
-                  </Button>
-                </Link>
-              )
-            })}
-          </div>
+        {renderAccordionSection(
+          "blaze-content",
+          "Blaze Content Admin",
+          LayoutGrid,
+          blazeContentMenuItems,
+          isAnyBlazeContentPageActive
         )}
 
-        {/* Blaze Settings 可展开菜单 */}
-        {blazeSettingsMenuItems.length > 0 && (
-          !isCollapsed ? (
-            <Accordion type="single" collapsible defaultValue={isAnyBlazeSettingsPageActive ? "blaze-settings" : undefined} className="w-full">
-              <AccordionItem value="blaze-settings" className="border-none">
-                <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                  <div className="flex items-center gap-2 w-full">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium pl-2 text-primary">Blaze Settings</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="pb-0 pt-2">
-                  <div className="space-y-1 pl-6">
-                    {blazeSettingsMenuItems.map((item) => {
-                      const Icon = item.icon
-                      const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                      
-                      return (
-                        <Link 
-                          key={item.href} 
-                          href={item.href}
-                          onClick={onNavigate}
-                        >
-                          <Button
-                            variant={isActive ? "secondary" : "ghost"}
-                            className={cn(
-                              "w-full justify-start text-sm",
-                              isActive && "bg-secondary"
-                            )}
-                          >
-                            <Icon className="mr-2 h-4 w-4 text-primary" />
-                            {item.title}
-                            {item.badge && (
-                              <Badge variant="default" className="ml-auto text-xs bg-primary text-primary-foreground">
-                                {item.badge}
-                              </Badge>
-                            )}
-                          </Button>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          ) : (
-            <div className="space-y-1">
-              {blazeSettingsMenuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                
-                return (
-                  <Link 
-                    key={item.href} 
-                    href={item.href} 
-                    title={item.title}
-                    onClick={onNavigate}
-                  >
-                    <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      className={cn(
-                        "w-full justify-center px-0",
-                        isActive && "bg-secondary"
-                      )}
-                    >
-                      <Icon className="h-4 w-4 text-primary" />
-                    </Button>
-                  </Link>
-                )
-              })}
-            </div>
-          )
-        )}
+        {blazeSettingsMenuItems.length > 0
+          ? renderAccordionSection(
+              "blaze-settings",
+              "Blaze Settings",
+              Settings,
+              blazeSettingsMenuItems,
+              isAnyBlazeSettingsPageActive
+            )
+          : null}
       </nav>
 
       <div className="p-4 border-t">
         <Button
           variant="ghost"
           className={cn(
-            "w-full text-destructive hover:text-destructive",
+            "w-full text-sm font-medium text-destructive hover:text-destructive hover:bg-destructive/10",
             isCollapsed ? "justify-center px-0" : "justify-start"
           )}
           onClick={handleSignOut}
           title={isCollapsed ? "Sign Out" : undefined}
         >
-          <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+          <LogOut className={cn("h-4 w-4 shrink-0", !isCollapsed && "mr-2")} />
           {!isCollapsed && "Sign Out"}
         </Button>
       </div>
     </aside>
   )
 }
-

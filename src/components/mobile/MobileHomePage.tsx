@@ -1,18 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { QuickActions } from './QuickActions'
+import { Button } from '@/components/ui/button'
 import { FeaturedCoursesMobile } from './FeaturedCoursesMobile'
 import { LocationSelectionMobile } from './LocationSelectionMobile'
 import { Categories } from '@/components/Categories'
 import { BlazeLogoIcon } from '@/components/Icons'
 
 export function MobileHomePage() {
-  const { data: session } = useSession()
-
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
@@ -53,20 +48,6 @@ export function MobileHomePage() {
         <h2 className="text-xl font-semibold mb-4">Our Programs</h2>
         <Categories />
       </section>
-
-      {/* Recent Activity (仅登录用户) */}
-      {session?.user && (
-        <section className="px-4 py-6">
-          <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                Your recent courses and activities will appear here.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-      )}
     </div>
   )
 }

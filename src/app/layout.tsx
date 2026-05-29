@@ -41,7 +41,7 @@ export default function RootLayout({
           >
             {children}
             <TrafficTracker />
-            <Toaster />
+            <Toaster richColors closeButton expand position="top-right" />
           </ThemeProvider>
         </SessionProvider>
       </body>

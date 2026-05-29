@@ -19,14 +19,22 @@ import {
   ShoppingCart,
   DollarSign,
   TrendingUp,
+  TrendingDown,
+  Eye,
   AlertCircle,
   Plus,
   BarChart3,
   ArrowRight,
   Mail,
   Clock as ClockIcon,
-  PieChart
+  PieChart,
+  Building2,
+  CalendarDays,
+  Layers,
+  MessageSquareQuote,
+  CircleHelp,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -53,6 +61,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { adminActionVerb, adminLabel, adminManage } from "@/lib/admin-ui-labels"
+import { ADMIN_ENROLLMENTS_ENABLED } from "@/lib/admin-features"
+import { cn } from "@/lib/utils"
 
 // Lazy-loaded section types (match API responses)
 type UsersStats = {
@@ -74,16 +85,12 @@ type CoursesStats = {
   ongoingInstances: number
   completedInstances: number
 }
-type EnrollmentsStats = {
-  total: number
-  active: number
-  enrolled: number
-  reserved: number
-  cart: number
-  waitlisted: number
-  completed: number
-  cancelled: number
-  expired: number
+type TrafficStats = {
+  visits: { total: number; mom_change: number; mom_change_type: string }
+  bounce_rate: { value: number; mom_change: number; mom_change_type: string }
+  unique_visitors: { total: number; mom_change: number; mom_change_type: string }
+  pageviews: { total: number; mom_change: number; mom_change_type: string }
+  period: { start: string; end: string }
 }
 type RevenueStats = { total: number; monthly: number; pending: number }
 type RecentActivityStats = {
@@ -91,6 +98,55 @@ type RecentActivityStats = {
   newCourses: Array<{ id: string; name: string; status: string; created_at: string }>
   recentEnrollments: Array<{ id: string; user_name: string; course_name: string; status: string; created_at: string }>
 }
+
+/** Mock revenue analytics — hidden until backed by real API data */
+const SHOW_MOCK_REVENUE_ANALYTICS = false
+
+const QUICK_ACTIONS: Array<{
+  href: string
+  title: string
+  hint: string
+  icon: LucideIcon
+  featured?: boolean
+}> = [
+  {
+    href: "/admin/blaze/programs",
+    title: adminActionVerb("Add", "program"),
+    hint: "Create or edit activities (programs) in the catalog hierarchy.",
+    icon: Plus,
+    featured: true,
+  },
+  {
+    href: "/admin/users",
+    title: "Create New User",
+    hint: "Add a parent, coach, or admin account with login access.",
+    icon: UserPlus,
+  },
+  {
+    href: "/admin/blaze/instance",
+    title: adminManage("instance"),
+    hint: "View and edit session schedules, capacity, and offering links.",
+    icon: CalendarDays,
+  },
+  {
+    href: "/admin/blaze/franchises",
+    title: adminManage("franchise"),
+    hint: "Configure campus branding, contact details, and marketing settings.",
+    icon: Building2,
+  },
+  {
+    href: "/admin/blaze/resources",
+    title: "Manage Resources",
+    hint: "Upload and organize files shown on the public resources page.",
+    icon: FileText,
+  },
+  {
+    href: "/admin/testimonials",
+    title: "Manage Testimonials",
+    hint: "Add or edit parent quotes on the home page and campus pages.",
+    icon: MessageSquareQuote,
+  },
+]
 
 // Mock 收入数据
 const mockRevenueData = {
@@ -140,9 +196,31 @@ function useLazySection<T>(url: string) {
 export default function AdminDashboardPage() {
   const usersSection = useLazySection<UsersStats>("/api/admin/stats/users")
   const coursesSection = useLazySection<CoursesStats>("/api/admin/stats/courses")
-  const enrollmentsSection = useLazySection<EnrollmentsStats>("/api/admin/stats/enrollments")
+  const trafficSection = useLazySection<TrafficStats>("/api/admin/traffic/summary?period=last_30_days")
   const revenueSection = useLazySection<RevenueStats>("/api/admin/stats/revenue")
   const recentActivitySection = useLazySection<RecentActivityStats>("/api/admin/stats/recent-activity")
+
+  const formatTrafficNumber = (num: number) => {
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
+    return num.toLocaleString()
+  }
+
+  const formatMomChange = (change: number, changeType: string) => (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-xs font-medium",
+        changeType === "increase" ? "text-red-600" : "text-green-600"
+      )}
+    >
+      {changeType === "increase" ? (
+        <TrendingUp className="h-3 w-3" />
+      ) : (
+        <TrendingDown className="h-3 w-3" />
+      )}
+      {change > 0 ? "+" : ""}
+      {change}% mo/mo
+    </span>
+  )
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -168,29 +246,42 @@ export default function AdminDashboardPage() {
     return variants[status] || "outline"
   }
 
+  const renderProgramStatusBadge = (status: string) => {
+    const normalized = status.toLowerCase()
+    if (normalized === "published") {
+      return (
+        <Badge
+          title="Published"
+          className="h-5 min-w-5 shrink-0 justify-center rounded px-1 text-[10px] font-bold bg-green-100 text-green-700 border-green-200 hover:bg-green-100"
+        >
+          P
+        </Badge>
+      )
+    }
+    if (normalized === "draft") {
+      return (
+        <Badge
+          title="Draft"
+          className="h-5 min-w-5 shrink-0 justify-center rounded px-1 text-[10px] font-bold bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100"
+        >
+          D
+        </Badge>
+      )
+    }
+    return (
+      <Badge variant={getStatusBadge(status)} className="shrink-0 text-[10px] px-1.5">
+        {status.charAt(0).toUpperCase()}
+      </Badge>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50/30 p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-2">
-            Welcome to the admin panel. Manage your application from here.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href="/admin/blaze/programs">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Program
-            </Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/users">
-              <UserPlus className="mr-2 h-4 w-4" />
-              New User
-            </Link>
-          </Button>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+        <p className="text-muted-foreground mt-2">
+          Welcome to the admin panel. Manage your application from here.
+        </p>
       </div>
 
       {/* 统计卡片 - 2x2 网格布局，每块独立懒加载 */}
@@ -247,15 +338,17 @@ export default function AdminDashboardPage() {
           )}
         </Card>
 
-        {/* Instance 统计卡片 */}
+        {/* Activity & session statistics */}
         <Card className="bg-white rounded-2xl shadow-lg border-0 p-6 hover:shadow-xl transition-shadow">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-800 mb-1">Instance Statistics</h3>
-              <p className="text-sm text-gray-500">Programs and scheduled instances</p>
+              <h3 className="text-lg font-semibold text-gray-800 mb-1">{adminLabel("instance", { plural: true })} Statistics</h3>
+              <p className="text-sm text-gray-500">
+                {adminLabel("program", { plural: true })} and scheduled {adminLabel("instance", { plural: true }).toLowerCase()}
+              </p>
             </div>
             <div className="p-3 bg-purple-100 rounded-full">
-              <BookOpen className="h-6 w-6 text-purple-600" />
+              <Layers className="h-6 w-6 text-purple-600" />
             </div>
           </div>
           {coursesSection.loading && (
@@ -273,21 +366,21 @@ export default function AdminDashboardPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Programs</p>
+                  <p className="text-sm text-gray-600">Total {adminLabel("program", { plural: true })}</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">{coursesSection.data.total}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">Active Programs</p>
+                  <p className="text-sm text-gray-600">Active {adminLabel("program", { plural: true })}</p>
                   <p className="text-xl font-semibold text-green-600 mt-1">{coursesSection.data.published}</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-3 border-t">
                 <div>
-                  <p className="text-xs text-gray-500">Total Instances</p>
+                  <p className="text-xs text-gray-500">Total {adminLabel("instance", { plural: true })}</p>
                   <p className="text-lg font-semibold text-gray-900">{coursesSection.data.totalInstances}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Active Instances</p>
+                  <p className="text-xs text-gray-500">Active {adminLabel("instance", { plural: true })}</p>
                   <p className="text-lg font-semibold text-blue-600">{coursesSection.data.activeInstances}</p>
                 </div>
                 <div>
@@ -299,54 +392,85 @@ export default function AdminDashboardPage() {
           )}
         </Card>
 
-        {/* 报名统计卡片 */}
+        {/* Traffic statistics */}
         <Card className="bg-white rounded-2xl shadow-lg border-0 p-6 hover:shadow-xl transition-shadow">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-800 mb-1">Enrollment Statistics</h3>
-              <p className="text-sm text-gray-500">Registration overview</p>
+              <h3 className="text-lg font-semibold text-gray-800 mb-1">Traffic Statistics</h3>
+              <p className="text-sm text-gray-500">Website traffic overview (last 30 days)</p>
             </div>
-            <div className="p-3 bg-orange-100 rounded-full">
-              <ShoppingCart className="h-6 w-6 text-orange-600" />
+            <div className="p-3 bg-cyan-100 rounded-full">
+              <Eye className="h-6 w-6 text-cyan-600" />
             </div>
           </div>
-          {enrollmentsSection.loading && (
+          {trafficSection.loading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 text-primary animate-spin" />
             </div>
           )}
-          {enrollmentsSection.error && (
+          {trafficSection.error && (
             <div className="py-4">
-              <p className="text-sm text-destructive mb-2">{enrollmentsSection.error}</p>
-              <Button size="sm" variant="outline" onClick={enrollmentsSection.refetch}>Retry</Button>
+              <p className="text-sm text-destructive mb-2">{trafficSection.error}</p>
+              <Button size="sm" variant="outline" onClick={trafficSection.refetch}>Retry</Button>
             </div>
           )}
-          {!enrollmentsSection.loading && !enrollmentsSection.error && enrollmentsSection.data && (
+          {!trafficSection.loading && !trafficSection.error && trafficSection.data && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Enrollments</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{enrollmentsSection.data.total}</p>
+                  <p className="text-sm text-gray-600">Total Visits</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {formatTrafficNumber(trafficSection.data.visits.total)}
+                  </p>
+                  <div className="mt-1">
+                    {formatMomChange(
+                      trafficSection.data.visits.mom_change,
+                      trafficSection.data.visits.mom_change_type
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">Active</p>
-                  <p className="text-xl font-semibold text-green-600 mt-1">{enrollmentsSection.data.active}</p>
+                  <p className="text-sm text-gray-600">Unique Visitors</p>
+                  <p className="text-xl font-semibold text-green-600 mt-1">
+                    {formatTrafficNumber(trafficSection.data.unique_visitors.total)}
+                  </p>
+                  <div className="mt-1 flex justify-end">
+                    {formatMomChange(
+                      trafficSection.data.unique_visitors.mom_change,
+                      trafficSection.data.unique_visitors.mom_change_type
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-3 border-t">
                 <div>
-                  <p className="text-xs text-gray-500">Enrolled</p>
-                  <p className="text-lg font-semibold text-gray-900">{enrollmentsSection.data.enrolled}</p>
+                  <p className="text-xs text-gray-500">Pageviews</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {formatTrafficNumber(trafficSection.data.pageviews.total)}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Waitlist</p>
-                  <p className="text-lg font-semibold text-yellow-600">{enrollmentsSection.data.waitlisted}</p>
+                  <p className="text-xs text-gray-500">Bounce Rate</p>
+                  <p className="text-lg font-semibold text-orange-600">
+                    {trafficSection.data.bounce_rate.value.toFixed(1)}%
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Completed</p>
-                  <p className="text-lg font-semibold text-blue-600">{enrollmentsSection.data.completed}</p>
+                  <p className="text-xs text-gray-500">Pageviews MoM</p>
+                  <div className="mt-1">
+                    {formatMomChange(
+                      trafficSection.data.pageviews.mom_change,
+                      trafficSection.data.pageviews.mom_change_type
+                    )}
+                  </div>
                 </div>
               </div>
+              <Button variant="ghost" size="sm" className="w-full text-primary hover:text-primary/80" asChild>
+                <Link href="/admin/traffic">
+                  View Traffic Details
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           )}
         </Card>
@@ -423,18 +547,20 @@ export default function AdminDashboardPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-500">Draft Programs</p>
+                  <p className="text-xs text-gray-500">Draft {adminLabel("program", { plural: true })}</p>
                   <p className="text-lg font-semibold text-gray-900">{coursesSection.data?.draft ?? 0}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-500">Cart Items</p>
-                  <p className="text-lg font-semibold text-gray-900">{enrollmentsSection.data?.cart ?? 0}</p>
+                  <p className="text-xs text-gray-500">Pageviews (30d)</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {formatTrafficNumber(trafficSection.data?.pageviews.total ?? 0)}
+                  </p>
                 </div>
               </div>
               <Button asChild className="w-full justify-start bg-primary hover:bg-primary/90 text-white">
                 <Link href="/admin/blaze/programs">
                   <Plus className="mr-2 h-4 w-4" />
-                  Add Program
+                  {adminActionVerb("Add", "program")}
                 </Link>
               </Button>
             </div>
@@ -442,7 +568,8 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
-      {/* 收入统计图表卡片（Mock Data） */}
+      {/* 收入统计图表卡片（Mock Data） — hidden until real API */}
+      {SHOW_MOCK_REVENUE_ANALYTICS && (
       <Card className="bg-white rounded-2xl shadow-lg border-0 p-6 hover:shadow-xl transition-shadow mb-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-green-100 rounded-lg">
@@ -607,6 +734,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </Card>
+      )}
 
       {/* 最近活动和快速操作 - 2x2 网格布局 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -673,18 +801,19 @@ export default function AdminDashboardPage() {
               <div className="pt-4 border-t">
                 <h4 className="text-sm font-semibold mb-2 flex items-center gap-2 text-gray-700">
                   <BookOpen className="h-4 w-4" />
-                  New Programs
+                  New {adminLabel("program", { plural: true })}
                 </h4>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {recentActivitySection.data.newCourses.slice(0, 3).map((program) => (
-                    <div key={program.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-gray-900">{program.name}</span>
-                        <Badge variant={getStatusBadge(program.status)} className="text-xs">
-                          {program.status}
-                        </Badge>
-                      </div>
-                      <span className="text-xs text-gray-400">
+                    <div
+                      key={program.id}
+                      className="flex flex-col gap-1 rounded-lg p-2 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center sm:gap-2"
+                    >
+                      {renderProgramStatusBadge(program.status)}
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-gray-900">
+                        {program.name}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-gray-400">
                         {new Date(program.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
                     </div>
@@ -692,7 +821,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <Button variant="ghost" size="sm" className="mt-2 w-full text-primary hover:text-primary/80" asChild>
                   <Link href="/admin/blaze/programs">
-                    View All Programs
+                    View All {adminLabel("program", { plural: true })}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
@@ -700,7 +829,9 @@ export default function AdminDashboardPage() {
             )}
 
             {/* 最近的报名记录 */}
-            {recentActivitySection.data.recentEnrollments && recentActivitySection.data.recentEnrollments.length > 0 && (
+            {ADMIN_ENROLLMENTS_ENABLED &&
+              recentActivitySection.data.recentEnrollments &&
+              recentActivitySection.data.recentEnrollments.length > 0 && (
               <div className="pt-4 border-t">
                 <h4 className="text-sm font-semibold mb-2 flex items-center gap-2 text-gray-700">
                   <ShoppingCart className="h-4 w-4" />
@@ -746,49 +877,64 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-gray-500">Common administrative tasks</p>
             </div>
           </div>
-          <div className="space-y-2">
-            <Button asChild className="w-full justify-start bg-primary hover:bg-primary/90 text-white">
-              <Link href="/admin/blaze/programs">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Program
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
-              <Link href="/admin/users">
-                <UserPlus className="mr-2 h-4 w-4" />
-                Create New User
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
-              <Link href="/admin/enrollments">
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                Manage Enrollments
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
-              <Link href="/admin/blaze/instance">
-                <Calendar className="mr-2 h-4 w-4" />
-                Manage Instances
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
-              <Link href="/admin/blaze/franchises">
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Manage Franchises
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
-              <Link href="/admin/blaze/resources">
-                <FileText className="mr-2 h-4 w-4" />
-                Manage Resources
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full justify-start border-gray-200 hover:bg-gray-50">
-              <Link href="/admin/learning-paths">
-                <BookOpen className="mr-2 h-4 w-4" />
-                Manage Learning Paths
-              </Link>
-            </Button>
+          <div className="grid grid-cols-2 gap-3">
+            {QUICK_ACTIONS.map((action) => {
+              const Icon = action.icon
+              return (
+                <div key={action.href} className="relative">
+                  <Link
+                    href={action.href}
+                    className={cn(
+                      "group flex flex-col items-center justify-center gap-3 rounded-xl border p-4 text-center transition-colors hover:bg-gray-50",
+                      action.featured
+                        ? "border-primary/30 bg-primary/5 hover:bg-primary/10"
+                        : "border-gray-200 bg-white"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-12 w-12 items-center justify-center rounded-xl",
+                        action.featured ? "bg-primary/10 text-primary" : "bg-gray-100 text-gray-600 group-hover:bg-gray-200"
+                      )}
+                    >
+                      <Icon className="h-7 w-7" />
+                    </div>
+                    <span
+                      className={cn(
+                        "text-sm font-medium leading-snug",
+                        action.featured ? "text-primary" : "text-gray-800"
+                      )}
+                    >
+                      {action.title}
+                    </span>
+                  </Link>
+                  <div className="absolute top-2 right-2 group/hint">
+                    <button
+                      type="button"
+                      title={action.hint}
+                      aria-label={action.hint}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                    >
+                      <CircleHelp className="h-3.5 w-3.5" strokeWidth={1} />
+                    </button>
+                    <div
+                      role="tooltip"
+                      className="pointer-events-none absolute top-full right-0 z-20 mt-1.5 hidden w-52 rounded-md border border-border bg-popover px-2.5 py-1.5 text-left text-xs leading-relaxed text-popover-foreground shadow-md group-hover/hint:block"
+                    >
+                      {action.hint}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </Card>
       </div>

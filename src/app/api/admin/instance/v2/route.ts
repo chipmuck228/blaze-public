@@ -2,6 +2,19 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
+/** Resolve v2_program ids for franchise/category filters (avoid PostgREST embed filters that null out program). */
+async function resolveProgramIdsForFilter(opts: {
+  franchiseId?: string | null
+  categoryId?: string | null
+}): Promise<string[]> {
+  let q = supabaseAdmin.from("v2_program").select("id")
+  if (opts.franchiseId) q = q.eq("franchise_id", opts.franchiseId)
+  if (opts.categoryId) q = q.eq("category_id", opts.categoryId)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []).map((row) => row.id)
+}
+
 // 获取所有 Instances V2（从 v2_instance 表）
 export async function GET(request: Request) {
   try {
@@ -78,12 +91,17 @@ export async function GET(request: Request) {
       query = query.eq("offering_id", offeringId)
     }
 
-    if (franchiseId) {
-      query = query.eq("program.franchise_id", franchiseId)
-    }
-
-    if (categoryId) {
-      query = query.eq("program.category_id", categoryId)
+    // Filter on v2_instance.program_id — not program.* embed columns. PostgREST embed
+    // filters (e.g. program.franchise_id) return all rows but set program=null on non-matches.
+    if (!programId && (franchiseId || categoryId)) {
+      const programIds = await resolveProgramIdsForFilter({
+        franchiseId,
+        categoryId,
+      })
+      if (programIds.length === 0) {
+        return NextResponse.json([], { status: 200 })
+      }
+      query = query.in("program_id", programIds)
     }
 
     if (status) {

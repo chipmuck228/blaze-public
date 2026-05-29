@@ -40,7 +40,7 @@ export function LocationSelectionMobile() {
   if (isLoading) {
     return (
       <section className="px-4 py-6">
-        <h2 className="text-xl font-semibold mb-4">Choose Your Location</h2>
+        <h2 className="text-xl font-semibold mb-4">Choose Your Campus</h2>
         <div className="grid grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
@@ -57,7 +57,7 @@ export function LocationSelectionMobile() {
   return (
     <section className="px-4 py-6">
       <div className="mb-4">
-        <h2 className="text-xl font-semibold">Choose Your Location</h2>
+        <h2 className="text-xl font-semibold">Choose Your Campus</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Select a campus near you
         </p>

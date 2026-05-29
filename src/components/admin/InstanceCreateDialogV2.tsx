@@ -31,6 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { adminUiLabels } from "@/lib/admin-ui-labels"
 
 interface InstanceCreateDialogProps {
   open: boolean
@@ -391,7 +392,7 @@ export function InstanceCreateDialog({
     // Validation: schema-driven; only program_id and offering_id are always required
     const schema = selectedOffering?.offering_type?.instance_schema?.fields
     const validationErrors: string[] = []
-    if (!formData.program_id) validationErrors.push("Program is required")
+    if (!formData.program_id) validationErrors.push(`${adminUiLabels.program.singular} is required`)
     if (!formData.offering_id) validationErrors.push("Offering is required")
     const scheduleObj = schema?.schedule?.type === 'object' ? schema.schedule : null
     const startDateRequired = schema?.start_date?.required || scheduleObj?.properties?.start_date?.required
@@ -448,7 +449,7 @@ export function InstanceCreateDialog({
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || `Failed to ${isEditMode ? 'update' : 'create'} instance`)
+        throw new Error(errorData.error || `Failed to ${isEditMode ? 'update' : 'create'} ${adminUiLabels.instance.singular.toLowerCase()}`)
       }
 
       onSuccess?.()
@@ -477,7 +478,7 @@ export function InstanceCreateDialog({
       })
       setSelectedOffering(null)
     } catch (error: any) {
-      setErrors([error.message || "Failed to save instance"])
+      setErrors([error.message || `Failed to save ${adminUiLabels.instance.singular.toLowerCase()}`])
     } finally {
       setIsSubmitting(false)
     }
@@ -878,9 +879,9 @@ export function InstanceCreateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] sm:max-w-[800px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>{isEditMode ? "Edit Instance" : "Create Instance"}</DialogTitle>
+          <DialogTitle>{isEditMode ? `Edit ${adminUiLabels.instance.singular}` : `Create ${adminUiLabels.instance.singular}`}</DialogTitle>
           <DialogDescription>
-            {isEditMode ? "Update instance details" : "Create a new instance for a program"}
+            {isEditMode ? `Update ${adminUiLabels.instance.singular.toLowerCase()} details` : `Create a new ${adminUiLabels.instance.singular.toLowerCase()} for an activity`}
           </DialogDescription>
         </DialogHeader>
 
@@ -900,13 +901,13 @@ export function InstanceCreateDialog({
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm font-medium">Program &amp; offering</CardTitle>
-              <CardDescription className="text-xs">Select the program and offering for this instance.</CardDescription>
+              <CardTitle className="text-sm font-medium">{adminUiLabels.program.singular} &amp; offering</CardTitle>
+              <CardDescription className="text-xs">Select the activity and offering for this {adminUiLabels.instance.singular.toLowerCase()}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pt-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Program <span className="text-red-500">*</span></Label>
+                  <Label className="text-xs">{adminUiLabels.program.singular} <span className="text-red-500">*</span></Label>
                   <Select
                     value={formData.program_id}
                     onValueChange={(value) => {
@@ -921,7 +922,7 @@ export function InstanceCreateDialog({
                           {programs.find(p => p.id === formData.program_id)?.display_name || selectedProgram?.display_name || programs.find(p => p.id === formData.program_id)?.name || ""}
                         </span>
                       ) : (
-                        <SelectValue placeholder="Select program" />
+                        <SelectValue placeholder={`Select ${adminUiLabels.program.singular.toLowerCase()}`} />
                       )}
                     </SelectTrigger>
                     <SelectContent>
@@ -971,7 +972,7 @@ export function InstanceCreateDialog({
             <CardHeader className="py-3">
               <CardTitle className="text-sm font-medium">Enrollment</CardTitle>
               <CardDescription className="text-xs">
-                Optional Amilia URL for the public instance page &quot;Enroll now&quot; button.
+                Optional Amilia URL for the public session page &quot;Enroll now&quot; button.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -1019,7 +1020,7 @@ export function InstanceCreateDialog({
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm font-medium">Date</CardTitle>
-                  <CardDescription className="text-xs">Start and end date for this instance.</CardDescription>
+                  <CardDescription className="text-xs">Start and end date for this {adminUiLabels.instance.singular.toLowerCase()}.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className={dateFields.length >= 2 ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "space-y-3"}>
@@ -1092,13 +1093,13 @@ export function InstanceCreateDialog({
             const hasCommon = commonFields.length > 0
             const campusEl = (
               <div className="space-y-1.5">
-                <Label className="text-xs">Campus</Label>
+                <Label className="text-xs">{adminUiLabels.campus.singular}</Label>
                 <Select value={formData.campus_id || "__none__"} onValueChange={(val) => setFormData({ ...formData, campus_id: val === "__none__" ? "" : val })}>
                   <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Optional campus" />
+                    <SelectValue placeholder={`Optional ${adminUiLabels.campus.singular.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">No Campus</SelectItem>
+                    <SelectItem value="__none__">No {adminUiLabels.campus.singular}</SelectItem>
                     {campuses.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.display_name || c.name}</SelectItem>
                     ))}
@@ -1111,8 +1112,8 @@ export function InstanceCreateDialog({
             return (
               <Card>
                 <CardHeader className="py-3">
-                  <CardTitle className="text-sm font-medium">Schedule, capacity &amp; campus</CardTitle>
-                  <CardDescription className="text-xs">Time, max students, price override, status, optional campus, and featured flag.</CardDescription>
+                  <CardTitle className="text-sm font-medium">Schedule, capacity &amp; {adminUiLabels.campus.singular.toLowerCase()}</CardTitle>
+                  <CardDescription className="text-xs">Time, max students, price override, status, optional {adminUiLabels.campus.singular.toLowerCase()}, and featured flag.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   {hasCommon && (
@@ -1135,7 +1136,7 @@ export function InstanceCreateDialog({
                       Featured
                     </Label>
                     <span className="text-xs text-muted-foreground">
-                      Show this instance in featured/recommended placements
+                      Show this {adminUiLabels.instance.singular.toLowerCase()} in featured/recommended placements
                     </span>
                   </div>
                 </CardContent>

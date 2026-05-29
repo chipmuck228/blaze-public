@@ -51,21 +51,28 @@ export async function GET() {
       }
     }
 
-    // 获取每个 franchise 的 active program 数量
-    const { data: programs, error: programsError } = await supabaseAdmin
-      .from("v2_program")
-      .select("franchise_id")
-      .eq("is_active", true)
+    // Web Program count = visible subscribed v2_category per franchise (not v2_program / Activity)
+    const { data: categoryMaps, error: categoryMapsError } = await supabaseAdmin
+      .from("v2_franchise_category_map")
+      .select(`
+        franchise_id,
+        category:v2_category!inner(is_active)
+      `)
+      .eq("is_visible", true)
 
-    if (programsError) {
-      console.warn("Error fetching programs for franchise counts:", programsError)
+    if (categoryMapsError) {
+      console.warn("Error fetching category subscriptions for franchise counts:", categoryMapsError)
     }
 
     const franchiseIdToProgramCount = new Map<string, number>()
-    if (programs) {
-      for (const p of programs) {
-        if (p.franchise_id) {
-          franchiseIdToProgramCount.set(p.franchise_id, (franchiseIdToProgramCount.get(p.franchise_id) ?? 0) + 1)
+    if (categoryMaps) {
+      for (const row of categoryMaps) {
+        const category = Array.isArray(row.category) ? row.category[0] : row.category
+        if (row.franchise_id && category?.is_active !== false) {
+          franchiseIdToProgramCount.set(
+            row.franchise_id,
+            (franchiseIdToProgramCount.get(row.franchise_id) ?? 0) + 1
+          )
         }
       }
     }

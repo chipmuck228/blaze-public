@@ -30,7 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, MoreVertical, Edit, Trash2, Loader2 } from "lucide-react"
-import { toast } from "sonner"
+import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 import { RichTextEditor } from "@/components/admin/RichTextEditor"
 
 interface NewsletterTemplate {
@@ -76,7 +76,7 @@ export default function NewsletterTemplatesPage() {
       setTemplates(data.templates || [])
     } catch (error: any) {
       console.error("Error fetching templates:", error)
-      toast.error("Failed to load templates")
+      adminToast.error("Failed to load templates")
     } finally {
       setIsLoading(false)
     }
@@ -107,7 +107,10 @@ export default function NewsletterTemplatesPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this template?")) {
+    if (!(await adminConfirm({
+      title: "Delete this template?",
+      confirmLabel: "Delete",
+    }))) {
       return
     }
 
@@ -121,11 +124,11 @@ export default function NewsletterTemplatesPage() {
         throw new Error(error.error || "Failed to delete template")
       }
 
-      toast.success("Template deleted successfully")
+      adminToast.success("Template deleted successfully")
       fetchTemplates()
     } catch (error: any) {
       console.error("Error deleting template:", error)
-      toast.error(error.message || "Failed to delete template")
+      adminToast.error(error.message || "Failed to delete template")
     }
   }
 
@@ -152,12 +155,12 @@ export default function NewsletterTemplatesPage() {
         throw new Error(error.error || "Failed to save template")
       }
 
-      toast.success(`Template ${editingTemplate ? "updated" : "created"} successfully`)
+      adminToast.success(`Template ${editingTemplate ? "updated" : "created"} successfully`)
       setIsEditDialogOpen(false)
       fetchTemplates()
     } catch (error: any) {
       console.error("Error saving template:", error)
-      toast.error(error.message || "Failed to save template")
+      adminToast.error(error.message || "Failed to save template")
     } finally {
       setIsSubmitting(false)
     }

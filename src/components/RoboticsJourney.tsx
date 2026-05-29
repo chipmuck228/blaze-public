@@ -5,7 +5,6 @@ import Link from "next/link"
 
 interface JourneyStep {
   id: number
-  stepNumber: string
   title: string
   description: string
   ctaText: string
@@ -20,7 +19,6 @@ interface JourneyStep {
 const journeySteps: JourneyStep[] = [
   {
     id: 1,
-    stepNumber: "Step 1",
     title: "Explore",
     description: "Beginner level for ages 8–12. Spark interest in robotics through camps and VEX IQ—build foundational skills and hands-on confidence with game-style learning.",
     ctaText: "Learn More",
@@ -32,7 +30,6 @@ const journeySteps: JourneyStep[] = [
   },
   {
     id: 2,
-    stepNumber: "Step 2",
     title: "Learn",
     description: "Intermediate to advanced, ages 12–18. Develop core robotics skills in structured courses—programming, control, sensors, and automation—and prepare for competition or career paths.",
     ctaText: "Learn More",
@@ -43,7 +40,6 @@ const journeySteps: JourneyStep[] = [
   },
   {
     id: 3,
-    stepNumber: "Step 3",
     title: "Compete & Innovate",
     description: "Competition and innovation tracks: join a team, build competition-ready robots, and compete in local and global VEX events—or explore AI, IoT, and automation in our Innovation Lab.",
     ctaText: "Learn More",
@@ -86,7 +82,7 @@ export const RoboticsJourney = () => {
                 <div className={`w-16 h-16 bg-transparent rounded-2xl flex items-center justify-center ${iconTextClass} mb-6 group-hover:scale-110 transition-transform`}>
                   {step.icon}
                 </div>
-                <h3 className="text-2xl font-bold text-[#0f172a] dark:text-white mb-3">{step.stepNumber}: {step.title}</h3>
+                <h3 className="text-2xl font-bold text-[#0f172a] dark:text-white mb-3">{step.title}</h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-6">{step.description}</p>
                 <Link 
                   href={step.ctaLink} 

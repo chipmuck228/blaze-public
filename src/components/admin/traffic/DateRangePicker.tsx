@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { adminToast } from '@/lib/admin-toast'
 
 interface DateRangePickerProps {
   value: {
@@ -54,7 +55,9 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   const handleCustomDateApply = () => {
     if (customStartDate && customEndDate) {
       if (new Date(customStartDate) > new Date(customEndDate)) {
-        alert('Start date must be before end date')
+        adminToast.warning('Invalid date range', {
+          description: 'Start date must be before end date.',
+        })
         return
       }
       onChange({
