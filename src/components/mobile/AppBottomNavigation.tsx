@@ -30,6 +30,14 @@ export function AppBottomNavigation() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const [cartCount, setCartCount] = useState(0)
+  const [hash, setHash] = useState('')
+
+  useEffect(() => {
+    const syncHash = () => setHash(window.location.hash)
+    syncHash()
+    window.addEventListener('hashchange', syncHash)
+    return () => window.removeEventListener('hashchange', syncHash)
+  }, [pathname])
 
   // 获取购物车数量
   useEffect(() => {
@@ -91,7 +99,7 @@ export function AppBottomNavigation() {
       id: 'locations',
       label: 'Campuses',
       icon: MapPin,
-      href: '/locations',
+      href: '/#locations',
     },
     ...(PUBLIC_USER_AUTH_ENABLED
       ? ([
@@ -106,11 +114,17 @@ export function AppBottomNavigation() {
       : []),
   ]
 
-  const isActive = (href: string) => {
-    if (href === '/') {
+  const isActive = (item: NavItem) => {
+    if (item.id === 'home') {
+      return pathname === '/' && hash !== '#locations'
+    }
+    if (item.id === 'locations') {
+      return pathname === '/' && hash === '#locations'
+    }
+    if (item.href === '/') {
       return pathname === '/'
     }
-    return pathname?.startsWith(href)
+    return pathname?.startsWith(item.href)
   }
 
   const handleClick = (item: NavItem, e: React.MouseEvent) => {
@@ -126,7 +140,7 @@ export function AppBottomNavigation() {
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.map((item) => {
           const Icon = item.icon
-          const active = isActive(item.href)
+          const active = isActive(item)
           const showBadge = item.badge && item.badge > 0
 
           return (

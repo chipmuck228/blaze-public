@@ -12,6 +12,9 @@ export type CatalogCategory = {
   display_order?: number | null
 }
 
+export const AMILIA_ENROLL_URL =
+  "https://app.amilia.com/store/en/blazeroboticsacademy/shop/programs"
+
 export type CatalogSession = {
   id: string
   start_date: string
@@ -22,6 +25,7 @@ export type CatalogSession = {
   current_students: number
   status: string
   price_override?: number
+  days_of_week?: number[]
   location?: {
     id: string
     name: string
@@ -44,6 +48,7 @@ export type CatalogSession = {
   offering?: {
     id: string
     name: string
+    description?: string | null
     poster_url?: string | null
     offering_type?: {
       id: string
@@ -118,6 +123,18 @@ export type ProgramsFilterParams = {
 }
 
 export type ProgramsViewMode = "global" | "location"
+
+export type SessionListItem = {
+  session: CatalogSession
+  activity: DisplayActivity
+  program: DisplayProgram
+  location: DisplayLocation
+}
+
+export type OfferingTypeSessionGroup = {
+  offeringType: OfferingTypeOption
+  sessions: SessionListItem[]
+}
 
 export function sortCatalogCategories(categories: CatalogCategory[]): CatalogCategory[] {
   return [...categories].sort((a, b) => {
@@ -314,6 +331,95 @@ export function buildDisplayTree(
   }
 
   return locations
+}
+
+/** Group filtered sessions by offering type for List view (all type buckets shown, including empty). */
+export function buildOfferingTypeSessionGroups(
+  locations: DisplayLocation[],
+  offeringTypeOptions: OfferingTypeOption[]
+): OfferingTypeSessionGroup[] {
+  const groupMap = new Map<string, OfferingTypeSessionGroup>()
+
+  for (const ot of offeringTypeOptions) {
+    groupMap.set(ot.code, { offeringType: ot, sessions: [] })
+  }
+
+  for (const location of locations) {
+    for (const program of location.programs) {
+      for (const activity of program.activities) {
+        for (const session of activity.sessions) {
+          const ot = session.offering?.offering_type
+          const code = (ot?.code || "other").toLowerCase()
+          if (!groupMap.has(code)) {
+            groupMap.set(code, {
+              offeringType: {
+                id: ot?.id || code,
+                code,
+                name: ot?.name || code,
+              },
+              sessions: [],
+            })
+          }
+          groupMap.get(code)!.sessions.push({
+            session,
+            activity,
+            program,
+            location,
+          })
+        }
+      }
+    }
+  }
+
+  const ordered: OfferingTypeSessionGroup[] = []
+  const seen = new Set<string>()
+
+  for (const ot of offeringTypeOptions) {
+    ordered.push(groupMap.get(ot.code) ?? { offeringType: ot, sessions: [] })
+    seen.add(ot.code)
+  }
+
+  for (const [code, group] of groupMap) {
+    if (!seen.has(code)) {
+      ordered.push(group)
+    }
+  }
+
+  return ordered
+}
+
+export function countSessionsInGroups(groups: OfferingTypeSessionGroup[]): number {
+  return groups.reduce((sum, g) => sum + g.sessions.length, 0)
+}
+
+function normalizeDaysOfWeek(values: unknown[]): number[] {
+  return [...values]
+    .map((d) => (typeof d === "string" ? parseInt(d, 10) : Number(d)))
+    .filter((d) => !Number.isNaN(d))
+    .sort((a, b) => a - b)
+}
+
+export function getSessionDaysOfWeek(session: CatalogSession): number[] {
+  if (Array.isArray(session.days_of_week) && session.days_of_week.length > 0) {
+    return normalizeDaysOfWeek(session.days_of_week)
+  }
+  return []
+}
+
+export function isCourseOfferingSession(session: CatalogSession): boolean {
+  return session.offering?.offering_type?.code?.toLowerCase() === "course"
+}
+
+export function getOfferingDescription(session: CatalogSession): string {
+  return (
+    session.offering?.description?.trim() ||
+    session.course?.description?.trim() ||
+    ""
+  )
+}
+
+export function getSessionPosterUrl(session: CatalogSession): string | null {
+  return session.offering?.poster_url || session.course?.poster_url || null
 }
 
 export function buildProgramsPageHref(options: {

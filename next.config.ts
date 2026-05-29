@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { source: '/about/faq', destination: '/faq', permanent: true },
       { source: '/about/coaches', destination: '/about/teams', permanent: true },
       { source: '/journey/build', destination: '/journey/learn', permanent: true },
+      { source: '/locations', destination: '/?section=locations', permanent: true },
     ]
   },
   // 注意：静态导出配置暂时注释，因为 API Routes 需要先迁移

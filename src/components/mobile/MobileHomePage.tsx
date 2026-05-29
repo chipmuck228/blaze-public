@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { QuickActions } from './QuickActions'
 import { Button } from '@/components/ui/button'
 import { FeaturedCoursesMobile } from './FeaturedCoursesMobile'
@@ -28,8 +29,8 @@ export function MobileHomePage() {
           <p className="text-muted-foreground">
             Blaze your trail with robotics
           </p>
-          <Button size="lg" className="mt-4">
-            Browse Courses
+          <Button size="lg" className="mt-4" asChild>
+            <Link href="/programs">Browse Courses</Link>
           </Button>
         </div>
       </section>

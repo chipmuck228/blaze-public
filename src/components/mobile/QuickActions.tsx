@@ -16,6 +16,13 @@ interface QuickAction {
   requireAuth?: boolean
 }
 
+function scrollToLocationsSection() {
+  const el = document.getElementById('locations')
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
 export function QuickActions() {
   const router = useRouter()
   const { data: session, status } = useSession()
@@ -26,14 +33,21 @@ export function QuickActions() {
       title: 'Browse Courses',
       description: 'Explore all available courses',
       icon: BookOpen,
-      href: '/course-catalog',
+      href: '/programs',
     },
     {
       id: 'choose-location',
       title: 'Choose Campus',
       description: 'Find programs near you',
       icon: MapPin,
-      href: '/locations',
+      onClick: () => {
+        if (window.location.pathname === '/') {
+          scrollToLocationsSection()
+          window.history.replaceState(null, '', '#locations')
+        } else {
+          router.push('/#locations')
+        }
+      },
     },
     ...(PUBLIC_USER_AUTH_ENABLED
       ? ([

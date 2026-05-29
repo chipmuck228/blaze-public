@@ -56,6 +56,7 @@ export async function GET(request: Request) {
         end_time,
         max_students,
         is_course_type,
+        days_of_week,
         portal_service_role,
         instance_data_ext,
         program:v2_program!inner(
@@ -241,6 +242,15 @@ export async function GET(request: Request) {
       const currentStudents = row.current_students ?? 0
       const targetGrades = audience?.target_grades ?? extData.target_grades
       const gradeLevel = Array.isArray(targetGrades) && targetGrades.length > 0 ? targetGrades[0] : null
+      const rawDaysOfWeek =
+        row.days_of_week ??
+        (schedule && typeof schedule === "object" ? (schedule as { days_of_week?: unknown[] }).days_of_week : null)
+      const daysOfWeek = Array.isArray(rawDaysOfWeek)
+        ? rawDaysOfWeek
+            .map((d: unknown) => (typeof d === "string" ? parseInt(d, 10) : Number(d)))
+            .filter((d: number) => !Number.isNaN(d))
+            .sort((a: number, b: number) => a - b)
+        : []
       programData.instances.push({
         id: row.id,
         start_date: row.start_date ?? extData.start_date ?? schedule?.start_date ?? null,
@@ -251,6 +261,7 @@ export async function GET(request: Request) {
         current_students: currentStudents,
         status: row.status,
         price_override: row.price_override,
+        days_of_week: daysOfWeek.length > 0 ? daysOfWeek : undefined,
         location: campus
           ? {
               id: campus.id,
@@ -276,6 +287,7 @@ export async function GET(request: Request) {
           ? {
               id: offering.id,
               name: offering.name,
+              description: offering.description ?? null,
               poster_url: normalizeRemoteImageUrl(offering.poster_url),
               base_price: offering.base_price,
               offering_type: (() => {

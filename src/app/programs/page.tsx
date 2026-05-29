@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useEffect, useMemo, Suspense, useCallback } from "react"
+import { useState, useEffect, useMemo, Suspense, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Loader2, MapPin, Calendar, Search, ArrowRight, BookOpen, ExternalLink, ChevronDown, Users, Layers } from "lucide-react"
+import { Loader2, MapPin, Calendar, Search, ArrowRight, ExternalLink, LayoutList, LayoutGrid } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import Image from "next/image"
 import {
+  AMILIA_ENROLL_URL,
   buildDisplayTree,
+  buildOfferingTypeSessionGroups,
   collectOfferingTypesFromInstances,
-  countSessionsInLocation,
+  countSessionsInGroups,
+  getOfferingDescription,
   resolveCategoryIdFromUrl,
   sortCatalogCategories,
   sortOfferingTypeOptions,
@@ -19,13 +21,19 @@ import {
   type CatalogSession,
   type DisplayActivity,
   type DisplayLocation,
-  type DisplayProgram,
   type InstancesLocation,
   type OfferingTypeOption,
+  type SessionListItem,
 } from "@/lib/programs-catalog-view"
+import { SessionListRow } from "@/components/programs/SessionListRow"
+import { CourseDaysOfWeekBadges } from "@/components/programs/CourseDaysOfWeekBadges"
+import { LazySessionPoster } from "@/components/programs/LazySessionPoster"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+import { cn } from "@/lib/utils"
 
 type FranchiseListItem = { id: string; code: string; name: string }
+
+const NAVBAR_HEIGHT_PX = 80
 
 function getCategorySlug(categoryName: string): string {
   return (categoryName || "").replace(/_/g, "-")
@@ -42,6 +50,48 @@ function instanceDetailHref(
     : `/category/explore/instance/${sessionId}`
   if (!locationCode) return base
   return `${base}?location=${encodeURIComponent(locationCode)}`
+}
+
+function FilterTag({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap",
+        active
+          ? "bg-[#2563eb] text-white border-[#2563eb] shadow-sm"
+          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+      )}
+    >
+      {label}
+    </button>
+  )
+}
+
+function FilterTagGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 shrink-0 pt-1 sm:w-16">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  )
 }
 
 function SessionCard({
@@ -80,21 +130,37 @@ function SessionCard({
     `https://picsum.photos/400/300?random=${session.id}`
   const campusName = session.location?.name || franchise.name || "Multiple Locations"
   const detailHref = instanceDetailHref(activity, session.id, locationCode)
-  const amiliaEnrollUrl =
-    "https://app.amilia.com/store/en/blazeroboticsacademy/shop/programs"
+  const offeringTypeCode = session.offering?.offering_type?.code?.toLowerCase() ?? ""
+  const cardHoverClass =
+    offeringTypeCode === "camp"
+      ? "hover:border-orange-300 hover:shadow-orange-100/60 hover:ring-orange-100"
+      : offeringTypeCode === "course"
+        ? "hover:border-indigo-300 hover:shadow-indigo-100/60 hover:ring-indigo-100"
+        : offeringTypeCode === "workshop"
+          ? "hover:border-rose-300 hover:shadow-rose-100/60 hover:ring-rose-100"
+          : offeringTypeCode === "competition"
+            ? "hover:border-teal-300 hover:shadow-teal-100/60 hover:ring-teal-100"
+            : "hover:border-blue-300 hover:shadow-blue-100/60 hover:ring-blue-100"
 
   return (
-    <div className="group bg-white rounded-[32px] overflow-hidden border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col h-full">
+    <div
+      className={cn(
+        "group bg-white rounded-[32px] overflow-hidden border border-slate-200 shadow-sm",
+        "transition-all duration-300 ease-out flex flex-col h-full",
+        "hover:-translate-y-2 hover:shadow-2xl hover:ring-2 hover:ring-offset-0",
+        cardHoverClass
+      )}
+    >
       <Link href={detailHref} className="flex flex-col flex-grow">
         <div className="h-64 relative overflow-hidden">
-          <Image
+          <LazySessionPoster
             src={image}
             alt={session.course.name || activity.display_name || activity.name}
-            fill
-            className="object-cover group-hover:scale-110 transition-transform duration-700"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            containerClassName="absolute inset-0"
+            className="transition-transform duration-700 ease-out group-hover:scale-110"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-90" />
           <div className="absolute top-4 left-4 flex flex-col gap-2">
             <span className="bg-white/90 backdrop-blur-md text-slate-900 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
               {ageGroup}
@@ -117,41 +183,39 @@ function SessionCard({
             <h3 className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">
               {session.course.name || activity.name}
             </h3>
-            {activity.display_name && session.course.name !== activity.display_name && (
-              <Badge variant="secondary" className="text-xs font-semibold">
-                {activity.display_name}
-              </Badge>
-            )}
+            <CourseDaysOfWeekBadges session={session} />
           </div>
           <p className="text-slate-500 text-sm mb-6 line-clamp-3 leading-relaxed">
-            {session.course.description || ""}
+            {getOfferingDescription(session)}
           </p>
           <div className="mt-auto">
-            <div className="flex items-center text-slate-600 text-sm mb-6 bg-slate-50 p-3 rounded-xl">
+            <div className="flex items-center text-slate-600 text-sm mb-6 bg-slate-50 p-3 rounded-xl transition-colors duration-300 group-hover:bg-blue-50/60">
               <Calendar className="w-4 h-4 mr-2 text-blue-500" />
               <span className="font-medium">{dates}</span>
             </div>
           </div>
         </div>
       </Link>
-      <div className="px-8 pb-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-6">
+      <div className="px-8 pb-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-6 transition-colors duration-300 group-hover:border-blue-100">
         <div>
           <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Enrollment</p>
-          <p className="text-2xl font-black text-slate-900">${basePrice.toFixed(2)}</p>
+          <p className="text-2xl font-black text-slate-900 transition-colors duration-300 group-hover:text-[#2563eb]">
+            ${basePrice.toFixed(2)}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href={detailHref}
-            className="bg-[#0f172a] hover:bg-slate-800 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all inline-flex items-center justify-center"
+            className="bg-[#0f172a] hover:bg-slate-800 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all duration-300 inline-flex items-center justify-center group-hover:shadow-md"
           >
-            <ArrowRight className="w-4 h-4 md:mr-2 transition-transform group-hover:translate-x-1" />
+            <ArrowRight className="w-4 h-4 md:mr-2 transition-transform duration-300 group-hover:translate-x-1" />
             <span className="hidden md:inline">Details</span>
           </Link>
           <a
-            href={amiliaEnrollUrl}
+            href={AMILIA_ENROLL_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-[#2563eb] hover:bg-blue-600 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all inline-flex items-center justify-center"
+            className="bg-[#2563eb] hover:bg-blue-600 text-white p-3 md:px-6 md:py-3 rounded-2xl font-bold text-sm transition-all duration-300 inline-flex items-center justify-center group-hover:shadow-md group-hover:scale-[1.02]"
           >
             <ExternalLink className="w-4 h-4 md:mr-2" />
             <span className="hidden md:inline">Enroll</span>
@@ -183,6 +247,11 @@ function ProgramsPageContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAgeRange, setSelectedAgeRange] = useState<string>("all")
   const [globalOfferingTypes, setGlobalOfferingTypes] = useState<OfferingTypeOption[]>([])
+  const [catalogViewMode, setCatalogViewMode] = useState<"list" | "details">("list")
+  const filterAnchorRef = useRef<HTMLDivElement>(null)
+  const filterBarRef = useRef<HTMLDivElement>(null)
+  const [isFilterPinned, setIsFilterPinned] = useState(false)
+  const [filterBarHeight, setFilterBarHeight] = useState(0)
   useEffect(() => {
     if (catalogCategories.length === 0 && !categoryIdFromUrl && !programNameFromUrl) return
     const resolved = resolveCategoryIdFromUrl(catalogCategories, {
@@ -263,6 +332,29 @@ function ProgramsPageContent() {
     fetchData()
   }, [fetchData])
 
+  useEffect(() => {
+    const anchor = filterAnchorRef.current
+    const bar = filterBarRef.current
+    if (!anchor || !bar || isLoading || error) return
+
+    const syncHeight = () => setFilterBarHeight(bar.offsetHeight)
+    syncHeight()
+
+    const resizeObserver = new ResizeObserver(syncHeight)
+    resizeObserver.observe(bar)
+
+    const intersectionObserver = new IntersectionObserver(
+      ([entry]) => setIsFilterPinned(!entry.isIntersecting),
+      { threshold: 0, rootMargin: `-${NAVBAR_HEIGHT_PX}px 0px 0px 0px` }
+    )
+    intersectionObserver.observe(anchor)
+
+    return () => {
+      intersectionObserver.disconnect()
+      resizeObserver.disconnect()
+    }
+  }, [isLoading, error, locationFromUrl, selectedProgramCategoryId, offeringTypeFromUrl, selectedAgeRange, searchQuery, catalogViewMode])
+
   const selectedFranchiseId = useMemo(() => {
     if (!locationFromUrl) return "all"
     const f = allFranchiseList.find((x) => x.code === locationFromUrl)
@@ -304,30 +396,54 @@ function ProgramsPageContent() {
     router,
   ])
 
-  const displayTree = useMemo(
-    () =>
-      buildDisplayTree(
-        catalogCategories,
-        instancesFranchises,
-        {
-          selectedProgramCategoryId,
-          searchQuery,
-          selectedAgeRange,
-          selectedFranchiseId,
-          selectedOfferingTypeCode: offeringTypeFromUrl,
-        },
-        "global",
-        null
-      ),
+  const sessionFilters = useMemo(
+    () => ({
+      selectedProgramCategoryId,
+      searchQuery,
+      selectedAgeRange,
+      selectedFranchiseId,
+      selectedOfferingTypeCode: offeringTypeFromUrl,
+    }),
     [
-      catalogCategories,
-      instancesFranchises,
       selectedProgramCategoryId,
       searchQuery,
       selectedAgeRange,
       selectedFranchiseId,
       offeringTypeFromUrl,
     ]
+  )
+
+  const displayTree = useMemo(
+    () =>
+      buildDisplayTree(
+        catalogCategories,
+        instancesFranchises,
+        sessionFilters,
+        "global",
+        null
+      ),
+    [catalogCategories, instancesFranchises, sessionFilters]
+  )
+
+  const offeringTypesForGroups = useMemo(() => {
+    if (visibleOfferingTypeOptions.length > 0) return visibleOfferingTypeOptions
+    if (globalOfferingTypes.length > 0) return globalOfferingTypes
+    return collectOfferingTypesFromInstances(instancesFranchises, selectedFranchiseId)
+  }, [
+    visibleOfferingTypeOptions,
+    globalOfferingTypes,
+    instancesFranchises,
+    selectedFranchiseId,
+  ])
+
+  const offeringTypeGroups = useMemo(
+    () => buildOfferingTypeSessionGroups(displayTree, offeringTypesForGroups),
+    [displayTree, offeringTypesForGroups]
+  )
+
+  const nonEmptyOfferingTypeGroups = useMemo(
+    () => offeringTypeGroups.filter((group) => group.sessions.length > 0),
+    [offeringTypeGroups]
   )
 
   const activeLocName = useMemo(() => {
@@ -400,8 +516,75 @@ function ProgramsPageContent() {
     updateUrl({ programCategoryId: null, location: null, offeringType: null })
   }
 
-  const showLocationHeaders = !locationFromUrl && displayTree.length > 1
-  const totalSessions = displayTree.reduce((n, loc) => n + countSessionsInLocation(loc), 0)
+  const totalSessions = countSessionsInGroups(nonEmptyOfferingTypeGroups)
+
+  const renderNoSessionsMessage = () => (
+    <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-slate-300">
+      <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+        <Search className="w-10 h-10 text-slate-300" />
+      </div>
+      <p className="text-slate-500 text-sm font-medium max-w-md mx-auto mb-8">
+        We couldn&apos;t find the session you&apos;re looking for.
+      </p>
+      <button
+        type="button"
+        onClick={clearAllFilters}
+        className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold hover:bg-blue-700 transition-all"
+      >
+        Clear All Filters
+      </button>
+    </div>
+  )
+
+  const renderOfferingTypeGroupSections = (
+    renderSession: (item: SessionListItem, locCode: string | null) => React.ReactNode
+  ) => (
+    <div className="space-y-12">
+      {nonEmptyOfferingTypeGroups.map((group) => {
+        const count = group.sessions.length
+        const locCode = locationFromUrl || null
+
+        return (
+          <div key={group.offeringType.code} className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900">
+                {group.offeringType.name}
+              </h2>
+              <Badge variant="secondary" className="text-sm font-semibold px-3 py-1">
+                {count} session{count !== 1 ? "s" : ""}
+              </Badge>
+            </div>
+
+            <div className={catalogViewMode === "list" ? "space-y-3" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"}>
+              {group.sessions.map((item: SessionListItem) =>
+                renderSession(item, locCode || item.location.code)
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const renderListView = () =>
+    renderOfferingTypeGroupSections((item, locCode) => (
+      <SessionListRow
+        key={item.session.id}
+        item={item}
+        detailHref={instanceDetailHref(item.activity, item.session.id, locCode)}
+      />
+    ))
+
+  const renderDetailsView = () =>
+    renderOfferingTypeGroupSections((item, locCode) => (
+      <SessionCard
+        key={item.session.id}
+        session={item.session}
+        activity={item.activity}
+        franchise={item.location}
+        locationCode={locCode}
+      />
+    ))
 
   if (isLoading) {
     return (
@@ -457,205 +640,125 @@ function ProgramsPageContent() {
           </div>
         </section>
 
-        <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-20">
-          <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 p-4 sm:p-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch">
-            <div className="relative w-full sm:flex-1 sm:min-w-0">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+        <div className="relative z-10 max-w-7xl mx-auto px-4 -mt-10">
+          <div ref={filterAnchorRef} className="h-px w-full" aria-hidden />
+          {isFilterPinned ? <div style={{ height: filterBarHeight }} aria-hidden /> : null}
+          <div
+            ref={filterBarRef}
+            className={cn(
+              "pb-4",
+              isFilterPinned
+                ? "fixed top-20 left-0 right-0 z-40 bg-slate-50/95 backdrop-blur-md border-b border-slate-200 shadow-md"
+                : "relative"
+            )}
+          >
+            <div className="max-w-7xl mx-auto px-4 pt-2">
+              <div className="bg-white/95 backdrop-blur-md rounded-[28px] shadow-xl border border-slate-200 p-3 sm:p-4 flex flex-col gap-3">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search programs, activities, or sessions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
               />
             </div>
 
-            <div className="relative group w-full sm:flex-1 sm:min-w-0">
-              <button
-                type="button"
-                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
-              >
-                <span className="flex-1 min-w-0 truncate text-left">
-                  {locationFromUrl
-                    ? allFranchiseList.find((f) => f.code === locationFromUrl)?.name ?? "All campuses"
-                    : "All campuses"}
-                </span>
-                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
-              </button>
-              <div className="absolute top-full left-0 pt-2 w-[min(320px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
-                  <div className="max-h-[min(320px,50vh)] overflow-y-auto py-2">
-                    <button
-                      type="button"
-                      onClick={() => handleLocationChange("all")}
-                      className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
-                        !locationFromUrl ? "bg-slate-100 text-[#2563eb]" : "text-[#1e3a5f] hover:bg-slate-100"
-                      }`}
-                    >
-                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                        <MapPin className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 font-medium">All campuses</div>
-                    </button>
-                    {allFranchiseList.map((franchise) => (
-                      <button
-                        key={franchise.id}
-                        type="button"
-                        onClick={() => handleLocationChange(franchise.code)}
-                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
-                          locationFromUrl === franchise.code
-                            ? "bg-slate-100 text-[#2563eb]"
-                            : "text-[#1e3a5f] hover:bg-slate-100"
-                        }`}
-                      >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                          <MapPin className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0 font-medium">{franchise.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <FilterTagGroup label="Campus">
+                <FilterTag
+                  label="All campuses"
+                  active={!locationFromUrl}
+                  onClick={() => handleLocationChange("all")}
+                />
+                {allFranchiseList.map((franchise) => (
+                  <FilterTag
+                    key={franchise.id}
+                    label={franchise.name}
+                    active={locationFromUrl === franchise.code}
+                    onClick={() => handleLocationChange(franchise.code)}
+                  />
+                ))}
+              </FilterTagGroup>
+
+              <FilterTagGroup label="Program">
+                <FilterTag
+                  label="All programs"
+                  active={selectedProgramCategoryId === "all"}
+                  onClick={() => handleProgramCategoryChange("all")}
+                />
+                {sortedCatalog.map((cat) => (
+                  <FilterTag
+                    key={cat.id}
+                    label={cat.display_name || cat.name}
+                    active={selectedProgramCategoryId === cat.id}
+                    onClick={() => handleProgramCategoryChange(cat.id)}
+                  />
+                ))}
+              </FilterTagGroup>
+
+              <FilterTagGroup label="Type">
+                <FilterTag
+                  label="All types"
+                  active={offeringTypeFromUrl === "all"}
+                  onClick={() => handleOfferingTypeChange("all")}
+                />
+                {visibleOfferingTypeOptions.map((type) => (
+                  <FilterTag
+                    key={type.id}
+                    label={type.name}
+                    active={offeringTypeFromUrl === type.code}
+                    onClick={() => handleOfferingTypeChange(type.code)}
+                  />
+                ))}
+              </FilterTagGroup>
+
+              <FilterTagGroup label="Age">
+                {ageRangeOptions.map((opt) => (
+                  <FilterTag
+                    key={opt.value}
+                    label={opt.label}
+                    active={selectedAgeRange === opt.value}
+                    onClick={() => setSelectedAgeRange(opt.value)}
+                  />
+                ))}
+              </FilterTagGroup>
             </div>
 
-            <div className="relative group w-full sm:flex-1 sm:min-w-0">
-              <button
-                type="button"
-                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
-              >
-                <span className="flex-1 min-w-0 truncate text-left">
-                  {selectedProgramCategoryId === "all"
-                    ? "All programs"
-                    : sortedCatalog.find((c) => c.id === selectedProgramCategoryId)?.display_name ||
-                      "All programs"}
-                </span>
-                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
-              </button>
-              <div className="absolute top-full left-0 pt-2 w-[min(320px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
-                  <div className="max-h-[min(400px,60vh)] overflow-y-auto py-2">
-                    <button
-                      type="button"
-                      onClick={() => handleProgramCategoryChange("all")}
-                      className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
-                        selectedProgramCategoryId === "all"
-                          ? "bg-slate-100 text-[#2563eb]"
-                          : "text-[#1e3a5f] hover:bg-slate-100"
-                      }`}
-                    >
-                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                        <BookOpen className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 font-medium">All programs</div>
-                    </button>
-                    {sortedCatalog.map((cat) => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => handleProgramCategoryChange(cat.id)}
-                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
-                          selectedProgramCategoryId === cat.id
-                            ? "bg-slate-100 text-[#2563eb]"
-                            : "text-[#1e3a5f] hover:bg-slate-100"
-                        }`}
-                      >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                          <BookOpen className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0 font-medium">{cat.display_name || cat.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+              <p className="text-[11px] text-slate-500 hidden sm:block">
+                {catalogViewMode === "list"
+                  ? "Sessions grouped by offering type"
+                  : "Full session cards grouped by offering type"}
+              </p>
+              <div className="flex items-center gap-1 ml-auto bg-slate-100 p-0.5 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode("list")}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    catalogViewMode === "list"
+                      ? "bg-white text-[#2563eb] shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode("details")}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    catalogViewMode === "details"
+                      ? "bg-white text-[#2563eb] shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Details
+                </button>
               </div>
             </div>
-
-            <div className="relative group w-full sm:flex-1 sm:min-w-0">
-              <button
-                type="button"
-                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
-              >
-                <span className="flex-1 min-w-0 truncate text-left">
-                  {offeringTypeFromUrl === "all"
-                    ? "All types"
-                    : visibleOfferingTypeOptions.find((t) => t.code === offeringTypeFromUrl)?.name ||
-                      globalOfferingTypes.find((t) => t.code === offeringTypeFromUrl)?.name ||
-                      offeringTypeFromUrl}
-                </span>
-                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
-              </button>
-              <div className="absolute top-full left-0 pt-2 w-[min(280px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
-                  <div className="max-h-[min(320px,50vh)] overflow-y-auto py-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOfferingTypeChange("all")}
-                      className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 ${
-                        offeringTypeFromUrl === "all"
-                          ? "bg-slate-100 text-[#2563eb]"
-                          : "text-[#1e3a5f] hover:bg-slate-100"
-                      }`}
-                    >
-                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                        <Layers className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0 font-medium">All types</div>
-                    </button>
-                    {visibleOfferingTypeOptions.map((type) => (
-                      <button
-                        key={type.id}
-                        type="button"
-                        onClick={() => handleOfferingTypeChange(type.code)}
-                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
-                          offeringTypeFromUrl === type.code
-                            ? "bg-slate-100 text-[#2563eb]"
-                            : "text-[#1e3a5f] hover:bg-slate-100"
-                        }`}
-                      >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                          <Layers className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0 font-medium">{type.name}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="relative group w-full sm:flex-1 sm:min-w-0">
-              <button
-                type="button"
-                className="flex items-center gap-2 px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors w-full min-w-0"
-              >
-                <span className="flex-1 min-w-0 truncate text-left">
-                  {ageRangeOptions.find((o) => o.value === selectedAgeRange)?.label ?? "All Ages"}
-                </span>
-                <ChevronDown className="w-4 h-4 shrink-0 transition-transform group-hover:rotate-180 text-slate-500" />
-              </button>
-              <div className="absolute top-full left-0 pt-2 w-[min(280px,calc(100vw-2rem))] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                <div className="bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden">
-                  <div className="py-2">
-                    {ageRangeOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setSelectedAgeRange(opt.value)}
-                        className={`flex gap-3 px-3 py-2.5 text-sm transition-colors w-full text-left border-b border-slate-100 last:border-0 ${
-                          selectedAgeRange === opt.value
-                            ? "bg-slate-100 text-[#2563eb]"
-                            : "text-[#1e3a5f] hover:bg-slate-100"
-                        }`}
-                      >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                          <Users className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0 font-medium">{opt.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -663,109 +766,19 @@ function ProgramsPageContent() {
 
         <section className="py-16 px-4">
           <div className="max-w-7xl mx-auto">
-            {displayTree.length > 0 && totalSessions > 0 && (
-              <p className="text-slate-500 text-sm text-center mb-10 max-w-2xl mx-auto">
-                Results are grouped by campus, program, and activity. Each card is a bookable session—tap for
-                schedule, price, and enrollment.
-              </p>
-            )}
-            {displayTree.length > 0 ? (
-              <div className="space-y-12">
-                {displayTree.map((location) => (
-                  <div key={location.id} className="space-y-8">
-                    {showLocationHeaders && (
-                      <div className="flex items-center gap-4">
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
-                        <h2 className="text-3xl md:text-4xl font-black text-slate-900">{location.name}</h2>
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
-                      </div>
-                    )}
-
-                    {location.programs.map((program: DisplayProgram) => {
-                      const activityCount = program.activities.length
-                      const sessionCount = program.activities.reduce(
-                        (n, a) => n + a.sessions.length,
-                        0
-                      )
-                      const locCode = locationFromUrl || location.code
-
-                      return (
-                        <div key={program.id} className="space-y-6">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="bg-[#2563eb] text-white px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-wider">
-                              {program.display_name}
-                            </span>
-                            <span className="text-slate-500 text-sm font-medium">
-                              {activityCount} activit{activityCount === 1 ? "y" : "ies"}
-                              {sessionCount > 0 &&
-                                ` · ${sessionCount} session${sessionCount !== 1 ? "s" : ""}`}
-                            </span>
-                          </div>
-
-                          {program.activities.length === 0 ? (
-                            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-8 text-center">
-                              <p className="text-slate-500 text-sm font-medium">Activities coming soon</p>
-                            </div>
-                          ) : (
-                            program.activities.map((activity) => (
-                              <div key={activity.id} className="space-y-4 pl-0 sm:pl-2">
-                                <div>
-                                  <h3 className="text-lg font-bold text-slate-800">
-                                    {activity.display_name || activity.name}
-                                  </h3>
-                                  {activity.description ? (
-                                    <p className="text-slate-500 text-sm mt-1 max-w-2xl">
-                                      {activity.description}
-                                    </p>
-                                  ) : null}
-                                  <p className="text-slate-400 text-xs mt-1">
-                                    {activity.sessions.length} session
-                                    {activity.sessions.length !== 1 ? "s" : ""} available
-                                  </p>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                  {activity.sessions.map((session) => (
-                                    <SessionCard
-                                      key={session.id}
-                                      session={session}
-                                      activity={activity}
-                                      franchise={location}
-                                      locationCode={locCode}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))}
-              </div>
+            {nonEmptyOfferingTypeGroups.length > 0 ? (
+              <>
+                {totalSessions > 0 && (
+                  <p className="text-slate-500 text-sm text-center mb-10 max-w-2xl mx-auto">
+                    {catalogViewMode === "list"
+                      ? "Sessions are grouped by offering type. Switch to Details for full session cards."
+                      : "Full session cards grouped by offering type. Switch to List for a compact overview."}
+                  </p>
+                )}
+                {catalogViewMode === "list" ? renderListView() : renderDetailsView()}
+              </>
             ) : (
-              <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-slate-300">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Search className="w-10 h-10 text-slate-300" />
-                </div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-2">No Matching Sessions</h2>
-                <p className="text-slate-500 max-w-md mx-auto mb-4">
-                  We couldn&apos;t find sessions matching your filters
-                  {activeLocName ? ` at ${activeLocName}` : ""}. Try another program, offering type, age range, or clear
-                  filters.
-                </p>
-                <p className="text-slate-400 text-sm max-w-sm mx-auto mb-8">
-                  Programs are learning tracks; activities are terms or seasons; sessions are the classes you
-                  can book. Pick a campus in the navbar or filter above to narrow results.
-                </p>
-                <button
-                  type="button"
-                  onClick={clearAllFilters}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold hover:bg-blue-700 transition-all"
-                >
-                  Clear All Filters
-                </button>
-              </div>
+              renderNoSessionsMessage()
             )}
           </div>
         </section>

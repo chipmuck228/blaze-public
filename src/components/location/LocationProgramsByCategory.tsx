@@ -3,6 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowRight, Star } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { buildProgramsPageHref } from "@/lib/programs-catalog-view"
 
 export type LocationProgram = {
@@ -12,6 +13,7 @@ export type LocationProgram = {
   description: string | null
   poster_url: string | null
   featured: boolean
+  session_count: number
   category: { id: string; name: string; display_name: string } | null
 }
 
@@ -31,6 +33,54 @@ interface LocationProgramsByCategoryProps {
   programsGroupedByCategory: CategoryGroup[]
   franchiseCode: string
   locationName: string
+}
+
+function journeyHrefForProgram(categoryName: string): string {
+  const code = (categoryName || "").toLowerCase()
+  return `/journey/${encodeURIComponent(code)}`
+}
+
+function sessionCountLabel(count: number): string {
+  return count === 1 ? "1 Session" : `${count} Sessions`
+}
+
+function activitySessionBadgeLabel(count: number): string {
+  if (count === 0) return "Coming Soon"
+  return sessionCountLabel(count)
+}
+
+function normalizeActivityText(value: string): string {
+  return value.toLowerCase().replace(/[_\s-]+/g, " ").trim()
+}
+
+/** C-end Activity title: display_name only; humanize DB name if display_name is empty. */
+function getActivityTitle(program: LocationProgram): string {
+  const displayName = program.display_name?.trim()
+  if (displayName) return displayName
+  return humanizeActivityName(program.name)
+}
+
+function humanizeActivityName(name: string): string {
+  return (name || "")
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
+}
+
+/** Omit description when it repeats the title or exposes raw activity name. */
+function getActivityDescription(program: LocationProgram, title: string): string | null {
+  const description = program.description?.trim()
+  if (!description) return null
+
+  const normalizedTitle = normalizeActivityText(title)
+  const normalizedDescription = normalizeActivityText(description)
+  const normalizedName = normalizeActivityText(program.name)
+
+  if (normalizedDescription === normalizedTitle) return null
+  if (normalizedDescription === normalizedName) return null
+
+  return description
 }
 
 function LocationHeader({
@@ -90,7 +140,12 @@ export function LocationProgramsByCategory({
               >
                 <div className="mb-6">
                   <h3 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {group.category.display_name}
+                    <Link
+                      href={journeyHrefForProgram(group.category.name)}
+                      className="hover:text-[#2563eb] dark:hover:text-blue-400 transition-colors"
+                    >
+                      {group.category.display_name}
+                    </Link>
                   </h3>
                   {group.category.description ? (
                     <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 max-w-2xl lg:max-w-none">
@@ -99,19 +154,14 @@ export function LocationProgramsByCategory({
                   ) : null}
                 </div>
 
-                {group.programs.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 bg-white/80 dark:bg-slate-800/40 p-8 text-center min-h-[200px] flex items-center justify-center">
-                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
-                      Activities coming soon
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-1 gap-4 lg:gap-4">
-                    {group.programs.map((program) => {
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-1 gap-4 lg:gap-4">
+                  {group.programs.map((program) => {
                       const posterUrl =
                         program.poster_url ||
                         `https://picsum.photos/400/300?random=${program.id}`
                       const isFeatured = program.featured
+                      const activityTitle = getActivityTitle(program)
+                      const activityDescription = getActivityDescription(program, activityTitle)
 
                       return (
                         <Link
@@ -126,7 +176,7 @@ export function LocationProgramsByCategory({
                           <div className="relative h-40 shrink-0 overflow-hidden">
                             <Image
                               src={posterUrl}
-                              alt={program.display_name || program.name}
+                              alt={activityTitle}
                               fill
                               className="object-cover group-hover:scale-105 transition-transform duration-300"
                               sizes="(max-width: 1024px) 50vw, 360px"
@@ -138,16 +188,27 @@ export function LocationProgramsByCategory({
                                 Featured
                               </span>
                             )}
+                            <Badge
+                              variant={program.session_count === 0 ? "outline" : "secondary"}
+                              className={
+                                program.session_count === 0
+                                  ? "absolute top-2 right-2 bg-white/95 text-slate-600 border-slate-300/80 shadow-sm text-xs font-semibold"
+                                  : "absolute top-2 right-2 bg-white/95 text-slate-800 border-slate-200/80 shadow-sm text-xs font-semibold"
+                              }
+                            >
+                              {activitySessionBadgeLabel(program.session_count)}
+                            </Badge>
                           </div>
                           <div className="p-4 flex flex-col flex-grow">
                             <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors line-clamp-2">
-                              {program.display_name || program.name}
+                              {activityTitle}
                             </h4>
-                            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 line-clamp-2 flex-grow">
-                              {program.description ||
-                                `Explore ${program.display_name || program.name}.`}
-                            </p>
-                            <div className="mt-3 flex items-center justify-between">
+                            {activityDescription ? (
+                              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 line-clamp-3 flex-grow">
+                                {activityDescription}
+                              </p>
+                            ) : null}
+                            <div className={`flex items-center justify-between ${activityDescription ? "mt-3" : "mt-auto pt-3"}`}>
                               <span className="text-xs text-slate-500">View schedule</span>
                               <ArrowRight className="h-4 w-4 text-[#2563eb] group-hover:translate-x-1 transition-transform" />
                             </div>
@@ -155,8 +216,7 @@ export function LocationProgramsByCategory({
                         </Link>
                       )
                     })}
-                  </div>
-                )}
+                </div>
               </div>
             ))}
           </div>

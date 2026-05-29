@@ -678,7 +678,7 @@ function CategoryPageContent() {
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link
-                    href="/locations"
+                    href="/#locations"
                     className="inline-flex items-center gap-2 border-2 border-slate-300 text-slate-700 px-6 py-3 rounded-full font-bold hover:bg-slate-50"
                   >
                     View campuses

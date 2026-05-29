@@ -55,7 +55,7 @@ export function LocationSelectionMobile() {
   }
 
   return (
-    <section className="px-4 py-6">
+    <section id="locations" className="px-4 py-6 scroll-mt-24">
       <div className="mb-4">
         <h2 className="text-xl font-semibold">Choose Your Campus</h2>
         <p className="text-sm text-muted-foreground mt-1">

@@ -262,6 +262,39 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     console.error("[LocationPage] Error fetching v2_program:", programsError)
   }
 
+  const programIds = (programsData || []).map((row: { id: string }) => row.id)
+  const sessionCountByProgramId = new Map<string, number>()
+
+  if (programIds.length > 0) {
+    // Filter on v2_instance.program_id — not program.franchise_id embed (PostgREST embed
+    // filters on nested columns are unreliable without resolving program ids first).
+    const { data: sessionCountRows, error: sessionCountError } = await supabaseAdmin
+      .from("v2_instance")
+      .select(
+        `
+        program_id,
+        portal_service_role,
+        offering:v2_offering!inner(status)
+      `
+      )
+      .eq("is_active", true)
+      .in("status", ["scheduled", "ongoing"])
+      .in("program_id", programIds)
+
+    if (sessionCountError) {
+      console.error("[LocationPage] Error fetching session counts:", sessionCountError)
+    } else {
+      for (const row of sessionCountRows || []) {
+        if (row.portal_service_role) continue
+        const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
+        if ((offering as { status?: string } | null)?.status !== "published") continue
+        const programId = row.program_id as string | null
+        if (!programId) continue
+        sessionCountByProgramId.set(programId, (sessionCountByProgramId.get(programId) ?? 0) + 1)
+      }
+    }
+  }
+
   const programs: LocationProgram[] = (programsData || []).map(
     (row: any) => ({
       id: row.id,
@@ -270,6 +303,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
       description: row.description ?? null,
       poster_url: row.poster_url ?? null,
       featured: row.featured === true,
+      session_count: sessionCountByProgramId.get(row.id) ?? 0,
       category: row.category
         ? {
             id: row.category.id,
@@ -280,7 +314,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     })
   )
 
-  // 该 franchise 订阅的全部 category（含无 program 的），用于「按兴趣探索」区块
+  // 该 franchise 订阅的 category；仅展示至少有一个 activity 的 program
   const programsGroupedByCategory: CategoryGroup[] = (() => {
     const programsByCategoryId = new Map<string, LocationProgram[]>()
     for (const program of programs) {
@@ -318,7 +352,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
           programs: programsByCategoryId.get(c.id) ?? [],
         }
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .filter((item): item is NonNullable<typeof item> => item !== null && item.programs.length > 0)
 
     return subscribed.sort((a, b) => {
       const orderA = a.mapOrder ?? a.category.display_order ?? 999

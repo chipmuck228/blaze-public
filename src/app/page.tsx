@@ -2,17 +2,12 @@
 import { useState, useEffect } from "react";
 import { usePlatform } from "@/hooks/usePlatform";
 import { Navbar } from "@/components/Navbar";
-import { Cta } from "@/components/Cta";
 import { Hero } from "@/components/Hero";
 import { Advantages } from "@/components/Advantages";
-import { Courses } from "@/components/Courses";
-import { Camps } from "@/components/Camps";
 import { Categories } from "@/components/Categories";
 import { Testimonials } from "@/components/Testimonials";
 import { Footer } from "@/components/Footer";
 import { Newsletter } from "@/components/Newsletter";
-import { Team } from "@/components/Team";
-import { Faq } from "@/components/Faq";
 import { MobileHomePage } from "@/components/mobile/MobileHomePage";
 import { MobileLayout } from "./mobile-layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,8 +18,6 @@ import { RoboticsJourney } from "@/components/RoboticsJourney";
 
 export default function Home() {
   const { isNative, isReady } = usePlatform();
-  const [mounted, setMounted] = useState(false);
-  const [activeSection, setActiveSection] = useState<'courses' | 'camps'>('courses');
   const [franchises, setFranchises] = useState<Array<{
     id: string;
     code: string;
@@ -56,53 +49,26 @@ export default function Home() {
     franchise?: { id: string; code: string; name: string | null };
   } | null>(null);
 
+  // Scroll to campuses section when linked via /#locations or legacy /locations redirect
   useEffect(() => {
-    setMounted(true);
+    const scrollToLocations = () => {
+      const el = document.getElementById('locations');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
 
-    // Check initial hash only if it exists
-    const hash = window.location.hash;
-    if (hash === '#camps') {
-      setActiveSection('camps');
-      // Scroll to camps section after a short delay to ensure it's rendered
-      setTimeout(() => {
-        const element = document.getElementById('camps');
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
-    } else if (hash === '#courses') {
-      setActiveSection('courses');
-      // Scroll to courses section after a short delay
-      setTimeout(() => {
-        const element = document.getElementById('courses');
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('section') === 'locations') {
+      setTimeout(scrollToLocations, 150);
+      window.history.replaceState(null, '', `${window.location.pathname}#locations`);
+    } else if (window.location.hash === '#locations') {
+      setTimeout(scrollToLocations, 150);
     }
-    // If no hash, default to courses (no scrolling)
 
-    // Listen for hash changes (when user clicks navbar links)
     const handleHashChange = () => {
-      const newHash = window.location.hash;
-      if (newHash === '#camps') {
-        setActiveSection('camps');
-        // Scroll to camps section
-        setTimeout(() => {
-          const element = document.getElementById('camps');
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }, 100);
-      } else if (newHash === '#courses') {
-        setActiveSection('courses');
-        // Scroll to courses section
-        setTimeout(() => {
-          const element = document.getElementById('courses');
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }, 100);
+      if (window.location.hash === '#locations') {
+        setTimeout(scrollToLocations, 100);
       }
     };
 
@@ -204,7 +170,7 @@ export default function Home() {
         {/* Location selection section */}
         <section
           id="locations"
-          className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-16 sm:py-20"
+          className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl py-16 sm:py-20 scroll-mt-24"
         >
           {isLoadingFranchises ? (
             <div className="py-12 text-center text-muted-foreground">
