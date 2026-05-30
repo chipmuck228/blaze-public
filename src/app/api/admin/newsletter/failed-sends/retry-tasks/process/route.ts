@@ -1,36 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { sendNewsletterEmail } from "@/lib/email"
-
-// Helper function to append unsubscribe link if not already present
-function appendUnsubscribeLink(htmlContent: string, unsubscribeLink: string): string {
-  const hasUnsubscribeLink =
-    htmlContent.includes(unsubscribeLink) ||
-    htmlContent.includes("/newsletter/unsubscribe?token=")
-
-  if (hasUnsubscribeLink) {
-    return htmlContent
-  }
-
-  const unsubscribeFooter = `
-    <div style="margin-top: 40px; padding: 20px; border-top: 1px solid #e0e0e0; text-align: center; font-size: 12px; color: #666;">
-      <p style="margin: 0 0 10px 0;">
-        You are receiving this email because you subscribed to our newsletter.
-      </p>
-      <p style="margin: 0;">
-        <a href="${unsubscribeLink}" style="color: #666; text-decoration: underline;">
-          Unsubscribe from this list
-        </a>
-      </p>
-    </div>
-  `
-
-  if (htmlContent.includes("</body>")) {
-    return htmlContent.replace("</body>", `${unsubscribeFooter}</body>`)
-  } else {
-    return htmlContent + unsubscribeFooter
-  }
-}
+import { prepareNewsletterHtmlForSend } from "@/lib/newsletter-template-runtime"
 
 /**
  * POST /api/admin/newsletter/failed-sends/retry-tasks/process
@@ -198,13 +169,18 @@ export async function POST(request: Request) {
         const subject = campaign.subject || "Newsletter"
 
         // 准备邮件内容
-        const unsubscribeLink = `${baseUrl}/newsletter/unsubscribe?token=${subscriber.unsubscribe_token}`
-        let content = template.content_html.replace(/{{unsubscribe_link}}/g, unsubscribeLink)
-        content = appendUnsubscribeLink(content, unsubscribeLink)
+        const content = prepareNewsletterHtmlForSend(template.content_html, {
+          baseUrl,
+          unsubscribeToken: subscriber.unsubscribe_token,
+        })
 
-        // 发送邮件
         console.log(`[Process API] Sending email to ${subscriber.email} for send ${send.id}`)
-        await sendNewsletterEmail(subscriber.email, subject, content)
+        const sendResult = await sendNewsletterEmail(subscriber.email, subject, content, {
+          tags: [
+            { name: "campaign_id", value: campaign.id },
+            { name: "subscriber_id", value: subscriber.id },
+          ],
+        })
         console.log(`[Process API] Email sent successfully to ${subscriber.email}`)
 
         // 更新发送记录为成功
@@ -213,6 +189,8 @@ export async function POST(request: Request) {
           .update({
             status: "sent",
             sent_at: new Date().toISOString(),
+            resend_email_id: sendResult.resendEmailId ?? null,
+            error_message: null,
             retry_count: (send.retry_count || 0) + 1,
             last_retry_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),

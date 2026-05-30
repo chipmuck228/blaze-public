@@ -28,6 +28,16 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, Eye, X, CheckCircle2, Clock, Send, AlertCircle, Ban } from "lucide-react"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import {
+  CampaignDeliveryBadge,
+  NewsletterDeliveryPanel,
+} from "@/components/admin/newsletter/NewsletterDeliveryPanel"
+
+interface CampaignDelivery {
+  mode: "broadcast" | "per_recipient"
+  label: string
+  resendBroadcastId: string | null
+}
 
 interface Campaign {
   id: string
@@ -40,6 +50,7 @@ interface Campaign {
   sent_count: number
   failed_count: number
   created_at: string
+  resend_broadcast_id?: string | null
   newsletter_templates: {
     id: string
     name: string
@@ -64,6 +75,7 @@ export default function NewsletterCampaignsPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [campaignStats, setCampaignStats] = useState<CampaignStats | null>(null)
+  const [campaignDelivery, setCampaignDelivery] = useState<CampaignDelivery | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const limit = 20
@@ -106,6 +118,7 @@ export default function NewsletterCampaignsPage() {
     setSelectedCampaign(campaign)
     setIsDetailDialogOpen(true)
     setIsLoadingDetails(true)
+    setCampaignDelivery(null)
 
     try {
       const response = await fetch(`/api/admin/newsletter/campaigns/${campaign.id}`)
@@ -114,6 +127,13 @@ export default function NewsletterCampaignsPage() {
       }
       const data = await response.json()
       setCampaignStats(data.stats)
+      setCampaignDelivery(data.delivery ?? null)
+      if (data.campaign?.resend_broadcast_id) {
+        setSelectedCampaign({
+          ...campaign,
+          resend_broadcast_id: data.campaign.resend_broadcast_id,
+        })
+      }
     } catch (error: any) {
       console.error("Error fetching campaign details:", error)
       adminToast.error("Failed to load campaign details")
@@ -212,6 +232,8 @@ export default function NewsletterCampaignsPage() {
         </p>
       </div>
 
+      <NewsletterDeliveryPanel variant="compact" />
+
       {/* Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -265,6 +287,7 @@ export default function NewsletterCampaignsPage() {
                     <TableHead>Template</TableHead>
                     <TableHead>Subject</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Delivery</TableHead>
                     <TableHead>Scheduled At</TableHead>
                     <TableHead>Sent At</TableHead>
                     <TableHead>Recipients</TableHead>
@@ -280,6 +303,11 @@ export default function NewsletterCampaignsPage() {
                       </TableCell>
                       <TableCell>{campaign.subject}</TableCell>
                       <TableCell>{getStatusBadge(campaign.status)}</TableCell>
+                      <TableCell>
+                        <CampaignDeliveryBadge
+                          resendBroadcastId={campaign.resend_broadcast_id}
+                        />
+                      </TableCell>
                       <TableCell>{formatDate(campaign.scheduled_at)}</TableCell>
                       <TableCell>{formatDate(campaign.sent_at)}</TableCell>
                       <TableCell>
@@ -396,6 +424,27 @@ export default function NewsletterCampaignsPage() {
                     <div className="mt-1">{getStatusBadge(selectedCampaign.status)}</div>
                   </div>
                   <div>
+                    <span className="text-muted-foreground">Delivery:</span>
+                    <div className="mt-1">
+                      <CampaignDeliveryBadge
+                        resendBroadcastId={
+                          campaignDelivery?.resendBroadcastId ??
+                          selectedCampaign.resend_broadcast_id
+                        }
+                      />
+                    </div>
+                  </div>
+                  {(campaignDelivery?.resendBroadcastId ||
+                    selectedCampaign.resend_broadcast_id) && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Resend broadcast ID:</span>
+                      <p className="font-mono text-xs break-all">
+                        {campaignDelivery?.resendBroadcastId ??
+                          selectedCampaign.resend_broadcast_id}
+                      </p>
+                    </div>
+                  )}
+                  <div>
                     <span className="text-muted-foreground">Created:</span>
                     <p className="font-medium">{formatDate(selectedCampaign.created_at)}</p>
                   </div>
@@ -434,6 +483,14 @@ export default function NewsletterCampaignsPage() {
                     <div className="text-2xl font-bold text-red-600">{campaignStats.failed}</div>
                     <div className="text-sm text-muted-foreground">Failed</div>
                   </div>
+                  {campaignStats.bounced > 0 && (
+                    <div className="p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">
+                        {campaignStats.bounced}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Bounced (webhook)</div>
+                    </div>
+                  )}
                 </div>
                 {campaignStats.total > 0 && (
                   <div className="mt-4">

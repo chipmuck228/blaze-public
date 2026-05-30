@@ -1,0 +1,66 @@
+---
+description: Newsletter subscription, templates, Resend delivery, and admin send workflows
+globs: src/app/**/newsletter/**,src/app/api/**/newsletter/**,src/app/api/webhooks/resend/**,src/lib/newsletter*.ts,src/lib/resend-newsletter.ts,src/lib/newsletter-resend-sync.ts,src/lib/newsletter-campaign-send.ts,sql/root-migrations/*newsletter*
+alwaysApply: false
+---
+
+# Newsletter & Resend
+
+## Source of truth
+
+- **Subscribers**: `newsletter_subscribers` in Supabase is authoritative (`is_active`, `unsubscribe_token`, consent via C-end form).
+- **Resend**: delivery mirror only — sync contacts/segment on subscribe/unsubscribe; do not treat Resend Audience as the only subscriber list.
+- **Templates**: `newsletter_templates` in DB; defaults/seeds in `@/lib/newsletter-email-templates.ts`. Admin edits HTML in portal; avoid a second template source in Resend Dashboard.
+
+## Delivery stack
+
+| Email type | API | Unsubscribe |
+|------------|-----|-------------|
+| Welcome / resubscribe / unsubscribe confirm | Resend `emails.send` (fallback SMTP) | Blaze `{{unsubscribe_link}}` → `/newsletter/unsubscribe?token=` |
+| Marketing campaigns | Resend **Broadcast** when `RESEND_NEWSLETTER_SEGMENT_ID` set; else per-recipient `emails.send` | Broadcast: `{{{RESEND_UNSUBSCRIBE_URL}}}` in HTML; webhook must sync `contact.unsubscribed` to Blaze |
+
+- Entry: `sendNewsletterEmail()` in `@/lib/email.ts` (Resend if `RESEND_API_KEY`, else Nodemailer).
+- Render placeholders: `prepareNewsletterHtmlForSend()` in `@/lib/newsletter-template-runtime.ts`.
+- Campaign send: `sendNewsletterCampaign()` in `@/lib/newsletter-campaign-send.ts` — do not reintroduce long inline `for` loops in route handlers.
+- Contact sync: `syncSubscriberToResend()` in `@/lib/newsletter-resend-sync.ts` after subscribe/unsubscribe (non-blocking).
+
+## Template placeholders (filled at send time)
+
+- `{{unsubscribe_link}}` — per-subscriber token URL (required for transactional templates).
+- `{{website_url}}`, `{{contact_email}}`, `{{body_content}}` — see `newsletter-email-templates.ts`.
+- Do not hardcode final unsubscribe URLs in stored template HTML.
+
+## Seeded template names (stable)
+
+Use `NEWSLETTER_TEMPLATE_NAMES` from `@/lib/newsletter-email-templates.ts`:
+
+- `Welcome — First Subscription`
+- `Welcome — Resubscribe`
+- `Unsubscribe Confirmation`
+- `Latest Updates — Newsletter`
+
+Seed/upsert: `npm run seed:newsletter-templates`.
+
+## Public vs admin
+
+- **Public**: `POST /api/public/newsletter/subscribe`, `GET /api/public/newsletter/unsubscribe`, Information Clause in `@/lib/newsletter-information-clause.ts`.
+- **Admin** (`role === "admin"`): templates CRUD, campaigns, send/schedule, statistics, failed-sends; delivery status UI via `NewsletterDeliveryPanel` + `GET /api/admin/newsletter/delivery-config`.
+- **Webhook**: `POST /api/webhooks/resend` — verify `RESEND_WEBHOOK_SECRET` (Svix headers); update `newsletter_sends` / deactivate subscriber on bounce or `contact.unsubscribed`.
+
+## Env vars
+
+- `RESEND_API_KEY`, `RESEND_NEWSLETTER_FROM` (or `RESEND_FROM`)
+- `RESEND_NEWSLETTER_SEGMENT_ID` — enables Broadcast for bulk sends
+- `RESEND_WEBHOOK_SECRET`
+- `NEXT_PUBLIC_APP_URL` — unsubscribe link base
+
+## Schema (Resend columns)
+
+Run `sql/root-migrations/migrate-newsletter-resend.sql` if missing: `resend_contact_id`, `resend_broadcast_id`, `resend_email_id`.
+
+## Do not
+
+- Block subscribe API on welcome-email failure (send async; log errors).
+- Assume Resend unsubscribe alone updates Blaze without webhook or Blaze token flow.
+- Add new `.md` docs for this feature (use this rule + code comments for non-obvious logic).
+- Mix franchise/catalog `product-hierarchy` terms into user-facing newsletter copy (brand: **Blaze Robotics Academy**, **BlazeRoboticsAcademy.org**).

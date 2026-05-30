@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { resolveTemplateContentHtml } from "@/lib/newsletter-template-save"
 
 export async function GET(request: Request) {
   try {
@@ -36,13 +37,26 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, subject, content_html, content_text, is_active } = body
+    const { name, subject, content_text, is_active, editor, content_html } = body
 
-    if (!name || !subject || !content_html) {
+    if (!name || !subject) {
       return NextResponse.json(
-        { error: "Name, subject, and content_html are required" },
+        { error: "Name and subject are required" },
         { status: 400 }
       )
+    }
+
+    let resolvedHtml: string
+    try {
+      resolvedHtml = resolveTemplateContentHtml({
+        name,
+        subject,
+        content_html,
+        editor,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid template body"
+      return NextResponse.json({ error: message }, { status: 400 })
     }
 
     const { data, error } = await supabaseAdmin
@@ -50,7 +64,7 @@ export async function POST(request: Request) {
       .insert({
         name,
         subject,
-        content_html,
+        content_html: resolvedHtml,
         content_text: content_text || null,
         is_active: is_active !== undefined ? is_active : true,
         created_by: session.user.id,

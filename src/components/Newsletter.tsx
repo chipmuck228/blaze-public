@@ -109,7 +109,7 @@ export const Newsletter = () => {
                   className="text-white text-sm leading-relaxed cursor-pointer"
                 >
                   I consent to the processing of my personal data by
-                  BlazeRobotics as described in the{" "}
+                  Blaze Robotics Academy as described in the{" "}
                   <button
                     type="button"
                     onClick={() => setIsDialogOpen(true)}
@@ -117,8 +117,8 @@ export const Newsletter = () => {
                   >
                     information clause
                   </button>{" "}
-                  to respond to inquiries and provide information about
-                  products and services.
+                  to receive newsletter updates and information about programs,
+                  events, products, and services.
                 </label>
               </div>
         </form>

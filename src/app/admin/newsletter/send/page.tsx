@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Loader2, Send, Clock, CheckCircle, XCircle } from "lucide-react"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import { NewsletterDeliveryPanel } from "@/components/admin/newsletter/NewsletterDeliveryPanel"
 
 interface NewsletterTemplate {
   id: string
@@ -137,14 +138,41 @@ export default function NewsletterSendPage() {
   }
 
   useEffect(() => {
-    if (selectedTemplateId) {
-      const template = templates.find((t) => t.id === selectedTemplateId)
-      if (template) {
-        setPreviewContent(template.content_html)
-        if (!customSubject) {
-          setCustomSubject(template.subject)
+    if (!selectedTemplateId) {
+      setPreviewContent("")
+      return
+    }
+
+    const template = templates.find((t) => t.id === selectedTemplateId)
+    if (!template) return
+
+    if (!customSubject) {
+      setCustomSubject(template.subject)
+    }
+
+    let cancelled = false
+    const loadPreview = async () => {
+      try {
+        const response = await fetch("/api/admin/newsletter/templates/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content_html: template.content_html }),
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        if (!cancelled && data.html) {
+          setPreviewContent(data.html)
+        }
+      } catch {
+        if (!cancelled) {
+          setPreviewContent(template.content_html)
         }
       }
+    }
+
+    loadPreview()
+    return () => {
+      cancelled = true
     }
   }, [selectedTemplateId, templates])
 
@@ -374,6 +402,10 @@ export default function NewsletterSendPage() {
           Send newsletter to all active subscribers
         </p>
       </div>
+
+      <NewsletterDeliveryPanel
+        footnote="Send Now uses Broadcast when a Resend segment is configured; otherwise emails are sent one-by-one. Progress below applies to per-recipient sends — Broadcast completion is tracked in Campaigns and via webhooks."
+      />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left: Form */}

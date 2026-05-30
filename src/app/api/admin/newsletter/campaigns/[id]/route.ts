@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { getCampaignDeliveryInfo } from "@/lib/newsletter-admin-delivery"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -62,6 +63,7 @@ export async function GET(
     return NextResponse.json({
       campaign,
       stats,
+      delivery: getCampaignDeliveryInfo(campaign),
     })
   } catch (error: any) {
     console.error("Error fetching campaign details:", error)

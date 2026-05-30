@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { NEWSLETTER_TEMPLATE_NAMES } from "@/lib/newsletter-email-templates"
+import { syncSubscriberToResend } from "@/lib/newsletter-resend-sync"
+import { sendNewsletterTransactionalEmail } from "@/lib/newsletter-template-runtime"
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const token = searchParams.get("token")
 
-    // 验证 token 是否存在
     if (!token || typeof token !== "string") {
       return NextResponse.json(
         { error: "Unsubscribe token is required" },
@@ -14,7 +16,6 @@ export async function GET(request: Request) {
       )
     }
 
-    // 验证 token 格式（64 字符十六进制）
     const tokenRegex = /^[a-f0-9]{64}$/i
     if (!tokenRegex.test(token)) {
       return NextResponse.json(
@@ -23,10 +24,9 @@ export async function GET(request: Request) {
       )
     }
 
-    // 查询订阅者
     const { data: subscriber, error: queryError } = await supabaseAdmin
       .from("newsletter_subscribers")
-      .select("id, email, is_active")
+      .select("id, email, is_active, resend_contact_id")
       .eq("unsubscribe_token", token)
       .single()
 
@@ -37,7 +37,6 @@ export async function GET(request: Request) {
       )
     }
 
-    // 检查是否已退订
     if (!subscriber.is_active) {
       return NextResponse.json(
         { error: "You have already unsubscribed from the newsletter" },
@@ -45,7 +44,6 @@ export async function GET(request: Request) {
       )
     }
 
-    // 执行退订操作
     const { error: updateError } = await supabaseAdmin
       .from("newsletter_subscribers")
       .update({
@@ -63,6 +61,25 @@ export async function GET(request: Request) {
       )
     }
 
+    syncSubscriberToResend({
+      email: subscriber.email,
+      subscriberId: subscriber.id,
+      isActive: false,
+      existingResendContactId: subscriber.resend_contact_id,
+    }).catch((err) => console.error("[unsubscribe] Resend sync failed:", err))
+
+    sendNewsletterTransactionalEmail({
+      templateName: NEWSLETTER_TEMPLATE_NAMES.UNSUBSCRIBE_CONFIRMATION,
+      to: subscriber.email,
+    })
+      .then(() => console.log(`Unsubscribe confirmation sent to ${subscriber.email}`))
+      .catch((error) =>
+        console.error(
+          `Failed to send unsubscribe confirmation to ${subscriber.email}:`,
+          error
+        )
+      )
+
     return NextResponse.json(
       {
         success: true,
@@ -71,11 +88,9 @@ export async function GET(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in newsletter unsubscribe:", error)
-    return NextResponse.json(
-      { error: error.message || "Failed to unsubscribe" },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : "Failed to unsubscribe"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

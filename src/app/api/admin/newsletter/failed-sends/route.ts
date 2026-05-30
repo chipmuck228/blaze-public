@@ -37,6 +37,7 @@ export async function GET(request: Request) {
         retry_count,
         last_retry_at,
         is_permanent_failure,
+        resend_email_id,
         created_at,
         updated_at,
         campaign:newsletter_campaigns!campaign_id (
@@ -85,6 +86,7 @@ export async function GET(request: Request) {
       retry_count: send.retry_count || 0,
       last_retry_at: send.last_retry_at,
       is_permanent_failure: send.is_permanent_failure || false,
+      resend_email_id: send.resend_email_id || null,
       created_at: send.created_at,
       updated_at: send.updated_at,
     }))

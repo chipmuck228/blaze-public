@@ -584,12 +584,38 @@ export async function sendInvoiceEmail(
   }
 }
 
-// 发送 Newsletter 邮件
+export type SendNewsletterEmailResult = {
+  provider: "resend" | "smtp"
+  messageId?: string
+  resendEmailId?: string
+}
+
+export type SendNewsletterEmailOptions = {
+  tags?: { name: string; value: string }[]
+}
+
+// 发送 Newsletter 邮件（优先 Resend，未配置时回退 SMTP）
 export async function sendNewsletterEmail(
   email: string,
   subject: string,
-  htmlContent: string
-) {
+  htmlContent: string,
+  options?: SendNewsletterEmailOptions
+): Promise<SendNewsletterEmailResult> {
+  const { isResendNewsletterEnabled, sendNewsletterViaResend } = await import(
+    "@/lib/resend-newsletter"
+  )
+
+  if (isResendNewsletterEnabled()) {
+    const { id } = await sendNewsletterViaResend({
+      to: email,
+      subject,
+      html: htmlContent,
+      tags: options?.tags,
+    })
+    console.log("Newsletter email sent via Resend:", id)
+    return { provider: "resend", resendEmailId: id, messageId: id }
+  }
+
   const transporter = createTransporter()
 
   const mailOptions = {
@@ -597,15 +623,16 @@ export async function sendNewsletterEmail(
     to: email,
     subject,
     html: htmlContent,
-    text: htmlContent.replace(/<[^>]*>/g, ''), // 简单的 HTML 转纯文本
+    text: htmlContent.replace(/<[^>]*>/g, " "),
   }
 
   try {
     const info = await transporter.sendMail(mailOptions)
-    console.log('Newsletter email sent:', info.messageId)
-    return info
-  } catch (error: any) {
-    console.error('Error sending newsletter email:', error)
-    throw new Error(`Failed to send newsletter email: ${error.message}`)
+    console.log("Newsletter email sent via SMTP:", info.messageId)
+    return { provider: "smtp", messageId: info.messageId }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Send failed"
+    console.error("Error sending newsletter email:", error)
+    throw new Error(`Failed to send newsletter email: ${message}`)
   }
 }

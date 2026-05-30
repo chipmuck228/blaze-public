@@ -29,9 +29,21 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, MoreVertical, Edit, Trash2, Loader2 } from "lucide-react"
+import { Plus, MoreVertical, Edit, Loader2, Power, PowerOff } from "lucide-react"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
-import { RichTextEditor } from "@/components/admin/RichTextEditor"
+import {
+  NewsletterTemplateEditor,
+  createEmptyEditorValue,
+  type NewsletterTemplateEditorValue,
+} from "@/components/admin/newsletter/NewsletterTemplateEditor"
+import {
+  defaultNewsletterTemplateConfig,
+  parseTemplateForEditor,
+} from "@/lib/newsletter-template-editor"
+import {
+  isSeededNewsletterTemplateName,
+  LATEST_UPDATES_BODY_PLACEHOLDER,
+} from "@/lib/newsletter-email-templates"
 
 interface NewsletterTemplate {
   id: string
@@ -50,14 +62,18 @@ export default function NewsletterTemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<NewsletterTemplate | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [legacyFullHtml, setLegacyFullHtml] = useState(false)
 
   const [formData, setFormData] = useState({
     name: "",
     subject: "",
-    content_html: "",
     content_text: "",
     is_active: true,
   })
+
+  const [editorValue, setEditorValue] = useState<NewsletterTemplateEditorValue>(
+    createEmptyEditorValue()
+  )
 
   useEffect(() => {
     fetchTemplates()
@@ -74,7 +90,7 @@ export default function NewsletterTemplatesPage() {
 
       const data = await response.json()
       setTemplates(data.templates || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching templates:", error)
       adminToast.error("Failed to load templates")
     } finally {
@@ -87,48 +103,76 @@ export default function NewsletterTemplatesPage() {
     setFormData({
       name: "",
       subject: "",
-      content_html: "",
       content_text: "",
       is_active: true,
     })
+    setEditorValue({
+      config: defaultNewsletterTemplateConfig(),
+      bodyHtml: LATEST_UPDATES_BODY_PLACEHOLDER,
+    })
+    setLegacyFullHtml(false)
     setIsEditDialogOpen(true)
   }
 
   const handleEdit = (template: NewsletterTemplate) => {
+    const parsed = parseTemplateForEditor(template.content_html, template.name)
     setEditingTemplate(template)
     setFormData({
       name: template.name,
       subject: template.subject,
-      content_html: template.content_html,
       content_text: template.content_text || "",
       is_active: template.is_active,
     })
+    setEditorValue({
+      config: parsed.config,
+      bodyHtml: parsed.bodyHtml,
+    })
+    setLegacyFullHtml(parsed.legacyFullHtml)
     setIsEditDialogOpen(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!(await adminConfirm({
-      title: "Delete this template?",
-      confirmLabel: "Delete",
-    }))) {
-      return
+  const handleToggleActive = async (template: NewsletterTemplate) => {
+    const nextActive = !template.is_active
+
+    if (!nextActive) {
+      const isSeeded = isSeededNewsletterTemplateName(template.name)
+      const confirmed = await adminConfirm({
+        title: isSeeded
+          ? "Deactivate system template?"
+          : "Deactivate this template?",
+        confirmLabel: "Deactivate",
+        ...(isSeeded
+          ? {
+              description:
+                "This template is used for welcome emails, unsubscribe confirmation, or default campaigns. Deactivating may stop automated or scheduled sends that depend on it.",
+            }
+          : {}),
+      })
+      if (!confirmed) return
     }
 
     try {
-      const response = await fetch(`/api/admin/newsletter/templates/${id}`, {
-        method: "DELETE",
-      })
+      const response = await fetch(
+        `/api/admin/newsletter/templates/${template.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: nextActive }),
+        }
+      )
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || "Failed to delete template")
+        throw new Error(error.error || "Failed to update template status")
       }
 
-      adminToast.success("Template deleted successfully")
+      adminToast.success(
+        nextActive ? "Template activated" : "Template deactivated"
+      )
       fetchTemplates()
-    } catch (error: any) {
-      console.error("Error deleting template:", error)
-      adminToast.error(error.message || "Failed to delete template")
+    } catch (error: unknown) {
+      console.error("Error toggling template status:", error)
+      adminToast.error(getErrorMessage(error))
     }
   }
 
@@ -147,7 +191,13 @@ export default function NewsletterTemplatesPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          subject: formData.subject,
+          content_text: formData.content_text || null,
+          is_active: formData.is_active,
+          editor: editorValue,
+        }),
       })
 
       if (!response.ok) {
@@ -155,12 +205,16 @@ export default function NewsletterTemplatesPage() {
         throw new Error(error.error || "Failed to save template")
       }
 
-      adminToast.success(`Template ${editingTemplate ? "updated" : "created"} successfully`)
+      adminToast.success(
+        `Template ${editingTemplate ? "updated" : "created"} successfully`
+      )
       setIsEditDialogOpen(false)
       fetchTemplates()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving template:", error)
-      adminToast.error(error.message || "Failed to save template")
+      adminToast.error(
+        error instanceof Error ? error.message : "Failed to save template"
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -176,220 +230,212 @@ export default function NewsletterTemplatesPage() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Newsletter Templates</h1>
         <p className="text-muted-foreground mt-2">
-          Create and manage newsletter email templates
+          Edit message content and link settings. Templates used in past campaigns
+          cannot be removed from the database — use <strong>Deactivate</strong> to
+          hide a template from Send while keeping campaign history. Unsubscribe
+          links are generated per subscriber at send time.
         </p>
       </div>
 
-      {/* Templates List */}
       <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Templates</CardTitle>
-                </div>
-                <Button onClick={handleAdd}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Template
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">No templates found</p>
-                </div>
-              ) : (
-                <div className="border rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Subject</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Updated</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {templates.map((template) => (
-                        <TableRow key={template.id}>
-                          <TableCell className="font-medium">
-                            {template.name}
-                          </TableCell>
-                          <TableCell>{template.subject}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={template.is_active ? "default" : "secondary"}
-                            >
-                              {template.is_active ? "Active" : "Inactive"}
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Templates</CardTitle>
+            <Button onClick={handleAdd}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Template
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No templates found</p>
+            </div>
+          ) : (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Updated</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {templates.map((template) => (
+                    <TableRow key={template.id}>
+                      <TableCell className="font-medium">
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {template.name}
+                          {isSeededNewsletterTemplateName(template.name) ? (
+                            <Badge variant="outline" className="text-xs font-normal">
+                              System
                             </Badge>
-                          </TableCell>
-                          <TableCell>{formatDate(template.updated_at)}</TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEdit(template)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => handleDelete(template.id)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Edit Dialog */}
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent className="max-w-[95vw] sm:max-w-[700px] lg:max-w-[800px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
-              <DialogHeader className="flex-shrink-0">
-                <DialogTitle>
-                  {editingTemplate ? "Edit Template" : "Add New Template"}
-                </DialogTitle>
-                <DialogDescription>
-                  {editingTemplate
-                    ? "Update newsletter template"
-                    : "Create a new newsletter template"}
-                </DialogDescription>
-              </DialogHeader>
-
-              <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-                <div className="flex-1 overflow-y-auto pr-1 space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Template Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                      placeholder="e.g., Monthly Newsletter"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Email Subject *</Label>
-                    <Input
-                      id="subject"
-                      value={formData.subject}
-                      onChange={(e) =>
-                        setFormData({ ...formData, subject: e.target.value })
-                      }
-                      placeholder="e.g., Latest Updates from BlazeRobotics"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="content_html">HTML Content *</Label>
-                    <RichTextEditor
-                      value={formData.content_html}
-                      onChange={(value) =>
-                        setFormData({ ...formData, content_html: value })
-                      }
-                      placeholder="Enter newsletter content... You can use variables like {{unsubscribe_link}} for unsubscribe link."
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Use the editor above or switch to HTML mode. You can use variables like {"{{unsubscribe_link}}"} for unsubscribe link.
-                    </p>
-                    <div className="mt-2">
-                      <details className="text-xs">
-                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                          View/Edit HTML Source
-                        </summary>
-                        <Textarea
-                          value={formData.content_html}
-                          onChange={(e) =>
-                            setFormData({ ...formData, content_html: e.target.value })
+                          ) : null}
+                        </span>
+                      </TableCell>
+                      <TableCell>{template.subject}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            template.is_active ? "default" : "secondary"
                           }
-                          placeholder="HTML source code..."
-                          rows={8}
-                          className="font-mono text-sm mt-2"
-                        />
-                      </details>
-                    </div>
-                  </div>
+                        >
+                          {template.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(template.updated_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleEdit(template)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            {template.is_active ? (
+                              <DropdownMenuItem
+                                onClick={() => handleToggleActive(template)}
+                              >
+                                <PowerOff className="mr-2 h-4 w-4" />
+                                Deactivate
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => handleToggleActive(template)}
+                              >
+                                <Power className="mr-2 h-4 w-4" />
+                                Activate
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="content_text">Plain Text Content (Optional)</Label>
-                    <Textarea
-                      id="content_text"
-                      value={formData.content_text}
-                      onChange={(e) =>
-                        setFormData({ ...formData, content_text: e.target.value })
-                      }
-                      placeholder="Enter plain text version (optional)..."
-                      rows={8}
-                      className="font-mono text-sm"
-                    />
-                  </div>
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[720px] lg:max-w-[900px] max-h-[95vh] h-[95vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>
+              {editingTemplate ? "Edit Template" : "Add New Template"}
+            </DialogTitle>
+            <DialogDescription>
+              Configure website and contact links in Link settings. Use the body
+              editor for your message only — not for unsubscribe URLs.
+            </DialogDescription>
+          </DialogHeader>
 
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="is_active"
-                      checked={formData.is_active}
-                      onChange={(e) =>
-                        setFormData({ ...formData, is_active: e.target.checked })
-                      }
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <Label htmlFor="is_active" className="font-normal">
-                      Active
-                    </Label>
-                  </div>
-                </div>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Template Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  placeholder="e.g., Latest Updates — Newsletter"
+                  required
+                />
+              </div>
 
-                <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsEditDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : editingTemplate ? (
-                      "Update Template"
-                    ) : (
-                      "Create Template"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+              <div className="space-y-2">
+                <Label htmlFor="subject">Email Subject *</Label>
+                <Input
+                  id="subject"
+                  value={formData.subject}
+                  onChange={(e) =>
+                    setFormData({ ...formData, subject: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <NewsletterTemplateEditor
+                templateName={formData.name || "Custom Template"}
+                value={editorValue}
+                onChange={setEditorValue}
+                legacyFullHtml={legacyFullHtml}
+              />
+
+              <div className="space-y-2">
+                <Label htmlFor="content_text">Plain Text (optional)</Label>
+                <Textarea
+                  id="content_text"
+                  value={formData.content_text}
+                  onChange={(e) =>
+                    setFormData({ ...formData, content_text: e.target.value })
+                  }
+                  rows={4}
+                  className="font-mono text-sm"
+                  placeholder="Optional plain-text version"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) =>
+                    setFormData({ ...formData, is_active: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="is_active" className="font-normal">
+                  Active (inactive templates are hidden from Send)
+                </Label>
+              </div>
+            </div>
+
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : editingTemplate ? (
+                  "Update Template"
+                ) : (
+                  "Create Template"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

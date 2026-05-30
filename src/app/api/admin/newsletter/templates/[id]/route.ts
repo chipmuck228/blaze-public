@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import {
+  parseTemplateRowForApi,
+  resolveTemplateContentHtml,
+} from "@/lib/newsletter-template-save"
 
 export async function GET(
   request: Request,
@@ -26,7 +30,12 @@ export async function GET(
       throw error
     }
 
-    return NextResponse.json(data, { status: 200 })
+    const enriched = parseTemplateRowForApi(data.name, data.content_html)
+
+    return NextResponse.json(
+      { ...data, ...enriched },
+      { status: 200 }
+    )
   } catch (error: any) {
     console.error("Error fetching template:", error)
     return NextResponse.json(
@@ -48,15 +57,39 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, subject, content_html, content_text, is_active } = body
+    const { name, subject, content_html, content_text, is_active, editor } = body
 
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
 
     if (name !== undefined) updateData.name = name
     if (subject !== undefined) updateData.subject = subject
-    if (content_html !== undefined) updateData.content_html = content_html
+
+    if (editor !== undefined || content_html !== undefined) {
+      const templateName =
+        (typeof name === "string" ? name : undefined) ??
+        (
+          await supabaseAdmin
+            .from("newsletter_templates")
+            .select("name")
+            .eq("id", id)
+            .single()
+        ).data?.name ??
+        "Custom Template"
+
+      try {
+        updateData.content_html = resolveTemplateContentHtml({
+          name: templateName,
+          subject: typeof subject === "string" ? subject : "",
+          content_html,
+          editor,
+        })
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Invalid template body"
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
+    }
     if (content_text !== undefined) updateData.content_text = content_text
     if (is_active !== undefined) updateData.is_active = is_active
 
@@ -86,30 +119,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
+    await params
     const session = await auth()
     if (!session?.user || session.user.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { error } = await supabaseAdmin
-      .from("newsletter_templates")
-      .delete()
-      .eq("id", id)
-
-    if (error) {
-      throw error
-    }
-
     return NextResponse.json(
-      { success: true, message: "Template deleted successfully" },
-      { status: 200 }
+      {
+        error:
+          "Templates cannot be deleted because past campaigns reference them. Set the template to Inactive instead — it will be hidden from Send but kept for history.",
+      },
+      { status: 409 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete template"
     console.error("Error deleting template:", error)
-    return NextResponse.json(
-      { error: error.message || "Failed to delete template" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

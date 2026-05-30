@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react"
 import { adminToast, getErrorMessage } from "@/lib/admin-toast"
+import { NewsletterDeliveryPanel } from "@/components/admin/newsletter/NewsletterDeliveryPanel"
 import {
   PieChart,
   Pie,
@@ -68,6 +69,7 @@ interface FailedSend {
   retry_count: number
   last_retry_at: string | null
   is_permanent_failure: boolean
+  resend_email_id: string | null
   created_at: string
   updated_at: string
 }
@@ -417,9 +419,15 @@ function FailedSendsPageContent() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Failed Email Management</h1>
           <p className="text-muted-foreground mt-2">
-            View and retry failed newsletter emails
+            View and retry failed sends; bounces from Resend webhooks appear in Campaign
+            details and may deactivate subscribers automatically.
           </p>
         </div>
+
+        <NewsletterDeliveryPanel
+          variant="compact"
+          footnote="Manual retries send one email per row via Resend/SMTP. Hard bounces are usually updated by the Resend webhook — check Campaigns for broadcast-level issues."
+        />
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -655,6 +663,7 @@ function FailedSendsPageContent() {
                         <TableHead>Last Failed At</TableHead>
                         <TableHead>Error Message</TableHead>
                         <TableHead>Retry Count</TableHead>
+                        <TableHead>Resend ID</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -700,6 +709,9 @@ function FailedSendsPageContent() {
                                   Max
                                 </Badge>
                               )}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground max-w-[120px] truncate" title={send.resend_email_id || undefined}>
+                              {send.resend_email_id ? send.resend_email_id.slice(0, 8) + "…" : "—"}
                             </TableCell>
                             <TableCell>
                               <Button
