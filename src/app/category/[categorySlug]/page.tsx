@@ -28,7 +28,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
-import { AIAssessmentDialog } from "@/components/location/AIAssessmentDialog"
+import { OpenProgramsAIChatButton } from "@/components/programs-ai/OpenProgramsAIChatButton"
+import { PROGRAMS_AI_ASSISTANT_ENABLED } from "@/lib/programs-ai-config"
+import { formatCalendarDate, formatCalendarDateRange } from "@/lib/format-calendar-date"
 
 /** Slug to v2_category name: "beginner-robotics" -> "beginner_robotics" */
 function slugToName(slug: string): string {
@@ -113,7 +115,6 @@ function CategoryPageContent() {
   const [selectedAgeRange, setSelectedAgeRange] = useState("all")
   const [selectedFranchise, setSelectedFranchise] = useState("all")
   const [locationSlug, setLocationSlug] = useState<string | null>(null)
-  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false)
 
   // Resolve slug -> category by name
   useEffect(() => {
@@ -555,9 +556,9 @@ function CategoryPageContent() {
                                     : "All Ages"
                                 const dates =
                                   instance.start_date && instance.end_date
-                                    ? `${new Date(instance.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(instance.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                                    ? formatCalendarDateRange(instance.start_date, instance.end_date)
                                     : instance.start_date
-                                    ? `Starts ${new Date(instance.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                                    ? `Starts ${formatCalendarDate(instance.start_date)}`
                                     : "TBD"
                                 const basePrice =
                                   instance.price_override ?? instance.course?.base_price ?? 0
@@ -689,35 +690,25 @@ function CategoryPageContent() {
           </div>
         </section>
 
-        {/* AI Assessment CTA */}
-        <section className="max-w-7xl mx-auto px-4">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl">
-            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
-              <div className="text-center lg:text-left">
-                <h2 className="text-4xl font-black mb-4">Unsure about your child&apos;s level?</h2>
-                <p className="text-blue-100 text-lg max-w-xl">
-                  Chat with our AI assistant for personalized recommendations based on age, grade, and interests.
-                </p>
+        {PROGRAMS_AI_ASSISTANT_ENABLED && (
+          <section className="max-w-7xl mx-auto px-4">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl">
+              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
+                <div className="text-center lg:text-left">
+                  <h2 className="text-4xl font-black mb-4">Unsure about your child&apos;s level?</h2>
+                  <p className="text-blue-100 text-lg max-w-xl">
+                    Chat with our AI assistant for personalized recommendations based on age, grade, and interests.
+                  </p>
+                </div>
+                <OpenProgramsAIChatButton>Get AI Assessment</OpenProgramsAIChatButton>
               </div>
-              <button
-                onClick={() => setIsAIDialogOpen(true)}
-                className="bg-white text-blue-600 px-12 py-5 rounded-full font-black text-xl hover:scale-105 transition-all shadow-xl whitespace-nowrap"
-              >
-                Get AI Assessment
-              </button>
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
             </div>
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
-          </div>
-        </section>
+          </section>
+        )}
       </div>
       <Footer />
 
-      <AIAssessmentDialog
-        franchiseCode={locationSlug || "general"}
-        franchiseName={activeLocName || "Blaze Robotics Academy"}
-        isOpen={isAIDialogOpen}
-        onOpenChange={setIsAIDialogOpen}
-      />
     </>
   )
 }

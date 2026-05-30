@@ -448,6 +448,7 @@ function buildInstanceDataExt(row, sessionTitle) {
 
   const daysOfWeek = parseDaysOfWeek(row["Classes start on which days each week"])
   const targetGrades = parseTargetGrades(row["Target Grade"])
+  const priceOverride = parseOptionalNumber(row["Price Override"])
 
   const schedule = {
     start_date: startDate,
@@ -463,6 +464,10 @@ function buildInstanceDataExt(row, sessionTitle) {
       age_min: ageMin,
       age_max: ageMax,
     },
+  }
+
+  if (priceOverride != null) {
+    ext.capacity_price = { price_override: priceOverride }
   }
 
   if (targetGrades) {
@@ -481,6 +486,7 @@ function buildInstanceDataExt(row, sessionTitle) {
     daysOfWeek,
     ageMin,
     ageMax,
+    priceOverride,
     notes: notes || null,
   }
 }
@@ -491,6 +497,7 @@ function deriveRowFields(mergedExt, parsed) {
   let finalStartTime = parsed.startTime
   let finalEndTime = parsed.endTime
   let finalDaysOfWeek = parsed.daysOfWeek
+  let finalPriceOverride = parsed.priceOverride
 
   if (mergedExt.schedule && typeof mergedExt.schedule === "object") {
     const s = mergedExt.schedule
@@ -500,6 +507,10 @@ function deriveRowFields(mergedExt, parsed) {
     if (s.end_time) finalEndTime = s.end_time
     if (s.days_of_week) finalDaysOfWeek = s.days_of_week
   }
+  if (mergedExt.capacity_price && typeof mergedExt.capacity_price === "object") {
+    const c = mergedExt.capacity_price
+    if (c.price_override != null) finalPriceOverride = c.price_override
+  }
 
   return {
     finalStartDate,
@@ -507,6 +518,7 @@ function deriveRowFields(mergedExt, parsed) {
     finalStartTime,
     finalEndTime,
     finalDaysOfWeek,
+    finalPriceOverride,
   }
 }
 
@@ -864,7 +876,7 @@ function resolveRow(row, ctx) {
     program_id: program.id,
     offering_id: offering.id,
     campus_id: campus?.id || null,
-    price_override: null,
+    price_override: derived.finalPriceOverride,
     start_date: derived.finalStartDate,
     end_date: derived.finalEndDate,
     start_time: derived.finalStartTime,

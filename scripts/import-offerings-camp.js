@@ -14,7 +14,7 @@ const path = require("path")
 const { execFileSync } = require("child_process")
 
 const DEFAULT_XLSX =
-  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/offerings-camp.xlsx"
+  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/Blaze-Offerings-Camp.xlsx"
 
 const COL = {
   TITLE: 0,
@@ -338,40 +338,34 @@ async function preflight(supabase) {
 
   if (catErr) throw new Error(`Failed to load categories: ${catErr.message}`)
 
-  const active = (categories || []).filter((c) => c.is_active !== false)
-  const byKey = {}
-  for (const c of active) {
-    const keys = [
-      (c.name || "").trim().toLowerCase(),
-      (c.display_name || "").trim().toLowerCase(),
-    ].filter(Boolean)
-    for (const k of keys) {
-      if (byKey[k] && byKey[k].id !== c.id) {
-        throw new Error(`Ambiguous category key: ${k}`)
+  const byKey = new Map()
+  for (const c of categories || []) {
+    if (c.is_active === false) continue
+    for (const k of [c.name, c.display_name].filter(Boolean)) {
+      const key = String(k).trim().toLowerCase()
+      if (byKey.has(key) && byKey.get(key).id !== c.id) {
+        throw new Error(`Ambiguous category key: ${key}`)
       }
-      byKey[k] = c
+      byKey.set(key, c)
     }
   }
 
-  const learn = byKey.learn
-  const explore = byKey.explore
-  if (!learn || !explore) {
-    const available = active
-      .map((c) => `${c.display_name || c.name} (${c.id})`)
-      .join(", ")
-    throw new Error(
-      `Missing Learn or Explore category. Available: ${available || "none"}`
-    )
-  }
-
-  return { offeringType, categories: { learn, explore } }
+  return { offeringType, categoriesByKey: byKey }
 }
 
-function resolveCategoryId(programTag, categories) {
+function resolveCategoryId(programTag, categoriesByKey) {
   const key = String(programTag || "").trim().toLowerCase()
-  if (key === "learn") return categories.learn.id
-  if (key === "explore") return categories.explore.id
-  throw new Error(`Unknown Program tag: ${programTag}`)
+  if (!key) throw new Error("Program (tag) is required")
+  const cat = categoriesByKey.get(key)
+  if (!cat) {
+    throw new Error(
+      `Unknown Program (category): "${programTag}". Available: ${[...categoriesByKey.values()]
+        .map((c) => c.display_name || c.name)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .join(", ")}`
+    )
+  }
+  return cat.id
 }
 
 async function findExistingByName(supabase, name) {
@@ -483,10 +477,14 @@ async function main() {
   console.log(`Supabase: ${supabaseUrl}`)
   console.log("")
 
-  const { offeringType, categories } = await preflight(supabase)
+  const { offeringType, categoriesByKey } = await preflight(supabase)
   console.log(`Camp offering_type_id: ${offeringType.id}`)
-  console.log(`Learn category_id: ${categories.learn.id}`)
-  console.log(`Explore category_id: ${categories.explore.id}`)
+  console.log(
+    `Categories: ${[...categoriesByKey.values()]
+      .map((c) => `${c.display_name || c.name} (${c.id})`)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .join(", ")}`
+  )
   console.log("")
 
   const allRows = parseXlsx(args.file)
@@ -505,17 +503,19 @@ async function main() {
     results: [],
   }
 
-  const categoryConfigById = {
-    [categories.learn.id]: categories.learn.config_base,
-    [categories.explore.id]: categories.explore.config_base,
+  const categoryConfigById = {}
+  for (const cat of categoriesByKey.values()) {
+    categoryConfigById[cat.id] = cat.config_base
   }
 
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i]
     const rowNum = i + 2
+    const title = cell(row, COL.TITLE)
+    if (!title) continue
     try {
       const programTag = cell(row, COL.PROGRAM)
-      const categoryId = resolveCategoryId(programTag, categories)
+      const categoryId = resolveCategoryId(programTag, categoriesByKey)
       const payload = mapRowToPayload(row, offeringType.id, categoryId)
       const existing = await findExistingByName(supabase, payload.name)
       const categoryConfigBase = categoryConfigById[categoryId]

@@ -1,0 +1,75 @@
+---
+description: Programs catalog AI assistant (DeepSeek, session, UI scope)
+globs: src/app/programs/**,src/app/category/**,src/components/programs-ai/**,src/contexts/programs-ai-assistant-context.tsx,src/lib/programs-ai*.ts,src/lib/programs-ai-config.ts,src/app/api/ai/programs-chat/**
+alwaysApply: false
+---
+
+# Programs AI Assistant
+
+## Scope (where it is enabled)
+
+Mount `<ProgramsAIAssistant />` only via:
+
+- [`src/app/programs/layout.tsx`](src/app/programs/layout.tsx) — `/programs`
+- [`src/app/category/layout.tsx`](src/app/category/layout.tsx) — `/category/[categorySlug]` and `/category/.../instance/[instanceId]`
+
+Do **not** enable on admin, coach, or location/franchise pages unless explicitly requested. Site-wide `AIChatButton` remains a no-op.
+
+## Stack
+
+| Piece | Location |
+|-------|----------|
+| UI launcher + chat panel | `src/components/programs-ai/` |
+| React context (open/collapse) | `src/contexts/programs-ai-assistant-context.tsx` |
+| Client session | `src/lib/programs-ai-session.ts` |
+| System prompt | `src/lib/programs-ai-prompt.ts` |
+| API (streaming) | `POST /api/ai/programs-chat` — `@ai-sdk/deepseek` `createDeepSeek` (not `@ai-sdk/openai`; OpenAI provider sends `developer` role) |
+
+## Environment
+
+```env
+NEXT_PUBLIC_PROGRAMS_AI_ASSISTANT_ENABLED=true   # show launcher, chat, CTA; allow API (default off if unset)
+DEEPSEEK_API_KEY=          # required when assistant enabled
+DEEPSEEK_BASE_URL=https://api.deepseek.com   # optional override
+DEEPSEEK_MODEL=deepseek-chat                   # optional override
+```
+
+Toggle flag in `.env.local` and restart `npm run dev`. Never commit keys. Do not use `DEEPSEEK_API_KEY` on the client.
+
+Assistant replies render with `ProgramsAIChatMarkdown` (`react-markdown`); user messages stay plain text.
+
+## Session lifecycle (client)
+
+Stored in `localStorage` key `blaze-programs-ai-session`:
+
+| Event | Behavior |
+|-------|----------|
+| **Start** | First visit or expired idle → new `sessionId` (UUID) |
+| **Persist** | Same `sessionId` across `/programs` and `/category/*` navigation; `useChat({ id: sessionId })` keeps message history |
+| **Activity** | `lastActivityAt` updated on each user send |
+| **End (idle)** | After `PROGRAMS_AI_SESSION_IDLE_MS` (30 min) without activity → session discarded on next load |
+| **End (explicit)** | User clicks **New conversation** (rotate icon in chat header) → new `sessionId`, welcome message reset |
+
+Sessions are **not** stored server-side; only used for client chat continuity and optional API logging.
+
+## UI states
+
+1. **Launcher expanded** (default) — horizontal card, bottom-right, `position: fixed`, English copy, “Chat” opens panel
+2. **Launcher collapsed** — circular icon only; click to re-expand
+3. **Chat open** — panel above launcher; header shows **one** bot icon (no avatar row)
+4. **Chat minimized** — header strip only; chevron toggles expand/minimize
+
+Use `useProgramsAIAssistant().openChat()` from in-page CTAs (programs/category sections).
+
+## Copy and hierarchy
+
+- English only in assistant UI and prompts
+- Use Web product terms: Campus, Location, Program (Explore/Learn/Compete), Activity, Session — see `product-hierarchy` rule
+- Do not invent prices, dates, or seat counts; point users to catalog session cards / enrollment links
+
+## Do not
+
+- Switch programs assistant to Gemini without product approval (franchise `/api/ai/chat` may still use Gemini)
+- Add unsubscribe or newsletter logic here
+- Persist full transcripts server-side without a designed retention policy
+- Enable physical template DELETE patterns in admin (unrelated)

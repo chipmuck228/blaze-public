@@ -10,7 +10,7 @@
  *   Activity           → ignored (camp/program activity; not used on course offerings)
  *
  * Usage:
- *   node scripts/import-offerings-course.js [--dry-run] [--execute] [--file <path>]
+ *   node scripts/import-offerings-course.js [--dry-run] [--execute] [--category-only] [--file <path>]
  *
  * Default file: ../Blaze/offerings-course.xlsx
  */
@@ -20,7 +20,7 @@ const path = require("path")
 const { execFileSync } = require("child_process")
 
 const DEFAULT_XLSX =
-  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/offerings-course.xlsx"
+  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/Blaze-Offerings-Course.xlsx"
 
 const HEADER_ALIASES = {
   title: "Title",
@@ -70,7 +70,7 @@ function loadEnv() {
 }
 
 function parseArgs(argv) {
-  const args = { dryRun: true, execute: false, file: DEFAULT_XLSX }
+  const args = { dryRun: true, execute: false, categoryOnly: false, file: DEFAULT_XLSX }
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--execute") {
       args.execute = true
@@ -78,6 +78,8 @@ function parseArgs(argv) {
     } else if (argv[i] === "--dry-run") {
       args.dryRun = true
       args.execute = false
+    } else if (argv[i] === "--category-only") {
+      args.categoryOnly = true
     } else if (argv[i] === "--file" && argv[i + 1]) {
       args.file = argv[++i]
     }
@@ -403,7 +405,7 @@ function resolveCategoryId(programTag, categoriesByKey) {
 async function findExistingByName(supabase, name, offeringTypeId) {
   const { data, error } = await supabase
     .from("v2_offering")
-    .select("id, name, slug")
+    .select("id, name, slug, category_id")
     .eq("name", name)
     .eq("offering_type_id", offeringTypeId)
 
@@ -474,6 +476,49 @@ async function upsertOffering(
   return { action: "INSERT", ...data }
 }
 
+async function updateCategoryOnly(
+  supabase,
+  existing,
+  categoryId,
+  programTag,
+  categoriesByKey,
+  dryRun
+) {
+  if (!existing) {
+    throw new Error(`Offering not found in v2_offering (course type): update skipped`)
+  }
+  if (existing.category_id === categoryId) {
+    return { action: "UNCHANGED", id: existing.id, slug: existing.slug, categoryId, programTag }
+  }
+  const cat = [...categoriesByKey.values()].find((c) => c.id === categoryId)
+  const catLabel = cat ? cat.display_name || cat.name : categoryId
+  if (dryRun) {
+    return {
+      action: "UPDATE",
+      id: existing.id,
+      slug: existing.slug,
+      categoryId,
+      programTag,
+      catLabel,
+      previousCategoryId: existing.category_id,
+    }
+  }
+  const { data, error } = await supabase
+    .from("v2_offering")
+    .update({ category_id: categoryId })
+    .eq("id", existing.id)
+    .select("id, name, slug, category_id")
+    .single()
+  if (error) throw new Error(`Update failed: ${error.message}`)
+  return {
+    action: "UPDATE",
+    ...data,
+    programTag,
+    catLabel,
+    previousCategoryId: existing.category_id,
+  }
+}
+
 async function main() {
   loadEnv()
   const args = parseArgs(process.argv)
@@ -498,6 +543,7 @@ async function main() {
   console.log("Import course offerings → v2_offering")
   console.log("=".repeat(60))
   console.log(`Mode: ${args.dryRun ? "DRY RUN" : "EXECUTE"}`)
+  console.log(`Scope: ${args.categoryOnly ? "category_id only" : "full upsert"}`)
   console.log(`File: ${args.file}`)
   console.log(`Supabase: ${supabaseUrl}`)
   console.log("Note: Activity column is ignored for course offerings.")
@@ -527,7 +573,7 @@ async function main() {
     mode: args.dryRun ? "dry-run" : "execute",
     file: args.file,
     offeringTypeId: offeringType.id,
-    summary: { insert: 0, update: 0, failed: 0 },
+    summary: { insert: 0, update: 0, unchanged: 0, failed: 0 },
     results: [],
   }
 
@@ -536,33 +582,52 @@ async function main() {
     try {
       const programTag = row.Program
       const categoryId = resolveCategoryId(programTag, categoriesByKey)
-      const payload = mapRowToPayload(row, offeringType.id, categoryId)
-      const existing = await findExistingByName(supabase, payload.name, offeringType.id)
-      const result = await upsertOffering(
-        supabase,
-        payload,
-        categoryConfigById.get(categoryId),
-        existing,
-        args.dryRun
-      )
+      const name = decodeHtmlEntities(row.Title)
+      const existing = await findExistingByName(supabase, name, offeringType.id)
+
+      let result
+      if (args.categoryOnly) {
+        result = await updateCategoryOnly(
+          supabase,
+          existing,
+          categoryId,
+          programTag,
+          categoriesByKey,
+          args.dryRun
+        )
+      } else {
+        const payload = mapRowToPayload(row, offeringType.id, categoryId)
+        result = await upsertOffering(
+          supabase,
+          payload,
+          categoryConfigById.get(categoryId),
+          existing,
+          args.dryRun
+        )
+      }
 
       if (result.action === "INSERT") report.summary.insert++
-      else report.summary.update++
+      else if (result.action === "UPDATE") report.summary.update++
+      else if (result.action === "UNCHANGED") report.summary.unchanged++
 
       report.results.push({
         row: rowNum,
-        name: payload.name,
+        name,
         program: programTag,
-        status: payload.status,
+        category_id: result.categoryId || result.category_id || categoryId,
         action: result.action,
         id: result.id || null,
         slug: result.slug || null,
+        previous_category_id: result.previousCategoryId || null,
       })
 
+      const catNote =
+        args.categoryOnly && result.catLabel
+          ? ` → ${result.catLabel}${result.previousCategoryId ? ` (was ${result.previousCategoryId})` : ""}`
+          : ""
       console.log(
-        `[${rowNum}] ${result.action} ${payload.name} (${programTag}, ${payload.status})` +
-          (result.id ? ` id=${result.id}` : "") +
-          (result.slug ? ` slug=${result.slug}` : "")
+        `[${rowNum}] ${result.action} ${name} (${programTag}${catNote})` +
+          (result.id ? ` id=${result.id}` : "")
       )
     } catch (err) {
       report.summary.failed++

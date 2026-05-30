@@ -40,7 +40,7 @@ const { execFileSync } = require("child_process")
 const BLAZE_INSTANCES_CSV =
   "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/instances-camp.csv"
 const BLAZE_INSTANCES_XLSX =
-  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/instances-camp.xlsx"
+  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/Blaze-Instances-Camps.xlsx"
 const REPO_TEMPLATE_CSV = path.join(__dirname, "templates", "instances-camp-template.csv")
 
 const HEADERS = [
@@ -68,8 +68,13 @@ const HEADERS = [
 
 const HEADER_ALIASES = {
   "location code": "Location Code",
+  "location id": "Location Code",
   program: "Program",
+  "programs (category)": "Program",
+  "program (category)": "Program",
   activity: "Activity",
+  "activity (program)": "Activity",
+  title: "Session Title",
   "session title": "Session Title",
   /** @deprecated use Activity */
   "program name": "Program Name",
@@ -307,6 +312,12 @@ function parseDate(val, label) {
   const v = String(val ?? "").trim()
   if (!v) throw new Error(`${label} is required`)
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+  const serial = Number(v)
+  if (!Number.isNaN(serial) && serial > 20000 && serial < 80000) {
+    const epoch = Date.UTC(1899, 11, 30)
+    const d = new Date(epoch + serial * 86400000)
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  }
   const mdy = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (mdy) {
     const [, month, day, year] = mdy
@@ -322,6 +333,13 @@ function parseOptionalTime(val) {
   if (!v) return null
   if (/^\d{1,2}:\d{2}$/.test(v)) return `${v}:00`
   if (/^\d{1,2}:\d{2}:\d{2}$/.test(v)) return v
+  const serial = Number(v)
+  if (!Number.isNaN(serial) && serial >= 0 && serial < 1) {
+    const totalMinutes = Math.round(serial * 24 * 60)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+  }
   throw new Error(`Invalid time: ${val}`)
 }
 
@@ -798,6 +816,12 @@ function resolveRow(row, ctx) {
     category = findCategory(ctx.categoriesByKey, categoryLabelInput)
     const scoped = programs.filter((p) => p.category_id === category.id)
     program = findProgram(scoped, activityLabel)
+    if (!program && scoped.length === 1) {
+      program = scoped[0]
+      console.warn(
+        `[${row._rowNum}] Activity "${activityLabel}" not found under Program "${categoryLabelInput}" at ${locationCode}; using sole program "${program.display_name || program.name}"`
+      )
+    }
     if (!program) {
       throw new Error(
         `Activity not found: "${activityLabel}" under Program "${categoryLabelInput}" at ${locationCode}. ` +

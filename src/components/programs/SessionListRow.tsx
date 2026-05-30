@@ -23,6 +23,7 @@ import {
   type SessionListItem,
 } from "@/lib/programs-catalog-view"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+import { formatCalendarDate } from "@/lib/format-calendar-date"
 import { CourseDaysOfWeekBadges } from "@/components/programs/CourseDaysOfWeekBadges"
 import { LazySessionPoster } from "@/components/programs/LazySessionPoster"
 
@@ -50,10 +51,7 @@ const HIERARCHY_BADGE_STYLES = {
 } as const
 
 function formatDate(dateString?: string | null): string {
-  if (!dateString) return "TBD"
-  const d = new Date(dateString)
-  if (Number.isNaN(d.getTime())) return dateString
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return formatCalendarDate(dateString)
 }
 
 function formatTime(timeString?: string | null): string {

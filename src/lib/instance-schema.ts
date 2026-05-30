@@ -40,6 +40,8 @@ export type SchemaFieldDisplayConfig = SchemaFieldConfig & {
   option_labels?: string[]
 }
 
+import { formatCalendarDate } from "@/lib/format-calendar-date"
+
 /** Default weekday labels (0=周日 … 6=周六) for formatSchemaValueForDisplay. */
 const DEFAULT_WEEKDAY_NAMES = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
 
@@ -93,7 +95,12 @@ export function formatSchemaValueForDisplay(
       return typeof value === "boolean" ? (value ? "是" : "否") : String(value)
     case "number":
       return typeof value === "number" ? String(value) : String(value)
-    case "date":
+    case "date": {
+      const s = String(value).trim()
+      if (!s) return empty
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return formatCalendarDate(s)
+      return s
+    }
     case "time":
     case "text":
       return String(value).trim() || empty

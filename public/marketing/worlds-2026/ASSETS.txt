@@ -1,0 +1,10 @@
+Background (section backdrop):
+  awards-background.jpeg  — preferred
+  awards-background.jpg   — auto-fallback if .jpeg missing
+
+Gallery (WebP):
+  champion.webp
+  awards-1.webp
+  awards-2.webp  (optional)
+
+Configured in src/lib/worlds-achievements-2026.ts

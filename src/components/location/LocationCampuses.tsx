@@ -50,7 +50,7 @@ function CampusMap({ campus, address }: { campus: Campus; address: string }) {
     return (
       <div className="rounded-xl overflow-hidden border border-white/10 h-[220px] sm:h-[260px] bg-slate-800/50">
         <iframe
-          title={`Map for ${campus.display_name || campus.name || "campus"}`}
+          title={`Map for ${campus.display_name || campus.name || "location"}`}
           width="100%"
           height="100%"
           style={{ border: 0 }}
@@ -88,7 +88,7 @@ export function LocationCampuses({ campuses, displayName }: LocationCampusesProp
   return (
     <section className="py-16 sm:py-20 lg:py-24 bg-[#0f172a] dark:bg-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Our Campuses</h2>
+        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Our Locations</h2>
         <p className="text-slate-300 text-sm md:text-base mb-10 max-w-2xl">
           {displayName} has {campuses.length} location{campuses.length > 1 ? "s" : ""}. Visit us at these
           locations.

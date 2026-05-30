@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { extractIsoDatePart } from "@/lib/format-calendar-date"
 import { filterInstanceDataExtByDisplayScope } from "@/lib/instance-schema"
+
+/** v2_instance DATE columns: expose YYYY-MM-DD only (no timezone shift on clients). */
+function normalizeInstanceDateColumn(value: unknown): string | null {
+  return extractIsoDatePart(value == null ? undefined : String(value))
+}
 
 /** Filter offering type_config_data by schema display_scope (web or both) for C-end. Top-level only. */
 function filterOfferingConfigByDisplayScope(
@@ -139,10 +145,21 @@ export async function GET(
     const maxStudents = (row as any).max_students ?? extData.max_students ?? capacityPrice?.max_students ?? 0
     const currentStudents = (row as any).current_students ?? 0
 
+    const rowStart = normalizeInstanceDateColumn((row as any).start_date)
+    const rowEnd = normalizeInstanceDateColumn((row as any).end_date)
+
     const payload = {
       id: (row as any).id,
-      start_date: (row as any).start_date ?? extData.start_date ?? schedule?.start_date ?? null,
-      end_date: (row as any).end_date ?? extData.end_date ?? schedule?.end_date ?? null,
+      start_date:
+        rowStart ??
+        normalizeInstanceDateColumn(extData.start_date) ??
+        normalizeInstanceDateColumn(schedule?.start_date) ??
+        null,
+      end_date:
+        rowEnd ??
+        normalizeInstanceDateColumn(extData.end_date) ??
+        normalizeInstanceDateColumn(schedule?.end_date) ??
+        null,
       start_time: (row as any).start_time ?? extData.start_time ?? schedule?.start_time ?? null,
       end_time: (row as any).end_time ?? extData.end_time ?? schedule?.end_time ?? null,
       max_students: maxStudents || null,

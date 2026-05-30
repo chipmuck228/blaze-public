@@ -24,7 +24,6 @@ function UnsubscribeContent() {
       return
     }
 
-    // 调用退订 API
     const unsubscribe = async () => {
       try {
         const response = await fetch(`/api/public/newsletter/unsubscribe?token=${encodeURIComponent(token)}`)
@@ -62,7 +61,7 @@ function UnsubscribeContent() {
           {status === "loading" && (
             <div className="flex flex-col items-center justify-center py-8">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-muted-foreground">正在处理退订请求...</p>
+              <p className="text-muted-foreground">Processing your unsubscribe request…</p>
             </div>
           )}
 
@@ -73,20 +72,22 @@ function UnsubscribeContent() {
                 <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">您已成功退订 Newsletter</h3>
+                <h3 className="text-lg font-semibold">
+                  You have been unsubscribed
+                </h3>
                 {email && (
                   <p className="text-sm text-muted-foreground">
-                    邮箱地址：<span className="font-mono">{email}</span>
+                    Email: <span className="font-mono">{email}</span>
                   </p>
                 )}
                 <p className="text-sm text-muted-foreground mt-4">
-                  我们很抱歉看到您离开。
+                  We&apos;re sorry to see you go.
                   <br />
-                  如果您改变主意，可以随时重新订阅。
+                  You can resubscribe anytime from our homepage.
                 </p>
               </div>
               <Button asChild className="w-full mt-4">
-                <Link href="/">返回首页并重新订阅</Link>
+                <Link href="/">Return home and resubscribe</Link>
               </Button>
             </div>
           )}
@@ -98,16 +99,16 @@ function UnsubscribeContent() {
                 <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">退订失败</h3>
+                <h3 className="text-lg font-semibold">Unsubscribe failed</h3>
                 <p className="text-sm text-muted-foreground">
-                  {error || "发生错误，请稍后重试"}
+                  {error || "Something went wrong. Please try again later."}
                 </p>
                 <p className="text-sm text-muted-foreground mt-4">
-                  请检查链接是否正确，或联系客服获取帮助。
+                  Check that your link is correct, or contact support for help.
                 </p>
               </div>
               <Button variant="outline" asChild className="w-full mt-4">
-                <Link href="/">返回首页</Link>
+                <Link href="/">Return home</Link>
               </Button>
             </div>
           )}
@@ -128,7 +129,7 @@ function UnsubscribeFallback() {
         <CardContent className="space-y-6">
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">正在加载...</p>
+            <p className="text-muted-foreground">Loading…</p>
           </div>
         </CardContent>
       </Card>

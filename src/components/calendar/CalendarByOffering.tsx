@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
+import { formatCalendarDateRange } from '@/lib/format-calendar-date'
 
 export interface InstanceItem {
   id: string
@@ -17,11 +18,7 @@ export interface InstanceItem {
 }
 
 function formatDateRange(start: string | null, end: string | null): string {
-  if (!start) return 'TBD'
-  const startStr = new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  if (!end || end === start) return startStr
-  const endStr = new Date(end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  return `${startStr} – ${endStr}`
+  return formatCalendarDateRange(start, end)
 }
 
 function isDateInRange(dayStr: string, start: string | null, end: string | null): boolean {

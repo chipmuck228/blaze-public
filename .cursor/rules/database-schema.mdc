@@ -16,8 +16,9 @@ Always use `v2_*` prefix. Never create `offerings_v2`, `franchises_v2`, or `inst
 
 ## C-end vs Admin naming
 
-- C-end: Location (`v2_franchise`) → Program (`v2_category`) → Activity (`v2_program`) → Session (`v2_instance`); session card title = `v2_offering.name`
-- Admin ops: franchise → category → program (`v2_program`) → instance; `v2_offering` is the product template linked on each instance
+**Canonical mapping:** see always-applied rule `product-hierarchy.mdc`.
+
+Summary: Web Campus = `v2_franchise`; Web Location = `v2_campus`; Web Program = `v2_category`; Web Activity = `v2_program`; Web Session = `v2_instance`. Session card title = `v2_offering.name` (offering is not a Web nav level).
 
 ## Entity Hierarchy
 
@@ -33,6 +34,7 @@ Always use `v2_*` prefix. Never create `offerings_v2`, `franchises_v2`, or `inst
 - `v2_offering.type_config_data` ← `offering_schema`; flatten nested keys (e.g. `pricing.base_price`) to table columns on write
 - `v2_instance.instance_data_ext` ← `instance_schema`; object groups (`schedule`, `capacity_price`) derive row columns (`start_date`, `max_students`, etc.)
 - Validate against schema before insert/update; display via `@/lib/instance-schema.ts` (see `admin/instance/v2/route.ts`)
+- **C-end date labels**: format `v2_instance.start_date` / `end_date` (DATE / `YYYY-MM-DD`) with `@/lib/format-calendar-date.ts` — show the stored calendar day for all users; do not use `new Date(isoDateOnly)` or viewer timezone for display
 
 ## Status & Integrity
 

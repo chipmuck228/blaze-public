@@ -45,6 +45,10 @@ Seed/upsert: `npm run seed:newsletter-templates`.
 
 - **Public**: `POST /api/public/newsletter/subscribe`, `GET /api/public/newsletter/unsubscribe`, Information Clause in `@/lib/newsletter-information-clause.ts`.
 - **Admin** (`role === "admin"`): templates CRUD, campaigns, send/schedule, statistics, failed-sends; delivery status UI via `NewsletterDeliveryPanel` + `GET /api/admin/newsletter/delivery-config`.
+
+## UI language
+
+- User-facing copy under `src/app/**/newsletter/**` and `src/components/admin/newsletter/**` must be **English** (labels, toasts, errors, empty states, confirmations). Code comments may stay bilingual; do not ship Chinese UI strings on these pages.
 - **Webhook**: `POST /api/webhooks/resend` — verify `RESEND_WEBHOOK_SECRET` (Svix headers); update `newsletter_sends` / deactivate subscriber on bounce or `contact.unsubscribed`.
 
 ## Env vars

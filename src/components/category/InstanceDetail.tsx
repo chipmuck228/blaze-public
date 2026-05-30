@@ -27,6 +27,11 @@ import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth"
 import { InstanceRecommendations } from "@/components/category/InstanceRecommendations"
 import { MealCareServiceBlock } from "@/components/category/MealCareServiceBlock"
 import { flattenInstanceDataExtForDisplay, formatSchemaValueForDisplay, iterateInstanceSchemaFieldsForDisplay, type SchemaFieldDisplayConfig } from "@/lib/instance-schema"
+import {
+  formatCalendarDate,
+  formatCalendarMonthYear,
+  parseLocalDateOnly,
+} from "@/lib/format-calendar-date"
 
 /** Renders HTML (from WYSIWYG editor) or Markdown with consistent prose styling. */
 function RichTextContent({ content, className = "" }: { content: string; className?: string }) {
@@ -91,6 +96,9 @@ const OFFERING_TYPE_LABEL_OVERRIDES: Record<string, Partial<SectionLabels>> = {
   giftcard: { overview: "Gift Card Details", audience: "Use For", outcomes: "Value", prerequisites: "" },
   competition: { overview: "Competition Overview", audience: "Eligibility", outcomes: "What You'll Experience", prerequisites: "Requirements" },
 }
+
+/** Schema-driven Offering / This session fields card; Session details sidebar stays visible. */
+const SHOW_INSTANCE_SCHEMA_DETAILS_CARD = false
 
 export interface InstanceDetailData {
   id: string
@@ -185,8 +193,7 @@ function getTypeLabels(code?: string): SectionLabels {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "TBD"
-  return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+  return formatCalendarDate(dateStr)
 }
 
 function formatTime(timeStr: string | null): string {
@@ -198,11 +205,9 @@ function formatTime(timeStr: string | null): string {
   return `${displayHour}:${m || "00"} ${ampm}`
 }
 
-/** Parse "YYYY-MM-DD" as local date (avoid UTC shift). */
+/** Parse "YYYY-MM-DD" as local calendar date (avoid UTC shift). */
 function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number)
-  if (y == null || m == null || d == null) return new Date(NaN)
-  return new Date(y, m - 1, d)
+  return parseLocalDateOnly(dateStr)
 }
 
 /** Get all session dates between start and end (inclusive), in local calendar. If daysOfWeek is set (0=Sun..6=Sat), only those weekdays are included. */
@@ -288,7 +293,7 @@ function InstanceSessionCalendar({
           return (
             <div key={`${year}-${month}`}>
               <p className="text-xs font-medium text-slate-500 mb-1.5">
-                {startOfMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                {formatCalendarMonthYear(year, month)}
               </p>
               <div className="grid grid-cols-7 gap-0.5 text-center">
                 {WEEKDAY_LABELS.map((label) => (
@@ -594,6 +599,7 @@ export function InstanceDetail() {
 
             {/* Offering (type_config_data) + Instance (instance_data_ext) details; both flattened by schema to avoid [object Object] */}
             {(() => {
+              if (!SHOW_INSTANCE_SCHEMA_DETAILS_CARD) return null
               const omit = new Set([
                 "description",
                 "target_audience",

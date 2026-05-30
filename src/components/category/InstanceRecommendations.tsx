@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { BookOpen, Loader2 } from "lucide-react"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+import { formatCalendarDateRange } from "@/lib/format-calendar-date"
 
 interface RecommendedSession {
   id: string
@@ -136,10 +137,10 @@ export function InstanceRecommendations({
             session.offering?.base_price ??
             session.course?.base_price
           const href = sessionDetailHref(session, locationCode)
-          const dates =
-            session.start_date && session.end_date
-              ? `${new Date(session.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(session.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-              : null
+          const dates = formatCalendarDateRange(session.start_date, session.end_date, {
+            emptyLabel: "",
+          })
+          const datesLabel = dates && dates !== "" ? dates : null
 
           return (
             <li key={session.id}>
@@ -166,7 +167,7 @@ export function InstanceRecommendations({
                   <p className="font-semibold text-slate-800 group-hover:text-blue-600 line-clamp-2">
                     {name}
                   </p>
-                  {dates && <p className="text-xs text-slate-500 mt-0.5">{dates}</p>}
+                  {datesLabel && <p className="text-xs text-slate-500 mt-0.5">{datesLabel}</p>}
                   {price != null && (
                     <p className="text-sm text-slate-500 mt-0.5">
                       ${Number(price).toFixed(2)}

@@ -1,0 +1,76 @@
+---
+description: Web (C-end) vs Admin hierarchy — canonical naming and v2 table mapping
+alwaysApply: true
+---
+
+# Product Hierarchy — Web vs Admin
+
+Use **Web user terms** in C-end UI, routes, copy, and public API responses. Use **Admin / DB terms** in admin portals, import scripts, and `v2_*` queries. Do not mix layers.
+
+## Web user hierarchy (C-end)
+
+```
+Campus → Location → Program → Activity → Session
+```
+
+| Level | Meaning | Bookable |
+|-------|---------|----------|
+| **Campus** | A franchise branch (one Web Campus per franchise) | No |
+| **Location** | Physical site under that Campus (name, address, contact) | No |
+| **Program** | Track within a Campus: Explore / Learn / Compete | No |
+| **Activity** | Season or catalog group (e.g. `2026 Summer Camps`) | No |
+| **Session** | Concrete schedulable offering: dates, price, times, capacity | **Yes** |
+
+## Admin / database hierarchy
+
+```
+franchise → campus → category → program → instance
+              (+ offering_type, offering — template layer, not a Web level)
+```
+
+| Admin term | Table | Web term |
+|------------|-------|----------|
+| franchise | `v2_franchise` | **Campus** |
+| campus | `v2_campus` | **Location** |
+| category | `v2_category` | **Program** |
+| program | `v2_program` | **Activity** |
+| instance | `v2_instance` | **Session** |
+| offering_type | `v2_offering_type` | *(no Web level)* |
+| offering | `v2_offering` | *(no Web level)* |
+
+## Backend-only: offering + offering_type
+
+- **`v2_offering`**: Session **template** (name/title, poster, type config). C-end Session **card title** usually comes from `v2_offering.name`; schedule/price from `v2_instance`.
+- **`v2_offering_type`**: Schema driver (`camp`, `course`, …). Never expose as a Web navigation level.
+
+## Development rules
+
+1. **New C-end code** must use Campus / Location / Program / Activity / Session — not franchise / category / program / instance in user-visible strings.
+2. **New Admin code** uses franchise / campus / category / program / instance / offering.
+3. **Types and variables**: prefer `webCampus`, `webLocation`, `webProgram`, `webActivity`, `webSession` (or `Display*` types in `@/lib/programs-catalog-view.ts`) when both layers appear in one module; avoid overloading `location` to mean franchise.
+4. **Imports / wide tables**: Admin columns may say `Location Code` (franchise `code`), `Programs (category)`, `Activity (program)`, `Session Title` (`v2_offering.name`) — see `scripts/design/unified-instance-import.md`.
+5. **Integrity** (do not break):
+   - `v2_campus.franchise_id` → franchise of the Web Campus
+   - `v2_program.franchise_id` + `category_id`; franchise must subscribe category (`v2_franchise_category_map`)
+   - `v2_instance.program_id`, `v2_instance.offering_id`, optional `v2_instance.campus_id`
+   - `v2_offering.category_id` must equal `v2_program.category_id` for the linked instance
+
+## Legacy mapping (migrate away)
+
+Old C-end docs/code often used:
+
+| Old Web label | Was mapped to | New Web label | DB |
+|---------------|---------------|---------------|-----|
+| Location | `v2_franchise` | **Campus** | `v2_franchise` |
+| Program | `v2_category` | **Program** | `v2_category` |
+| Activity | `v2_program` | **Activity** | `v2_program` |
+| Session | `v2_instance` | **Session** | `v2_instance` |
+
+When refactoring, introduce **Location** = `v2_campus` where a physical site is shown; do not use Location for franchise.
+
+## Quick reference
+
+```text
+Web:     Campus(bellevue) → Location(Bellevue, WA) → Program(Explore) → Activity(2026 Summer Camps) → Session(week of 7/6…)
+Admin:   franchise(bellevue) → campus(…) → category(explore) → program(2026 Summer Camps) → instance(row) + offering(template)
+```

@@ -2,12 +2,12 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | 已落盘（设计规格，待实现） |
+| 状态 | 已实现（`import-instances.js` + `lib/import-instances-common.js`） |
 | 版本 | 1.0 |
 | 日期 | 2026-05-29 |
 | 相关规则 | `.cursor/rules/database-schema.mdc` |
 | 现有脚本（保留，不删除） | `scripts/import-instances-camp.js`、`scripts/import-instances-course.js` |
-| 计划新增（本文仅设计，不含实现） | `scripts/import-instances.js`、`scripts/lib/import-instances-common.js`、`scripts/templates/instances-unified-template.csv` |
+| 统一入口 | `scripts/import-instances.js`、`scripts/lib/import-instances-common.js` |
 
 ---
 
@@ -107,6 +107,7 @@ Session Title:       2-Week Full Day: Competitive Robotics Fundamentals with VEX
 | Campus | 校区名或地址 | — |
 | Start Date | 开始日期 | 支持 `YYYY-MM-DD`、`M/D/YYYY`、Excel 序列号 |
 | End Date | 结束日期 | 同上 |
+| Price Override | 实例售价覆盖；Camp / Course 均有 | 来自 raw `Price` |
 | Status | `scheduled` / `ongoing` / `completed` / `cancelled` | — |
 | Is Active | Yes/No | — |
 | Featured | Yes/No | — |
@@ -119,7 +120,7 @@ Session Title:       2-Week Full Day: Competitive Robotics Fundamentals with VEX
 |------|
 | Start Time, End Time |
 | Min Age, Max Age |
-| Max Campers, Price Override |
+| Max Campers |
 | Meal Provided, Camp Shirt Provided, After Care Available |
 
 写入：`instance_data_ext`（`schedule`、`capacity_price`、`camp_services`、`age_range`、`additional.special_needs`）；`v2_instance` 扁平列（`start_date`、`max_students`、`price_override` 等）。
@@ -137,11 +138,11 @@ Session Title:       2-Week Full Day: Competitive Robotics Fundamentals with VEX
 
 | 维度 | Camp | Course |
 |------|------|--------|
-| 容量/价格 | Max Campers, Price Override | DB 通常为 null |
+| 容量/价格 | Max Campers + **Price Override**（宽表） | **Price Override**（宽表）；Max Campers 通常为空 |
 | 服务 | Meal / Shirt / After Care | 无 |
 | 排期 | 日期 + 时间 | 含每周上课日；Start Time 可为日期 |
 | 受众 | Min/Max Age 可选 | Min/Max Age 必填 + Target Grade |
-| `instance_data_ext` | `camp_services`, `capacity_price` | `audience.target_grades` |
+| `instance_data_ext` | `camp_services`, `capacity_price` | `audience.target_grades`；有 `Price Override` 时写 `capacity_price` |
 | `days_of_week` 列 | 不写 | 写 `v2_instance.days_of_week` |
 
 ### 3.6 模板文件（计划）
@@ -349,6 +350,32 @@ location | category | activity | sessionTitle | startDate | campus
 | `--allow-file-duplicates` | 允许文件内重复键 |
 | `--allow-draft-offering` | 允许 draft offering |
 | `--publish-referenced-offerings` | execute 时 publish 引用 offering |
+| `--replace-all` | execute 前 **DELETE 全部** `v2_instance`，再纯 INSERT（隐含 `--insert-only`） |
+| `--insert-only` | 跳过 UPDATE，仅 INSERT（与 `--replace-all` 联用做全量重建） |
+| `--audit` | 仅运行 category 一致性审计后退出 |
+
+### 6.6.1 UPSERT 与 orphan 行
+
+默认 UPSERT（natural key 匹配则 UPDATE）**不会删除** CSV 未覆盖的旧 instance。若库中已有脏数据或与 CSV 重复的行，会出现：
+
+- instance 总数 > CSV 行数
+- `offering.category_id ≠ program.category_id`（Admin API 报错）
+
+**全量重建**（无 enrollment 时）：`--execute --replace-all --allow-file-duplicates`，使库内 instance **仅来自 CSV**。
+
+### 6.6.2 文件内重复 natural key
+
+`Blaze-Instances-Unified.csv` 中 rows 219–220 等同 session 不同 Amilia link。使用 `--allow-file-duplicates` 保留**最后一行**，其余 `SKIPPED_DUPLICATE`。
+
+### 6.6.3 完整性审计
+
+```bash
+node scripts/audit-instances-integrity.js
+# 或
+node scripts/import-instances.js --audit
+```
+
+导入前后自动审计写入 report 的 `audit_before` / `audit_after`。
 
 ### 6.7 空行
 
@@ -416,7 +443,8 @@ dry-run：`db_after` 为拟写入内容；INSERT 时 `instance_id` 为 null。
 
 ```
 scripts/
-  import-instances.js              # 统一入口（新建）
+  import-instances.js              # 统一入口
+  audit-instances-integrity.js     # category 一致性审计
   import-instances-camp.js         # 保留；未来可改为薄包装
   import-instances-course.js       # 保留；未来可改为薄包装
   import-offerings-camp.js         # 保留；Offering 含 Image Link → poster_url
@@ -434,11 +462,17 @@ scripts/
     import-instances-*.log
 ```
 
-**CLI（计划）**
+**CLI**
 
 ```bash
 node scripts/import-instances.js --dry-run [--file <path>] [--type all|camp|course]
 node scripts/import-instances.js --execute [--file <path>] [--fail-fast] [--allow-draft-offering] [--publish-referenced-offerings]
+
+# 全量重建（无 enrollment 时）
+node scripts/import-instances.js --execute --replace-all --allow-file-duplicates \
+  --file Blaze/Blaze-Instances-Unified.csv
+
+node scripts/audit-instances-integrity.js
 ```
 
 默认源文件：`Blaze-Instances.xlsx`（OneDrive Blaze 目录）；亦可通过 `--file` 指定现有 `Blaze-Instances-Camps.xlsx` 等。
@@ -458,10 +492,10 @@ node scripts/import-instances.js --execute [--file <path>] [--fail-fast] [--allo
 | Title | `2-Week Full Day: Competitive Robotics… (Rising Grades 3-4)` | → **Session Title** |
 | Image Link | `https://…` | → **仅 Offerings 提取**（§11.6） |
 | Amilia Link | `https://app.amilia.com/…` | → **Amilia Link** |
-| Location | `Bellevue` / `Chess4Life Bellevue` / … | → **Location Code**（需别名表） |
+| Location | `Bellevue` / `Chess4Life Bellevue` / … | → **Campus**（原文，不解析）；另经别名表 → **Location Code** |
 | Start Date / End Date | Excel 序列号 `46209` | → **Start/End Date**（转 `YYYY-MM-DD`） |
 | Time | `Weekdays, 9:00 AM - 3:00 PM` | → 解析 **Start Time / End Time**；course 另解析 **上课日** |
-| Price | `1750` / `390` | Camp → **Price Override**；Course 通常不写 instance 价 |
+| Price | `1750` / `390` | → **Price Override**（Camp / Course 均写入宽表） |
 | Overview / Target Students / Learning Outcome | 长文本 | → **仅 Offerings 提取** |
 | Tag: Explore/Learn/Compete | `Explore` / `Compete` / `Learn` | → **Programs (category)** |
 | Tag: Camp/Course/Workshop/Competition | `Camp` / `Course` | **过滤** + 推导 Activity (program) |
@@ -472,7 +506,7 @@ node scripts/import-instances.js --execute [--file <path>] [--fail-fast] [--allo
 | Unified 列 | 推导策略 |
 |------------|----------|
 | Activity (program) | 由 offering type 标签推导（见 §11.3） |
-| Campus | 原始表无；默认空，由导入器按 franchise 匹配唯一 campus；或 Location 别名映射到具体校区（Chess4Life → 对应 campus） |
+| Campus | 原始 `Location` 列**原文**写入，不做别名或 code 转换 |
 | Status | 默认 `scheduled` |
 | Is Active | 默认 `Yes` |
 | Min Age / Max Age | 从 **Title** 解析 `Rising Grades X-Y` / `Ages X-Y`（约 210/256 行可解析） |
@@ -527,8 +561,8 @@ flowchart LR
 | 原始 Location | Location Code | 备注 |
 |---------------|---------------|------|
 | Bellevue | `bellevue` | |
-| Bellevue Bel-Red | `bellevue` | 同 franchise；Campus 可后续用地址区分 |
-| Chess4Life Bellevue | `bellevue` | 合作点；Campus 可能需单独映射 |
+| Bellevue Bel-Red | `bellevue` | 同 franchise；Campus 保留原文 `Bellevue Bel-Red` |
+| Chess4Life Bellevue | `bellevue` | 合作点；Campus 保留原文 `Chess4Life Bellevue` |
 | Issaquah | `issaquah` | |
 | Chess4Life Issaquah | `issaquah` | |
 | Sammamish | `sammamish` | |
@@ -568,12 +602,12 @@ Offerings 去重键建议：`Title` + `Tag: Explore/Learn/Compete` + `Tag: Camp/
 | Programs (category) | `Tag: Explore/Learn/Compete` |
 | Activity (program) | §11.3 推导 |
 | Session Title | `Title`（全文） |
-| Campus | 空或 Location 子类型映射 |
+| Campus | `Location` 原文 |
 | Start Date / End Date | 序列号 → 日期 |
 | Start Time / End Time | §11.5 |
 | Min Age / Max Age | Title 正则推断 |
 | Max Campers | 空 |
-| Price Override | `Price`（仅 Camp） |
+| Price Override | `Price`（**Camp / Course 均映射**） |
 | Meal / Shirt / After Care | 默认或空 |
 | Classes start on… / Target Grade | §11.5 + Title（仅 Course） |
 | Status | `scheduled` |

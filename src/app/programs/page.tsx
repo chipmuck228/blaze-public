@@ -30,6 +30,9 @@ import { CourseDaysOfWeekBadges } from "@/components/programs/CourseDaysOfWeekBa
 import { LazySessionPoster } from "@/components/programs/LazySessionPoster"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 import { cn } from "@/lib/utils"
+import { OpenProgramsAIChatButton } from "@/components/programs-ai/OpenProgramsAIChatButton"
+import { PROGRAMS_AI_ASSISTANT_ENABLED } from "@/lib/programs-ai-config"
+import { formatCalendarDate, formatCalendarDateRange } from "@/lib/format-calendar-date"
 
 type FranchiseListItem = { id: string; code: string; name: string }
 
@@ -118,9 +121,9 @@ function SessionCard({
 
   const dates =
     session.start_date && session.end_date
-      ? `${new Date(session.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(session.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+      ? formatCalendarDateRange(session.start_date, session.end_date)
       : session.start_date
-        ? `Starts ${new Date(session.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+        ? `Starts ${formatCalendarDate(session.start_date)}`
         : "TBD"
 
   const basePrice = session.price_override ?? session.course.base_price ?? 0
@@ -783,26 +786,23 @@ function ProgramsPageContent() {
           </div>
         </section>
 
-        <section className="max-w-7xl mx-auto px-4">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl">
-            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
-              <div className="text-center lg:text-left">
-                <h2 className="text-4xl font-black mb-4">Unsure about your child&apos;s level?</h2>
-                <p className="text-blue-100 text-lg max-w-xl">
-                  Chat with our AI assistant for personalized program recommendations by age, grade, and
-                  interests.
-                </p>
+        {PROGRAMS_AI_ASSISTANT_ENABLED && (
+          <section className="max-w-7xl mx-auto px-4">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[40px] p-12 text-white relative overflow-hidden shadow-2xl">
+              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
+                <div className="text-center lg:text-left">
+                  <h2 className="text-4xl font-black mb-4">Unsure about your child&apos;s level?</h2>
+                  <p className="text-blue-100 text-lg max-w-xl">
+                    Chat with our AI assistant for personalized program recommendations by age, grade, and
+                    interests.
+                  </p>
+                </div>
+                <OpenProgramsAIChatButton>Get AI Assessment</OpenProgramsAIChatButton>
               </div>
-              <div
-                className="bg-white/90 text-blue-600 px-12 py-5 rounded-full font-black text-xl shadow-xl whitespace-nowrap cursor-not-allowed opacity-90"
-                aria-disabled="true"
-              >
-                Coming Soon
-              </div>
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
             </div>
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
-          </div>
-        </section>
+          </section>
+        )}
       </div>
       <Footer />
 

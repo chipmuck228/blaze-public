@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { usePlatform } from "@/hooks/usePlatform";
 import { Navbar } from "@/components/Navbar";
 import { Hero } from "@/components/Hero";
+import { WorldsAchievementsSection } from "@/components/WorldsAchievementsSection";
+import { WORLDS_ACHIEVEMENTS_SECTION_ENABLED } from "@/lib/worlds-achievements-config";
 import { Advantages } from "@/components/Advantages";
 import { Categories } from "@/components/Categories";
 import { Testimonials } from "@/components/Testimonials";
@@ -164,6 +166,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen">
       <Navbar />
       <main className="flex-grow">
+        {WORLDS_ACHIEVEMENTS_SECTION_ENABLED && <WorldsAchievementsSection />}
         <Hero />
         {/* <RoboticsJourney /> */}
 

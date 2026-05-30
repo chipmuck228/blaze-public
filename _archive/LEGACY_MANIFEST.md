@@ -27,7 +27,7 @@
 | _archive/admin-pages/franchises/page.tsx | B | isolated | /admin/blaze/franchises | Redirect in src |
 | _archive/admin-pages/locations/page.tsx | B | isolated | /admin/blaze/campuses | Redirect in src |
 | _archive/admin-pages/offering-types/page.tsx | B | isolated | /admin/blaze/offering-types | Redirect in src |
-| _archive/admin-pages/courses/page.tsx | B | isolated | /admin/guide | No v2 equivalent |
+| _archive/admin-pages/guide/page.tsx | B | isolated | src/app/admin/guide/page.tsx | Legacy schema-driven admin guide (archived 2026-05) |
 | _archive/admin-pages/subcategories/page.tsx | B | isolated | /admin/guide | No v2 equivalent |
 | _archive/components/admin/InstanceCreateDialog.tsx | B | isolated | InstanceCreateDialogV2 | Was series-only |
 | _archive/components/admin/BatchCreateInstanceDialog.tsx | B | isolated | InstanceCreateDialogV2 | Was instances/assignments |
