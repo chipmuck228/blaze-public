@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowRight, Calendar, MapPin, BookOpen } from 'lucide-react'
-import Image from 'next/image'
+import { ArrowRight, BookOpen, Calendar, MapPin } from 'lucide-react'
 import Link from 'next/link'
+import { LazyRemoteImage } from '@/components/ui/LazyRemoteImage'
 
 interface FeaturedCourse {
   id: string
@@ -90,15 +90,19 @@ export function FeaturedCoursesMobile() {
           >
             <div className="relative w-full h-32 bg-muted rounded-t-lg overflow-hidden">
               {course.poster_url ? (
-                <Image
+                <LazyRemoteImage
                   src={course.poster_url}
                   alt={course.name}
-                  fill
-                  className="object-cover"
+                  containerClassName="absolute inset-0"
+                  fallback={
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                      <BookOpen className="h-12 w-12 text-primary/40" aria-hidden />
+                    </div>
+                  }
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
-                  <BookOpen className="h-12 w-12 text-primary/40" />
+                  <BookOpen className="h-12 w-12 text-primary/40" aria-hidden />
                 </div>
               )}
             </div>

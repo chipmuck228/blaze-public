@@ -3,15 +3,12 @@ import { Button } from "./ui/button";
 import { HeroCards } from "./HeroCards";
 import Link from "next/link";
 import { ArrowRight, ExternalLink } from "lucide-react";
+import { MarketingHeroBackdrop } from "@/components/MarketingHeroBackdrop";
 
 export const Hero = () => {
   return (
-    <section className="relative min-h-[100vh] lg:min-h-[60vh] flex flex-col lg:flex-row bg-[#0f172a] overflow-hidden pt-20 lg:pt-20 items-center justify-center">
-      {/* Decorative Background Elements */}
-      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-600 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-600 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4"></div>
-      </div>
+    <section className="relative min-h-[100vh] lg:min-h-[60vh] flex flex-col lg:flex-row bg-hero overflow-hidden pt-20 lg:pt-20 items-center justify-center">
+      <MarketingHeroBackdrop />
       <div className="relative z-10 w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-12 lg:py-0">
         <div className="max-w-xl">
           <a

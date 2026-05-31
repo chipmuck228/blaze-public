@@ -1,6 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
+import { formatDayOfWeekAbbrev } from "@/lib/day-of-week-labels"
 import { getSessionDaysOfWeek, isCourseOfferingSession } from "@/lib/programs-catalog-view"
 import type { CatalogSession } from "@/lib/programs-catalog-view"
 
@@ -13,15 +14,15 @@ export function CourseDaysOfWeekBadges({ session }: { session: CatalogSession })
   return (
     <span
       className="inline-flex items-center gap-0.5 shrink-0"
-      title="Class days (0=Sun, 1=Mon, 2=Tue, …)"
+      title={`Meets on ${days.map(formatDayOfWeekAbbrev).join(", ")}`}
     >
       {days.map((day) => (
         <Badge
           key={day}
           variant="outline"
-          className="h-5 min-w-[1.25rem] px-1 py-0 text-[10px] font-semibold tabular-nums justify-center rounded-sm border-indigo-300/80 text-indigo-800 bg-indigo-50/80"
+          className="h-5 min-w-[1.25rem] px-1 py-0 text-[10px] font-semibold justify-center rounded-sm border-indigo-300/80 text-indigo-800 bg-indigo-50/80"
         >
-          {day}
+          {formatDayOfWeekAbbrev(day)}
         </Badge>
       ))}
     </span>

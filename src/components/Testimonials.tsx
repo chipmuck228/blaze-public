@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { LazyRemoteImage } from "@/components/ui/LazyRemoteImage";
 
 interface TestimonialProps {
   id: string;
@@ -60,9 +61,16 @@ export const Testimonials = ({ franchiseCode, locationName }: TestimonialsProps 
   const displayTestimonials = testimonials;
   const duplicatedTestimonials = testimonials.length > 0 ? [...displayTestimonials, ...displayTestimonials] : [];
 
-  // 生成头像背景色（循环使用不同颜色）
+  const getAvatarInitials = (name: string) =>
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+
   const getAvatarColor = (index: number) => {
-    return index % 2 === 0 ? 'bg-[#2563eb]' : 'bg-[#e0f2fe]';
+    return index % 2 === 0 ? "bg-[#2563eb]" : "bg-[#e0f2fe]";
   };
 
   // 动画效果 useEffect - 只在有数据时运行
@@ -194,38 +202,28 @@ export const Testimonials = ({ franchiseCode, locationName }: TestimonialsProps 
                 </p>
                 <div className="flex items-center space-x-4">
                   {testimonial.image_url ? (
-                    <>
-                      <img
-                        src={testimonial.image_url}
-                        alt={testimonial.name}
-                        className="w-12 h-12 rounded-full object-cover"
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => {
-                          // 如果图片加载失败，隐藏图片并显示默认头像
-                          const target = e.target as HTMLImageElement
-                          target.style.display = 'none'
-                          const fallback = target.nextElementSibling as HTMLElement
-                          if (fallback) fallback.style.display = 'flex'
-                        }}
-                      />
-                      <div className={`w-12 h-12 ${getAvatarColor(index)} rounded-full hidden items-center justify-center text-white font-semibold text-sm`}>
-                        {testimonial.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2)}
-                      </div>
-                    </>
+                    <LazyRemoteImage
+                      src={testimonial.image_url}
+                      alt={testimonial.name}
+                      containerClassName="w-12 h-12 shrink-0 rounded-full"
+                      className="rounded-full"
+                      fallback={
+                        <div
+                          className={`absolute inset-0 ${getAvatarColor(index)} rounded-full flex items-center justify-center font-semibold text-sm ${
+                            index % 2 === 0 ? "text-white" : "text-[#2563eb]"
+                          }`}
+                        >
+                          {getAvatarInitials(testimonial.name)}
+                        </div>
+                      }
+                    />
                   ) : (
-                    <div className={`w-12 h-12 ${getAvatarColor(index)} rounded-full flex items-center justify-center text-white font-semibold text-sm`}>
-                      {testimonial.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .toUpperCase()
-                        .slice(0, 2)}
+                    <div
+                      className={`w-12 h-12 shrink-0 ${getAvatarColor(index)} rounded-full flex items-center justify-center font-semibold text-sm ${
+                        index % 2 === 0 ? "text-white" : "text-[#2563eb]"
+                      }`}
+                    >
+                      {getAvatarInitials(testimonial.name)}
                     </div>
                   )}
                   <div>

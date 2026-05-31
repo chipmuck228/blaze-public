@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { MapPin, List } from "lucide-react";
 import Link from "next/link";
 import { RoboticsJourney } from "@/components/RoboticsJourney";
+import { LazyRemoteImage } from "@/components/ui/LazyRemoteImage";
 
 export default function Home() {
   const { isNative, isReady } = usePlatform();
@@ -241,18 +242,18 @@ export default function Home() {
                                 className="group relative border rounded-xl p-2 bg-card hover:bg-accent/50 transition-all duration-300 flex items-center justify-between shadow-sm hover:shadow-lg hover:border-primary/50"
                               >
                                 <div className="flex items-center gap-6 flex-1">
-                                  <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-transparent">
+                                  <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden">
                                     {fr.posterUrl ? (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img
+                                      <LazyRemoteImage
                                         src={fr.posterUrl}
-                                        alt=""
-                                        className="w-full h-full object-cover"
-                                        loading="lazy"
-                                        decoding="async"
+                                        alt={fr.name}
+                                        containerClassName="w-full h-full rounded-lg"
+                                        className="rounded-lg"
+                                        fallbackInitials={fr.name.charAt(0).toUpperCase()}
+                                        fallbackTone="light"
                                       />
                                     ) : (
-                                      <div className="w-full h-full flex items-center justify-center bg-transparent transition-colors">
+                                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg">
                                         <span className="text-2xl font-bold text-primary">
                                           {fr.name.charAt(0).toUpperCase()}
                                         </span>
@@ -433,12 +434,8 @@ export default function Home() {
             })()
           )}
         </section>
-        <section id="advantages">
-          <Advantages />
-
-        </section>
-
-        <RoboticsJourney />
+        <RoboticsJourney theme="dark" />
+        <Advantages theme="light" />
 
         {/* Programs overview: categories (high-level) */}
         <section id="programs">

@@ -4,7 +4,19 @@ import { useState, useEffect, useMemo, Suspense, useCallback, useRef } from "rea
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
-import { Loader2, MapPin, Calendar, Search, ArrowRight, ExternalLink, LayoutList, LayoutGrid } from "lucide-react"
+import {
+  Loader2,
+  MapPin,
+  Calendar,
+  Search,
+  ArrowRight,
+  ExternalLink,
+  LayoutList,
+  LayoutGrid,
+  X,
+  SlidersHorizontal,
+  ChevronDown,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import {
@@ -27,6 +39,10 @@ import {
 } from "@/lib/programs-catalog-view"
 import { SessionListRow } from "@/components/programs/SessionListRow"
 import { CourseDaysOfWeekBadges } from "@/components/programs/CourseDaysOfWeekBadges"
+import {
+  OfferingTypeIcon,
+  SessionStatusIcon,
+} from "@/components/programs/SessionCatalogMetaIcons"
 import { LazySessionPoster } from "@/components/programs/LazySessionPoster"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 import { cn } from "@/lib/utils"
@@ -55,21 +71,33 @@ function instanceDetailHref(
   return `${base}?location=${encodeURIComponent(locationCode)}`
 }
 
+/** Overrides globals.css mobile `button { min-height: 44px }` for compact filter chips. */
+const FILTER_BADGE_CLASS =
+  "programs-filter-badge max-md:!min-h-0 max-md:!min-w-0 max-md:py-[2px] max-md:leading-none max-md:h-auto"
+
+/** Mobile Filters row + List/Details toggles — 4px vertical padding (see globals.css). */
+const MOBILE_FILTER_BAR_CONTROL_CLASS =
+  "programs-filter-bar-control max-lg:py-[4px] max-lg:leading-none max-lg:!min-h-0 max-lg:!min-w-0"
+
 function FilterTag({
   label,
   active,
   onClick,
+  compact,
 }: {
   label: string
   active: boolean
   onClick: () => void
+  compact?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap",
+        FILTER_BADGE_CLASS,
+        "inline-flex items-center justify-center rounded-full font-medium border transition-colors whitespace-nowrap",
+        compact ? "px-2 py-[2px] text-[10px] leading-none" : "px-2.5 py-[2px] text-[11px] leading-none",
         active
           ? "bg-[#2563eb] text-white border-[#2563eb] shadow-sm"
           : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
@@ -81,18 +109,15 @@ function FilterTag({
 }
 
 function FilterTagGroup({
-  label,
   children,
+  inline,
 }: {
-  label: string
   children: React.ReactNode
+  inline?: boolean
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 shrink-0 pt-1 sm:w-16">
-        {label}
-      </span>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
+    <div className={cn("flex flex-wrap gap-1", inline ? "min-w-0 flex-1" : "w-full")}>
+      {children}
     </div>
   )
 }
@@ -186,6 +211,8 @@ function SessionCard({
             <h3 className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">
               {session.course.name || activity.name}
             </h3>
+            <SessionStatusIcon status={session.status} />
+            <OfferingTypeIcon code={offeringTypeCode} />
             <CourseDaysOfWeekBadges session={session} />
           </div>
           <p className="text-slate-500 text-sm mb-6 line-clamp-3 leading-relaxed">
@@ -251,6 +278,7 @@ function ProgramsPageContent() {
   const [selectedAgeRange, setSelectedAgeRange] = useState<string>("all")
   const [globalOfferingTypes, setGlobalOfferingTypes] = useState<OfferingTypeOption[]>([])
   const [catalogViewMode, setCatalogViewMode] = useState<"list" | "details">("list")
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const filterAnchorRef = useRef<HTMLDivElement>(null)
   const filterBarRef = useRef<HTMLDivElement>(null)
   const [isFilterPinned, setIsFilterPinned] = useState(false)
@@ -521,6 +549,22 @@ function ProgramsPageContent() {
 
   const totalSessions = countSessionsInGroups(nonEmptyOfferingTypeGroups)
 
+  const activeFilterCount = useMemo(() => {
+    let n = 0
+    if (locationFromUrl) n += 1
+    if (selectedProgramCategoryId !== "all") n += 1
+    if (offeringTypeFromUrl !== "all") n += 1
+    if (selectedAgeRange !== "all") n += 1
+    if (searchQuery.trim()) n += 1
+    return n
+  }, [
+    locationFromUrl,
+    selectedProgramCategoryId,
+    offeringTypeFromUrl,
+    selectedAgeRange,
+    searchQuery,
+  ])
+
   const renderNoSessionsMessage = () => (
     <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-slate-300">
       <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -632,13 +676,12 @@ function ProgramsPageContent() {
               Programs {activeLocName ? `in ${activeLocName}` : "Across Blaze"}
             </h1>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto mb-4">
-              Discover robotics pathways by campus, program, activity, and bookable sessions.
+              Find the right camp or class for your child—browse by campus, season, and schedule, then
+              enroll in a few clicks.
             </p>
             <p className="text-slate-500 text-sm max-w-xl mx-auto">
-              Browse by <strong className="text-slate-400">campus</strong>, then{" "}
-              <strong className="text-slate-400">program</strong> (learning track),{" "}
-              <strong className="text-slate-400">activity</strong> (term or season), and{" "}
-              <strong className="text-slate-400">sessions</strong> you can enroll in below.
+              From summer camps to year-round courses, explore what&apos;s open at Blaze and secure a
+              spot while seats are available.
             </p>
           </div>
         </section>
@@ -651,117 +694,261 @@ function ProgramsPageContent() {
             className={cn(
               "pb-4",
               isFilterPinned
-                ? "fixed top-20 left-0 right-0 z-40 bg-slate-50/95 backdrop-blur-md border-b border-slate-200 shadow-md"
+                ? "fixed top-20 left-0 right-0 z-40 bg-slate-50/55 backdrop-blur-lg border-b border-slate-200/80 shadow-md"
                 : "relative"
             )}
           >
             <div className="max-w-7xl mx-auto px-4 pt-2">
-              <div className="bg-white/95 backdrop-blur-md rounded-[28px] shadow-xl border border-slate-200 p-3 sm:p-4 flex flex-col gap-3">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search programs, activities, or sessions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              />
-            </div>
-
-            <div className="space-y-2 border-t border-slate-100 pt-3">
-              <FilterTagGroup label="Campus">
-                <FilterTag
-                  label="All campuses"
-                  active={!locationFromUrl}
-                  onClick={() => handleLocationChange("all")}
-                />
-                {allFranchiseList.map((franchise) => (
-                  <FilterTag
-                    key={franchise.id}
-                    label={franchise.name}
-                    active={locationFromUrl === franchise.code}
-                    onClick={() => handleLocationChange(franchise.code)}
+              <div className="bg-white/60 backdrop-blur-lg rounded-[28px] shadow-xl border border-slate-200/80 p-3 sm:p-4 flex flex-col gap-2.5">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search programs, activities, or sessions..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-9 py-2 text-sm bg-white/50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                   />
-                ))}
-              </FilterTagGroup>
+                  {searchQuery.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/80 transition-colors"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-4 w-4" strokeWidth={1.5} />
+                    </button>
+                  ) : null}
+                </div>
 
-              <FilterTagGroup label="Program">
-                <FilterTag
-                  label="All programs"
-                  active={selectedProgramCategoryId === "all"}
-                  onClick={() => handleProgramCategoryChange("all")}
-                />
-                {sortedCatalog.map((cat) => (
-                  <FilterTag
-                    key={cat.id}
-                    label={cat.display_name || cat.name}
-                    active={selectedProgramCategoryId === cat.id}
-                    onClick={() => handleProgramCategoryChange(cat.id)}
-                  />
-                ))}
-              </FilterTagGroup>
+                {/* Mobile: collapsible filters */}
+                <div className="lg:hidden border-t border-slate-100 pt-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMobileFiltersOpen((o) => !o)}
+                      className={cn(
+                        MOBILE_FILTER_BAR_CONTROL_CLASS,
+                        "inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      )}
+                    >
+                      <SlidersHorizontal className="h-4 w-4" strokeWidth={1.5} />
+                      Filters
+                      {activeFilterCount > 0 ? (
+                        <span className="bg-[#2563eb] text-white text-[10px] font-bold min-w-[1.25rem] h-5 px-1.5 rounded-full inline-flex items-center justify-center">
+                          {activeFilterCount}
+                        </span>
+                      ) : null}
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 transition-transform",
+                          mobileFiltersOpen && "rotate-180"
+                        )}
+                        strokeWidth={1.5}
+                      />
+                    </button>
+                    <div className="flex items-center gap-0.5 shrink-0 bg-slate-100 p-0.5 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setCatalogViewMode("list")}
+                        className={cn(
+                          MOBILE_FILTER_BAR_CONTROL_CLASS,
+                          "inline-flex items-center justify-center gap-1 px-2 rounded-md text-xs font-medium transition-colors",
+                          catalogViewMode === "list"
+                            ? "bg-white text-[#2563eb] shadow-sm"
+                            : "text-slate-600"
+                        )}
+                        aria-label="List view"
+                      >
+                        <LayoutList className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCatalogViewMode("details")}
+                        className={cn(
+                          MOBILE_FILTER_BAR_CONTROL_CLASS,
+                          "inline-flex items-center justify-center gap-1 px-2 rounded-md text-xs font-medium transition-colors",
+                          catalogViewMode === "details"
+                            ? "bg-white text-[#2563eb] shadow-sm"
+                            : "text-slate-600"
+                        )}
+                        aria-label="Details view"
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {mobileFiltersOpen ? (
+                    <div className="mt-2 space-y-1.5 max-h-[min(50vh,320px)] overflow-y-auto pr-0.5">
+                      <FilterTagGroup>
+                        <FilterTag
+                          label="All campuses"
+                          active={!locationFromUrl}
+                          onClick={() => handleLocationChange("all")}
+                          compact
+                        />
+                        {allFranchiseList.map((franchise) => (
+                          <FilterTag
+                            key={franchise.id}
+                            label={franchise.name}
+                            active={locationFromUrl === franchise.code}
+                            onClick={() => handleLocationChange(franchise.code)}
+                            compact
+                          />
+                        ))}
+                      </FilterTagGroup>
+                      <FilterTagGroup>
+                        <FilterTag
+                          label="All programs"
+                          active={selectedProgramCategoryId === "all"}
+                          onClick={() => handleProgramCategoryChange("all")}
+                          compact
+                        />
+                        {sortedCatalog.map((cat) => (
+                          <FilterTag
+                            key={cat.id}
+                            label={cat.display_name || cat.name}
+                            active={selectedProgramCategoryId === cat.id}
+                            onClick={() => handleProgramCategoryChange(cat.id)}
+                            compact
+                          />
+                        ))}
+                      </FilterTagGroup>
+                      <FilterTagGroup>
+                        <FilterTag
+                          label="All types"
+                          active={offeringTypeFromUrl === "all"}
+                          onClick={() => handleOfferingTypeChange("all")}
+                          compact
+                        />
+                        {visibleOfferingTypeOptions.map((type) => (
+                          <FilterTag
+                            key={type.id}
+                            label={type.name}
+                            active={offeringTypeFromUrl === type.code}
+                            onClick={() => handleOfferingTypeChange(type.code)}
+                            compact
+                          />
+                        ))}
+                      </FilterTagGroup>
+                      <FilterTagGroup>
+                        {ageRangeOptions.map((opt) => (
+                          <FilterTag
+                            key={opt.value}
+                            label={opt.label}
+                            active={selectedAgeRange === opt.value}
+                            onClick={() => setSelectedAgeRange(opt.value)}
+                            compact
+                          />
+                        ))}
+                      </FilterTagGroup>
+                    </div>
+                  ) : null}
+                </div>
 
-              <FilterTagGroup label="Type">
-                <FilterTag
-                  label="All types"
-                  active={offeringTypeFromUrl === "all"}
-                  onClick={() => handleOfferingTypeChange("all")}
-                />
-                {visibleOfferingTypeOptions.map((type) => (
-                  <FilterTag
-                    key={type.id}
-                    label={type.name}
-                    active={offeringTypeFromUrl === type.code}
-                    onClick={() => handleOfferingTypeChange(type.code)}
-                  />
-                ))}
-              </FilterTagGroup>
+                {/* Desktop: campus row + compact Program / Type / Age row */}
+                <div className="hidden lg:flex flex-col gap-1.5 border-t border-slate-100/80 pt-2">
+                  <FilterTagGroup>
+                    <FilterTag
+                      label="All campuses"
+                      active={!locationFromUrl}
+                      onClick={() => handleLocationChange("all")}
+                      compact
+                    />
+                    {allFranchiseList.map((franchise) => (
+                      <FilterTag
+                        key={franchise.id}
+                        label={franchise.name}
+                        active={locationFromUrl === franchise.code}
+                        onClick={() => handleLocationChange(franchise.code)}
+                        compact
+                      />
+                    ))}
+                  </FilterTagGroup>
+                  <div className="grid grid-cols-3 gap-2 items-start">
+                    <FilterTagGroup inline>
+                      <FilterTag
+                        label="All programs"
+                        active={selectedProgramCategoryId === "all"}
+                        onClick={() => handleProgramCategoryChange("all")}
+                        compact
+                      />
+                      {sortedCatalog.map((cat) => (
+                        <FilterTag
+                          key={cat.id}
+                          label={cat.display_name || cat.name}
+                          active={selectedProgramCategoryId === cat.id}
+                          onClick={() => handleProgramCategoryChange(cat.id)}
+                          compact
+                        />
+                      ))}
+                    </FilterTagGroup>
+                    <FilterTagGroup inline>
+                      <FilterTag
+                        label="All types"
+                        active={offeringTypeFromUrl === "all"}
+                        onClick={() => handleOfferingTypeChange("all")}
+                        compact
+                      />
+                      {visibleOfferingTypeOptions.map((type) => (
+                        <FilterTag
+                          key={type.id}
+                          label={type.name}
+                          active={offeringTypeFromUrl === type.code}
+                          onClick={() => handleOfferingTypeChange(type.code)}
+                          compact
+                        />
+                      ))}
+                    </FilterTagGroup>
+                    <FilterTagGroup inline>
+                      {ageRangeOptions.map((opt) => (
+                        <FilterTag
+                          key={opt.value}
+                          label={opt.label}
+                          active={selectedAgeRange === opt.value}
+                          onClick={() => setSelectedAgeRange(opt.value)}
+                          compact
+                        />
+                      ))}
+                    </FilterTagGroup>
+                  </div>
+                </div>
 
-              <FilterTagGroup label="Age">
-                {ageRangeOptions.map((opt) => (
-                  <FilterTag
-                    key={opt.value}
-                    label={opt.label}
-                    active={selectedAgeRange === opt.value}
-                    onClick={() => setSelectedAgeRange(opt.value)}
-                  />
-                ))}
-              </FilterTagGroup>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-              <p className="text-[11px] text-slate-500 hidden sm:block">
-                {catalogViewMode === "list"
-                  ? "Sessions grouped by offering type"
-                  : "Full session cards grouped by offering type"}
-              </p>
-              <div className="flex items-center gap-1 ml-auto bg-slate-100 p-0.5 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setCatalogViewMode("list")}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    catalogViewMode === "list"
-                      ? "bg-white text-[#2563eb] shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <LayoutList className="h-3.5 w-3.5" />
-                  List
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCatalogViewMode("details")}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    catalogViewMode === "details"
-                      ? "bg-white text-[#2563eb] shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  Details
-                </button>
-              </div>
-            </div>
+                <div className="hidden lg:flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+                  <p className="text-[11px] text-slate-500">
+                    {catalogViewMode === "list"
+                      ? "Camps and courses at a glance"
+                      : "Rich cards with photos and full details"}
+                  </p>
+                  <div className="flex items-center gap-1 ml-auto bg-slate-100 p-0.5 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setCatalogViewMode("list")}
+                      className={cn(
+                        "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        catalogViewMode === "list"
+                          ? "bg-white text-[#2563eb] shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      )}
+                    >
+                      <LayoutList className="h-3.5 w-3.5" />
+                      List
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogViewMode("details")}
+                      className={cn(
+                        "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        catalogViewMode === "details"
+                          ? "bg-white text-[#2563eb] shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      )}
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      Details
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -770,16 +957,7 @@ function ProgramsPageContent() {
         <section className="py-16 px-4">
           <div className="max-w-7xl mx-auto">
             {nonEmptyOfferingTypeGroups.length > 0 ? (
-              <>
-                {totalSessions > 0 && (
-                  <p className="text-slate-500 text-sm text-center mb-10 max-w-2xl mx-auto">
-                    {catalogViewMode === "list"
-                      ? "Sessions are grouped by offering type. Switch to Details for full session cards."
-                      : "Full session cards grouped by offering type. Switch to List for a compact overview."}
-                  </p>
-                )}
-                {catalogViewMode === "list" ? renderListView() : renderDetailsView()}
-              </>
+              catalogViewMode === "list" ? renderListView() : renderDetailsView()
             ) : (
               renderNoSessionsMessage()
             )}

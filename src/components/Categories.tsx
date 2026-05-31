@@ -4,6 +4,13 @@ import { useState, useEffect } from "react"
 import { Button } from "./ui/button"
 import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy, Rocket } from "lucide-react"
 import Link from "next/link"
+import { LazyRemoteImage } from "@/components/ui/LazyRemoteImage"
+import { MarketingHeroBackdrop } from "@/components/MarketingHeroBackdrop"
+import {
+  HOME_HERO_SECTION_BG,
+  HOME_HERO_SECTION_GRADIENT_OVERLAY,
+} from "@/lib/home-section-styles"
+import { cn } from "@/lib/utils"
 
 /** V2 全局类别（v2_category 表，is_active = true） */
 interface Category {
@@ -143,17 +150,24 @@ export const Categories = () => {
   }
 
   return (
-    <section className="bg-[#0f172a] text-white pt-16 pb-8">
-      <div className="text-center mb-12 md:mb-16">
+    <section
+      className={cn(
+        HOME_HERO_SECTION_BG,
+        "text-white pt-16 pb-8 relative overflow-hidden"
+      )}
+    >
+      <div className={HOME_HERO_SECTION_GRADIENT_OVERLAY} aria-hidden />
+      <MarketingHeroBackdrop />
+      <div className="relative z-10 text-center mb-12 md:mb-16">
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
           Blaze Programs
         </h2>
-        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+        <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto">
           Explore our programs—each location may offer a selection of these. Choose a program to see available sessions and schedules.
         </p>
       </div>
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl flex flex-wrap justify-center gap-6 md:gap-8">
+      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl flex flex-wrap justify-center gap-6 md:gap-8">
         {categories.map((category, index) => {
           const gradient = getCategoryGradient(category.name)
           const icon = getCategoryIcon(category.name)
@@ -169,15 +183,25 @@ export const Categories = () => {
               <div className="h-48 relative overflow-hidden shrink-0">
                 {category.poster_url ? (
                   <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <LazyRemoteImage
                       src={category.poster_url}
-                      alt=""
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                      loading="lazy"
-                      decoding="async"
+                      alt={category.display_name || category.name}
+                      containerClassName="absolute inset-0"
+                      className="group-hover:scale-110 transition-transform duration-700"
+                      fallback={
+                        <div
+                          className="absolute inset-0 flex items-center justify-center"
+                          style={{
+                            background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`,
+                          }}
+                        >
+                          <div className="w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg bg-white/20 backdrop-blur-sm">
+                            {icon}
+                          </div>
+                        </div>
+                      }
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 pointer-events-none z-[1]" />
                   </>
                 ) : (
                   <div
@@ -229,7 +253,7 @@ export const Categories = () => {
       </div>
 
       {/* Call to Action */}
-      <div className="mt-12 md:mt-16 text-center">
+      <div className="relative z-10 mt-12 md:mt-16 text-center">
         <Button asChild variant={"default"}>
           <Link href="/programs">
             View All Programs

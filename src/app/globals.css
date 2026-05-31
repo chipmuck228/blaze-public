@@ -44,6 +44,9 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+
+    /* Marketing hero + dark section gradient start (matches Hero bg) */
+    --hero-background: #0f172a;
   }
 
   .dark {
@@ -79,6 +82,8 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    --hero-background: #0f172a;
   }
 
   button:not(:disabled),
@@ -170,6 +175,10 @@ section[id] {
 
   .brand-gradient-text {
     @apply text-transparent bg-clip-text bg-gradient-to-r from-secondary to-primary font-extrabold;
+  }
+
+  .bg-hero {
+    background-color: var(--hero-background);
   }
 
   /* Hide scrollbar */
@@ -361,7 +370,7 @@ section[id] {
 /* 移动端基础优化 */
 @media (max-width: 768px) {
   /* 增加触摸目标大小 */
-  button:not(:disabled),
+  button:not(:disabled):not(.programs-filter-badge):not(.programs-filter-bar-control),
   a:not([role="button"]),
   [role="button"]:not(:disabled),
   input[type="button"],
@@ -369,6 +378,24 @@ section[id] {
   input[type="reset"] {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  /* Programs catalog filter chips — compact badges, not 44px touch targets */
+  button.programs-filter-badge:not(:disabled) {
+    min-height: auto;
+    min-width: auto;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    line-height: 1;
+  }
+
+  /* Programs mobile: Filters toggle + List/Details view switcher */
+  button.programs-filter-bar-control:not(:disabled) {
+    min-height: auto;
+    min-width: auto;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    line-height: 1;
   }
 
   /* 优化滚动体验 */

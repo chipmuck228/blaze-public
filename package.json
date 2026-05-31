@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "refresh-browser-data": "npx update-browserslist-db@latest && npm install baseline-browser-mapping@latest -D",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -91,6 +92,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.20",
+    "baseline-browser-mapping": "^2.10.33",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
     "md-to-pdf": "^5.2.5",
@@ -99,5 +101,9 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.21.0",
     "typescript": "^5"
+  },
+  "overrides": {
+    "baseline-browser-mapping": "$baseline-browser-mapping",
+    "caniuse-lite": "$caniuse-lite"
   }
 }

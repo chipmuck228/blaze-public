@@ -1,9 +1,9 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LazyRemoteImage } from "@/components/ui/LazyRemoteImage"
 import type { FeaturedSession } from "@/lib/featured-sessions"
 
 function FeaturedSessionBadges({ session }: { session: FeaturedSession }) {
@@ -30,31 +30,31 @@ interface FeaturedSessionCardProps {
 }
 
 export function FeaturedSessionCard({ session, index = 0, priority }: FeaturedSessionCardProps) {
-  const imagePriority = priority ?? index < 2
+  const imageEager = priority ?? index < 2
+  const posterFallback = (
+    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1e3a5f] to-[#2d4a6f]">
+      <span className="text-white/80 text-4xl font-bold">{session.title.charAt(0)}</span>
+    </div>
+  )
 
   return (
     <div className="min-w-[300px] w-[300px] md:min-w-[340px] md:w-[340px] snap-start bg-white rounded-3xl overflow-hidden shadow-xl group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 h-full flex flex-col">
       <div className="h-48 relative overflow-hidden shrink-0">
         {session.poster_url ? (
           <>
-            <Image
+            <LazyRemoteImage
               src={session.poster_url}
               alt={session.title}
-              fill
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-              priority={imagePriority}
-              loading={imagePriority ? "eager" : "lazy"}
-              sizes="(max-width: 768px) 300px, 340px"
-              onError={(e) => {
-                e.currentTarget.style.display = "none"
-              }}
+              containerClassName="absolute inset-0"
+              className="group-hover:scale-110 transition-transform duration-700"
+              eager={imageEager}
+              fallback={posterFallback}
+              fallbackTone="dark"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 pointer-events-none z-[1]" />
           </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#1e3a5f] to-[#2d4a6f]">
-            <span className="text-white/80 text-4xl font-bold">{session.title.charAt(0)}</span>
-          </div>
+          posterFallback
         )}
 
         <FeaturedSessionBadges session={session} />

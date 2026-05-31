@@ -25,6 +25,10 @@ import {
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
 import { formatCalendarDate } from "@/lib/format-calendar-date"
 import { CourseDaysOfWeekBadges } from "@/components/programs/CourseDaysOfWeekBadges"
+import {
+  OfferingTypeIcon,
+  SessionStatusIcon,
+} from "@/components/programs/SessionCatalogMetaIcons"
 import { LazySessionPoster } from "@/components/programs/LazySessionPoster"
 
 const OFFERING_TYPE_BORDER: Record<string, string> = {
@@ -171,17 +175,20 @@ export function SessionListRow({
           <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold text-slate-900 transition-colors duration-300 group-hover:text-[#2563eb]">
+                <Link
+                  href={detailHref}
+                  className="text-sm font-semibold text-slate-900 transition-colors duration-300 hover:text-[#2563eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-1 rounded-sm"
+                >
                   {title}
-                </h3>
-                <Badge className={cn("text-[10px] px-1.5 py-0 font-normal", getStatusColor(session.status))}>
-                  {session.status}
-                </Badge>
-                {session.offering?.offering_type ? (
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
-                    {session.offering.offering_type.name}
+                </Link>
+                <SessionStatusIcon status={session.status} />
+                {session.status.toLowerCase() !== "scheduled" &&
+                session.status.toLowerCase() !== "draft" ? (
+                  <Badge className={cn("text-[10px] px-1.5 py-0 font-normal", getStatusColor(session.status))}>
+                    {session.status}
                   </Badge>
                 ) : null}
+                <OfferingTypeIcon code={offeringTypeCode} />
                 <CourseDaysOfWeekBadges session={session} />
               </div>
 

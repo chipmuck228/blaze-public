@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
+import { LazyRemoteImage } from "@/components/ui/LazyRemoteImage"
+import { HOME_HERO_SECTION_BG } from "@/lib/home-section-styles"
 import {
   ArrowRight,
   Award,
@@ -59,59 +60,59 @@ const variantStyles: Record<
 function AchievementImage({
   image,
   priority = false,
-  sizes,
 }: {
   image: WorldsAchievementImage
   priority?: boolean
-  sizes: string
 }) {
-  const [failed, setFailed] = useState(false)
-
-  if (failed) {
-    return (
-      <div
-        className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-800/80 text-slate-400 border border-white/10"
-        role="img"
-        aria-label={image.alt}
-      >
-        <Trophy className="h-10 w-10 text-[#38bdf8]/60" aria-hidden />
-        <span className="text-xs text-center px-4">Photo coming soon</span>
-      </div>
-    )
-  }
-
   return (
-    <Image
+    <LazyRemoteImage
       src={image.src}
       alt={image.alt}
-      fill
-      className="object-cover"
-      sizes={sizes}
-      priority={priority}
-      onError={() => setFailed(true)}
+      containerClassName="absolute inset-0"
+      eager={priority}
+      fallbackTone="dark"
+      fallback={
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-800/90 via-slate-900/90 to-[#0c4a6e]/80 text-slate-400 border border-white/10"
+          role="img"
+          aria-label={image.alt}
+        >
+          <Trophy className="h-10 w-10 text-[#38bdf8]/60" aria-hidden />
+          <span className="text-xs text-center px-4">Photo coming soon</span>
+        </div>
+      }
     />
   )
 }
 
 function SectionBackground() {
   const [src, setSrc] = useState(WORLDS_ACHIEVEMENTS_BACKGROUND)
+  const [bgFailed, setBgFailed] = useState(false)
+
+  const handleBgError = () => {
+    if (src !== WORLDS_ACHIEVEMENTS_BACKGROUND_JPG) {
+      setSrc(WORLDS_ACHIEVEMENTS_BACKGROUND_JPG)
+      return
+    }
+    setBgFailed(true)
+  }
 
   return (
     <>
-      <Image
-        src={src}
-        alt=""
-        fill
-        className="object-cover object-center"
-        sizes="100vw"
-        priority
-        aria-hidden
-        onError={() => {
-          if (src !== WORLDS_ACHIEVEMENTS_BACKGROUND_JPG) {
-            setSrc(WORLDS_ACHIEVEMENTS_BACKGROUND_JPG)
-          }
-        }}
-      />
+      {bgFailed ? (
+        <div className={cn("absolute inset-0", HOME_HERO_SECTION_BG)} aria-hidden />
+      ) : (
+        <LazyRemoteImage
+          key={src}
+          src={src}
+          alt=""
+          containerClassName="absolute inset-0"
+          className="object-center"
+          eager
+          onError={handleBgError}
+          fallback={<div className={cn("absolute inset-0", HOME_HERO_SECTION_BG)} aria-hidden />}
+        />
+      )}
       <div
         className="absolute inset-0 bg-gradient-to-b from-[#0f172a]/92 via-[#0f172a]/85 to-[#0f172a]/95"
         aria-hidden
@@ -265,11 +266,7 @@ export function WorldsAchievementsSection() {
 
           <div className="space-y-4 order-1 lg:order-2">
             <div className="relative aspect-[4/3] w-full rounded-3xl overflow-hidden border border-white/20 shadow-2xl ring-1 ring-white/10">
-              <AchievementImage
-                image={featured}
-                priority
-                sizes="(max-width: 1024px) 100vw, 50vw"
-              />
+              <AchievementImage image={featured} priority />
             </div>
             {gallery.length > 0 && (
               <div
@@ -283,10 +280,7 @@ export function WorldsAchievementsSection() {
                     key={image.src}
                     className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-white/15 shadow-lg"
                   >
-                    <AchievementImage
-                      image={image}
-                      sizes="(max-width: 1024px) 50vw, 25vw"
-                    />
+                    <AchievementImage image={image} />
                   </div>
                 ))}
               </div>
