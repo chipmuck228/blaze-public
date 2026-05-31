@@ -1,7 +1,18 @@
 import { supabaseAdmin } from './supabase'
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { isStudentAccount, getStudentPayer } from './permissions'
+import { resolveTeamMemberImageUrl } from './team-avatar'
+import { unwrapRelation } from './supabase-relation'
+
+type TeamUserJoin = {
+  id: string
+  name: string
+  email: string
+  image?: string
+  role: string
+}
 
 // 生成随机密码（12位，包含大小写字母、数字、特殊字符）
 export function generateRandomPassword(length: number = 12): string {
@@ -103,7 +114,7 @@ export async function createUser(name: string, email: string, password: string) 
     .single()
 
   if (error) {
-    throw new Error(`Failed to create user: ${error.message}`)
+    throw new Error(`Failed to create user: ${getErrorMessage(error)}`)
   }
 
   return user as User
@@ -204,7 +215,7 @@ export async function resendVerificationEmail(email: string) {
     .eq('id', user.id)
 
   if (error) {
-    throw new Error(`Failed to update verification token: ${error.message}`)
+    throw new Error(`Failed to update verification token: ${getErrorMessage(error)}`)
   }
 
   return { token: email_verification_token, user }
@@ -234,7 +245,7 @@ export async function createPasswordResetToken(email: string) {
     })
 
   if (error) {
-    throw new Error(`Failed to create reset token: ${error.message}`)
+    throw new Error(`Failed to create reset token: ${getErrorMessage(error)}`)
   }
 
   return { token, user }
@@ -313,7 +324,7 @@ export async function createOrUpdateGoogleUser(
 
     if (existingUser) {
       // 用户已存在，更新信息（如头像、名称）
-      const updateData: any = {
+      const updateData: StringKeyRecord = {
         name,
         email_verified: true, // Google 登录的用户邮箱已验证
         updated_at: new Date().toISOString(),
@@ -332,8 +343,8 @@ export async function createOrUpdateGoogleUser(
         .single()
 
       if (error) {
-        console.error("Error updating Google user:", { error: error.message, email, userId: existingUser.id })
-        throw new Error(`Failed to update user: ${error.message}`)
+        console.error("Error updating Google user:", { error: getErrorMessage(error), email, userId: existingUser.id })
+        throw new Error(`Failed to update user: ${getErrorMessage(error)}`)
       }
 
       if (!data) {
@@ -345,7 +356,7 @@ export async function createOrUpdateGoogleUser(
       return data as User
     } else {
       // 用户不存在，创建新用户
-      const insertData: any = {
+      const insertData: StringKeyRecord = {
         name,
         email,
         email_verified: true, // Google 登录的用户邮箱已验证
@@ -365,8 +376,8 @@ export async function createOrUpdateGoogleUser(
         .single()
 
       if (error) {
-        console.error("Error creating Google user:", { error: error.message, email })
-        throw new Error(`Failed to create user: ${error.message}`)
+        console.error("Error creating Google user:", { error: getErrorMessage(error), email })
+        throw new Error(`Failed to create user: ${getErrorMessage(error)}`)
       }
 
       if (!data) {
@@ -377,11 +388,11 @@ export async function createOrUpdateGoogleUser(
       console.log("Google user created successfully", { userId: data.id, email })
       return data as User
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 记录详细错误信息以便调试
     console.error("createOrUpdateGoogleUser error:", {
-      error: error?.message || error,
-      stack: error?.stack,
+      error: getErrorMessage(error),
+      stack: error instanceof Error ? error.stack : undefined,
       email,
       name,
       hasImage: !!image
@@ -398,7 +409,7 @@ export async function getAllUsers() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch users: ${error.message}`)
+    throw new Error(`Failed to fetch users: ${getErrorMessage(error)}`)
   }
 
   return data as Omit<User, 'password_hash' | 'email_verification_token' | 'email_verification_expires'>[]
@@ -462,7 +473,7 @@ export async function createUserByAdmin(data: {
   }
 
   // 创建用户
-  const insertData: any = {
+  const insertData: StringKeyRecord = {
     name: data.name,
     email: data.email,
     role: data.role,
@@ -486,7 +497,7 @@ export async function createUserByAdmin(data: {
     .single()
 
   if (error) {
-    throw new Error(`Failed to create user: ${error.message}`)
+    throw new Error(`Failed to create user: ${getErrorMessage(error)}`)
   }
 
   return {
@@ -580,7 +591,7 @@ export async function resendInvitation(userId: string): Promise<{
     .eq('id', userId)
 
   if (error) {
-    throw new Error(`Failed to resend invitation: ${error.message}`)
+    throw new Error(`Failed to resend invitation: ${getErrorMessage(error)}`)
   }
 
   return {
@@ -606,7 +617,7 @@ export async function updateUser(userId: string, updates: {
     .single()
 
   if (error) {
-    throw new Error(`Failed to update user: ${error.message}`)
+    throw new Error(`Failed to update user: ${getErrorMessage(error)}`)
   }
 
   return data as User
@@ -633,7 +644,7 @@ export async function deleteUser(userId: string): Promise<{
     .eq('id', userId)
 
   if (error) {
-    throw new Error(`Failed to delete user: ${error.message}`)
+    throw new Error(`Failed to delete user: ${getErrorMessage(error)}`)
   }
 
   return {
@@ -810,13 +821,23 @@ export async function getAdminStatsRecentActivity(): Promise<AdminStats["recentA
       .order("created_at", { ascending: false })
       .limit(10),
   ])
-  const recentEnrollments = (recentEnrollmentsData || []).map((e: any) => ({
-    id: e.id,
-    user_name: e.user?.name || "Unknown",
-    course_name: e.instance?.program?.display_name || e.instance?.program?.name || "Unknown",
-    status: e.status,
-    created_at: e.created_at,
-  }))
+  const recentEnrollments = (recentEnrollmentsData || []).map((e) => {
+    const user = unwrapRelation(e.user as { name?: string } | { name?: string }[] | null)
+    const instance = unwrapRelation(
+      e.instance as
+        | { program?: { name?: string; display_name?: string } | { name?: string; display_name?: string }[] }
+        | Array<{ program?: { name?: string; display_name?: string } | { name?: string; display_name?: string }[] }>
+        | null
+    )
+    const program = instance ? unwrapRelation(instance.program) : null
+    return {
+      id: e.id,
+      user_name: user?.name || "Unknown",
+      course_name: program?.display_name || program?.name || "Unknown",
+      status: e.status,
+      created_at: e.created_at,
+    }
+  })
   return {
     newUsers: (recentUsers || []).map((u) => ({ id: u.id, name: u.name, email: u.email, created_at: u.created_at })),
     newCourses: (recentCourses || []).map((c: { id: string; name: string; display_name?: string; is_active?: boolean; created_at: string }) => ({
@@ -908,13 +929,14 @@ export async function getAllTeamMembers(): Promise<TeamMember[]> {
 
   // 组合数据，优先使用 Users 表的 name 和 image
   const teamsWithSocial = teams.map(team => {
-    const user = (team as any).user
-    // 安全地访问 image 字段（如果 users 表有该字段）
+    const user = unwrapRelation(
+      (team as { user?: TeamUserJoin | TeamUserJoin[] }).user
+    )
     const userImage = user?.image || null
     return {
       id: team.id,
       user_id: team.user_id || null,
-      image_url: userImage || team.image_url,  // 优先使用 Users 表的 image（如果存在）
+      image_url: resolveTeamMemberImageUrl(team.image_url, userImage),
       name: user?.name || team.name,  // 优先使用 Users 表的 name
       position: team.position,
       description: team.description,
@@ -979,12 +1001,14 @@ export async function getAllActiveTeamMembers(): Promise<TeamMember[]> {
 
   // 组合数据，优先使用 Users 表的 name 和 image
   const teamsWithSocial = teams.map(team => {
-    const user = (team as any).user
+    const user = unwrapRelation(
+      (team as { user?: TeamUserJoin | TeamUserJoin[] }).user
+    )
     const userImage = user?.image || null
     return {
       id: team.id,
       user_id: team.user_id || null,
-      image_url: userImage || team.image_url,
+      image_url: resolveTeamMemberImageUrl(team.image_url, userImage),
       name: user?.name || team.name,
       position: team.position,
       description: team.description,
@@ -1049,13 +1073,14 @@ export async function getAllTeamMembersForAdmin(): Promise<TeamMember[]> {
 
   // 组合数据
   const teamsWithSocial = teams.map(team => {
-    const user = (team as any).user
-    // 安全地访问 image 字段（如果 users 表有该字段）
+    const user = unwrapRelation(
+      (team as { user?: TeamUserJoin | TeamUserJoin[] }).user
+    )
     const userImage = user?.image || null
     return {
       id: team.id,
       user_id: team.user_id || null,
-      image_url: userImage || team.image_url,
+      image_url: resolveTeamMemberImageUrl(team.image_url, userImage),
       name: user?.name || team.name,
       position: team.position,
       description: team.description,
@@ -1077,7 +1102,7 @@ export async function getAllTeamMembersForAdmin(): Promise<TeamMember[]> {
         id: user.id,
         name: user.name,
         email: user.email,
-        image: user.image || undefined,  // 安全地访问 image（如果存在）
+        image: user.image || undefined,
         role: user.role,
       } : undefined,
     }
@@ -1125,7 +1150,7 @@ export async function createTeamMember(data: {
   }
 
   // 准备插入数据
-  const insertData: any = {
+  const insertData: StringKeyRecord = {
     position: data.position,
     description: data.description,
     display_order: data.display_order,
@@ -1235,7 +1260,7 @@ export async function updateTeamMember(
   }
 
   // 更新团队成员基本信息
-  const updates: any = {}
+  const updates: StringKeyRecord = {}
   if (data.user_id !== undefined) updates.user_id = data.user_id || null
   if (data.image_url !== undefined) updates.image_url = data.image_url
   if (data.name !== undefined) updates.name = data.name
@@ -1308,7 +1333,7 @@ export async function deleteTeamMember(teamId: string): Promise<boolean> {
     .eq('id', teamId)
 
   if (error) {
-    throw new Error(`Failed to delete team member: ${error.message}`)
+    throw new Error(`Failed to delete team member: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -1412,6 +1437,14 @@ export interface PrerequisiteGroup {
   prerequisites?: CoursePrerequisite[] // 组内的先修课程
 }
 
+type PrerequisiteGroupItemRow = {
+  prerequisite?: CoursePrerequisite | null
+}
+
+type PrerequisiteGroupQueryRow = PrerequisiteGroup & {
+  items?: PrerequisiteGroupItemRow[]
+}
+
 export interface UserCourseCompletion {
   id: string
   user_id: string
@@ -1426,22 +1459,6 @@ export interface UserCourseCompletion {
   created_at: string
   updated_at: string
   course?: Course // 关联的课程详情
-}
-
-export interface UserLearningPathProgress {
-  id: string
-  user_id: string
-  path_id: string
-  current_stage: number
-  completed_courses_count: number
-  total_courses_count: number
-  started_at: string
-  last_activity_at?: string | null
-  completed_at?: string | null
-  is_completed: boolean
-  created_at: string
-  updated_at: string
-  path?: LearningPath // 关联的学习路径详情
 }
 
 export interface CourseAssignment {
@@ -1477,7 +1494,7 @@ export interface CourseLocation {
   email?: string
   parking_info?: string | null
   check_in_info?: string | null
-  amenities?: Record<string, any> | null
+  amenities?: Record<string, unknown> | null
   franchise_id?: string | null
   is_active: boolean
   created_at: string
@@ -1591,44 +1608,6 @@ export interface Franchise {
   is_active: boolean
 }
 
-// 学习路径相关接口
-export interface LearningPath {
-  id: string
-  name: string
-  slug?: string
-  description?: string
-  category_id?: string | null
-  target_audience?: string
-  estimated_duration_weeks?: number
-  difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
-  is_active: boolean
-  display_order: number
-  created_at: string
-  updated_at: string
-  category?: CourseCategory // 关联的课程大类
-  courses?: LearningPathCourse[] // 路径中的课程
-}
-
-export interface LearningPathCourse {
-  id: string
-  path_id: string
-  course_id: string
-  stage: number
-  stage_name?: string | null
-  is_required: boolean
-  is_parallel: boolean
-  display_order: number
-  estimated_weeks?: number | null
-  notes?: string | null
-  created_at: string
-  updated_at: string
-  course?: Course // 关联的课程详情
-}
-
-export interface LearningPathWithDetails extends LearningPath {
-  courses: LearningPathCourse[]
-}
-
 // 完整的课程信息（包含关联数据）
 export interface CourseWithDetails extends Course {
   subcategories?: CourseSubcategory[]
@@ -1646,7 +1625,7 @@ export async function getAllCourseCategories(): Promise<CourseCategory[]> {
     .order('display_order', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course categories: ${error.message}`)
+    throw new Error(`Failed to fetch course categories: ${getErrorMessage(error)}`)
   }
 
   return data as CourseCategory[]
@@ -1668,7 +1647,7 @@ export async function getCourseSeriesByCategory(categoryId: string, franchiseId?
   const { data, error } = await query
 
   if (error) {
-    throw new Error(`Failed to fetch course series: ${error.message}`)
+    throw new Error(`Failed to fetch course series: ${getErrorMessage(error)}`)
   }
 
   return data as CourseSeries[]
@@ -1683,7 +1662,7 @@ export async function getAllCourseSubcategories(): Promise<CourseSubcategory[]> 
     .order('display_order', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course subcategories: ${error.message}`)
+    throw new Error(`Failed to fetch course subcategories: ${getErrorMessage(error)}`)
   }
 
   return data as CourseSubcategory[]
@@ -1698,7 +1677,7 @@ export async function getAllCourses(): Promise<Course[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch courses: ${error.message}`)
+    throw new Error(`Failed to fetch courses: ${getErrorMessage(error)}`)
   }
 
   return data as Course[]
@@ -1713,7 +1692,7 @@ export async function getPublishedCourses(): Promise<Course[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch published courses: ${error.message}`)
+    throw new Error(`Failed to fetch published courses: ${getErrorMessage(error)}`)
   }
 
   return data as Course[]
@@ -1758,10 +1737,10 @@ export async function getFranchiseByCode(code: string): Promise<Franchise | null
 
   if (error) {
     // 如果是找不到记录，返回 null；其他错误抛出
-    if (error.code === 'PGRST116' || error.message?.toLowerCase().includes('no rows')) {
+    if (error.code === 'PGRST116' || getErrorMessage(error)?.toLowerCase().includes('no rows')) {
       return null
     }
-    throw new Error(`Failed to fetch franchise: ${error.message}`)
+    throw new Error(`Failed to fetch franchise: ${getErrorMessage(error)}`)
   }
 
   return data as Franchise
@@ -1824,7 +1803,7 @@ export async function getFranchiseLocations(franchiseId: string): Promise<Course
     .order('name', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch franchise locations: ${error.message}`)
+    throw new Error(`Failed to fetch franchise locations: ${getErrorMessage(error)}`)
   }
 
   return (data || []) as CourseLocation[]
@@ -1862,11 +1841,11 @@ export async function getFranchiseFeaturedCourses(
       : instance.assignment
     
     if (assignment && typeof assignment === 'object' && 'course' in assignment) {
-      const course = (assignment as any).course
-      if (course && typeof course === 'object' && 'id' in course) {
-        // 只包含已发布的课程
-        if (course.status === 'published' && !courseMap.has(course.id)) {
-          courseMap.set(course.id, course as Course)
+      const course = (assignment as Record<string, unknown>).course
+      if (course && typeof course === 'object' && 'id' in course && 'status' in course) {
+        const published = course as Course
+        if (published.status === 'published' && !courseMap.has(published.id)) {
+          courseMap.set(published.id, published)
         }
       }
     }
@@ -1968,7 +1947,7 @@ export async function getCourseWithDetails(courseId: string): Promise<CourseWith
       .order('created_at', { ascending: true })
 
     if (prerequisitesData) {
-      prerequisites_list = prerequisitesData.map((item: any) => ({
+      prerequisites_list = prerequisitesData.map((item) => ({
         ...item,
         prerequisite_course: Array.isArray(item.prerequisite_course)
           ? item.prerequisite_course[0]
@@ -2103,7 +2082,7 @@ export async function getCourseWithDetailsBySlug(slug: string): Promise<CourseWi
       .order('created_at', { ascending: true })
 
     if (prerequisitesData) {
-      prerequisites_list = prerequisitesData.map((item: any) => ({
+      prerequisites_list = prerequisitesData.map((item) => ({
         ...item,
         prerequisite_course: Array.isArray(item.prerequisite_course)
           ? item.prerequisite_course[0]
@@ -2134,7 +2113,7 @@ export async function getCourseInstancesByAssignment(assignmentId: string): Prom
     .order('start_time', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course instances: ${error.message}`)
+    throw new Error(`Failed to fetch course instances: ${getErrorMessage(error)}`)
   }
 
   return data as CourseInstance[]
@@ -2163,7 +2142,7 @@ export async function getCourseInstances(courseId: string): Promise<CourseInstan
     .order('start_time', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course instances: ${error.message}`)
+    throw new Error(`Failed to fetch course instances: ${getErrorMessage(error)}`)
   }
 
   // 调试日志：记录查询结果
@@ -2172,7 +2151,7 @@ export async function getCourseInstances(courseId: string): Promise<CourseInstan
       course_id: courseId,
       assignment_ids: assignmentIds,
       instances_count: data.length,
-      instances: data.map((inst: any) => ({
+      instances: data.map((inst) => ({
         id: inst.id,
         assignment_id: inst.assignment_id,
         franchise_id: inst.franchise_id,
@@ -2194,7 +2173,7 @@ export async function getAllCourseLocations(): Promise<CourseLocation[]> {
     .order('name', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course locations: ${error.message}`)
+    throw new Error(`Failed to fetch course locations: ${getErrorMessage(error)}`)
   }
 
   return data as CourseLocation[]
@@ -2245,7 +2224,7 @@ export async function createCourseInstance(instance: Omit<CourseInstance, 'id' |
     .single()
 
   if (error) {
-    throw new Error(`Failed to create course instance: ${error.message}`)
+    throw new Error(`Failed to create course instance: ${getErrorMessage(error)}`)
   }
 
   return data as CourseInstance
@@ -2284,7 +2263,7 @@ export async function updateCourseInstance(
   }
 
   // 确保 location_id 如果是 undefined，则设置为 null（允许清除 location）
-  const updateData: any = { ...updates }
+  const updateData: StringKeyRecord = { ...updates }
   if (updateData.location_id === undefined && 'location_id' in updates) {
     updateData.location_id = null
   }
@@ -2297,7 +2276,7 @@ export async function updateCourseInstance(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update course instance: ${error.message}`)
+    throw new Error(`Failed to update course instance: ${getErrorMessage(error)}`)
   }
 
   return data as CourseInstance
@@ -2311,7 +2290,7 @@ export async function deleteCourseInstance(instanceId: string): Promise<boolean>
     .eq('id', instanceId)
 
   if (error) {
-    throw new Error(`Failed to delete course instance: ${error.message}`)
+    throw new Error(`Failed to delete course instance: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -2334,7 +2313,7 @@ export async function createCourse(course: Omit<Course, 'id' | 'created_at' | 'u
     .single()
 
   if (error) {
-    throw new Error(`Failed to create course: ${error.message}`)
+    throw new Error(`Failed to create course: ${getErrorMessage(error)}`)
   }
 
   return data as Course
@@ -2353,7 +2332,7 @@ export async function updateCourse(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update course: ${error.message}`)
+    throw new Error(`Failed to update course: ${getErrorMessage(error)}`)
   }
 
   return data as Course
@@ -2367,7 +2346,7 @@ export async function deleteCourse(courseId: string): Promise<boolean> {
     .eq('id', courseId)
 
   if (error) {
-    throw new Error(`Failed to delete course: ${error.message}`)
+    throw new Error(`Failed to delete course: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -2388,10 +2367,10 @@ export async function getCoursePrerequisites(courseId: string): Promise<CoursePr
     .order('created_at', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course prerequisites: ${error.message}`)
+    throw new Error(`Failed to fetch course prerequisites: ${getErrorMessage(error)}`)
   }
 
-  return (data || []).map((item: any) => ({
+  return (data || []).map((item) => ({
     ...item,
     prerequisite_course: Array.isArray(item.prerequisite_course) 
       ? item.prerequisite_course[0] as Course | undefined
@@ -2407,11 +2386,11 @@ export async function getCoursesRequiringPrerequisite(prerequisiteCourseId: stri
     .eq('prerequisite_course_id', prerequisiteCourseId)
 
   if (error) {
-    throw new Error(`Failed to fetch courses requiring prerequisite: ${error.message}`)
+    throw new Error(`Failed to fetch courses requiring prerequisite: ${getErrorMessage(error)}`)
   }
 
   return (data || [])
-    .map((item: any) => {
+    .map((item) => {
       const course = Array.isArray(item.course) ? item.course[0] : item.course
       return course as Course | null
     })
@@ -2464,10 +2443,10 @@ export async function createCoursePrerequisite(
 
   if (error) {
     // 检查是否是循环依赖错误
-    if (error.message.includes('Circular dependency')) {
+    if (getErrorMessage(error).includes('Circular dependency')) {
       throw new Error('Circular dependency detected. Cannot add this prerequisite.')
     }
-    throw new Error(`Failed to create course prerequisite: ${error.message}`)
+    throw new Error(`Failed to create course prerequisite: ${getErrorMessage(error)}`)
   }
 
   return {
@@ -2497,7 +2476,7 @@ export async function updateCoursePrerequisite(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update course prerequisite: ${error.message}`)
+    throw new Error(`Failed to update course prerequisite: ${getErrorMessage(error)}`)
   }
 
   return {
@@ -2514,7 +2493,7 @@ export async function deleteCoursePrerequisite(prerequisiteId: string): Promise<
     .eq('id', prerequisiteId)
 
   if (error) {
-    throw new Error(`Failed to delete course prerequisite: ${error.message}`)
+    throw new Error(`Failed to delete course prerequisite: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -2528,7 +2507,7 @@ export async function deleteAllCoursePrerequisites(courseId: string): Promise<bo
     .eq('course_id', courseId)
 
   if (error) {
-    throw new Error(`Failed to delete course prerequisites: ${error.message}`)
+    throw new Error(`Failed to delete course prerequisites: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -2545,7 +2524,7 @@ export async function getUserCompletedCourseIds(userId: string): Promise<Set<str
     .eq('user_id', userId)
 
   if (completions && completions.length > 0) {
-    completions.forEach((c: any) => {
+    completions.forEach((c) => {
       if (c.course_id) completedCourseIds.add(c.course_id)
     })
     return completedCourseIds
@@ -2637,12 +2616,14 @@ export async function checkUserPrerequisites(
 
     let allGroupsSatisfied = true
 
-    for (const group of groups) {
+    for (const group of groups as PrerequisiteGroupQueryRow[]) {
       const groupItems = group.items || []
-      const groupPrerequisites = groupItems.map((item: any) => item.prerequisite).filter(Boolean)
-      
-      const completedInGroup = groupPrerequisites.filter((p: any) =>
-        p.prerequisite_course_id && completedCourseIds.has(p.prerequisite_course_id)
+      const groupPrerequisites = groupItems
+        .map((item: PrerequisiteGroupItemRow) => item.prerequisite)
+        .filter((p): p is CoursePrerequisite => Boolean(p))
+
+      const completedInGroup = groupPrerequisites.filter(
+        (p) => p.prerequisite_course_id && completedCourseIds.has(p.prerequisite_course_id)
       )
 
       let satisfied = false
@@ -2657,9 +2638,9 @@ export async function checkUserPrerequisites(
       }
 
       const missing = groupPrerequisites
-        .filter((p: any) => !completedCourseIds.has(p.prerequisite_course_id))
-        .map((p: any) => p.prerequisite_course)
-        .filter(Boolean)
+        .filter((p) => !completedCourseIds.has(p.prerequisite_course_id))
+        .map((p) => p.prerequisite_course)
+        .filter((c): c is Course => Boolean(c))
 
       groupRequirements.push({
         groupId: group.id,
@@ -2673,8 +2654,8 @@ export async function checkUserPrerequisites(
 
     // 检查不在组中的必填先修课程
     const prerequisitesInGroups = new Set<string>()
-    groups.forEach((group: any) => {
-      (group.items || []).forEach((item: any) => {
+    ;(groups as PrerequisiteGroupQueryRow[]).forEach((group) => {
+      (group.items || []).forEach((item: PrerequisiteGroupItemRow) => {
         if (item.prerequisite?.id) {
           prerequisitesInGroups.add(item.prerequisite.id)
         }
@@ -2767,8 +2748,7 @@ export async function getStudentCompletedOfferingIds(
   return completedOfferingIds
 }
 
-// 获取offering的所有先修课程（基于offering_id）
-export async function getOfferingPrerequisites(offeringId: string): Promise<Array<{
+type OfferingPrerequisiteRow = {
   id: string
   offering_id: string
   prerequisite_offering_id: string
@@ -2776,8 +2756,22 @@ export async function getOfferingPrerequisites(offeringId: string): Promise<Arra
   is_mandatory: boolean
   display_order: number
   notes: string | null
-  prerequisite_offering?: any
-}>> {
+  prerequisite_offering?: unknown
+}
+
+type OfferingPrerequisiteGroupItemRow = {
+  prerequisite?: OfferingPrerequisiteRow | null
+}
+
+type OfferingPrerequisiteGroupQueryRow = {
+  id: string
+  group_type: string
+  min_required?: number
+  items?: OfferingPrerequisiteGroupItemRow[]
+}
+
+// 获取offering的所有先修课程（基于offering_id）
+export async function getOfferingPrerequisites(offeringId: string): Promise<OfferingPrerequisiteRow[]> {
   const { data, error } = await supabaseAdmin
     .from('offering_prerequisites')
     .select(`
@@ -2789,10 +2783,10 @@ export async function getOfferingPrerequisites(offeringId: string): Promise<Arra
     .order('created_at', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch offering prerequisites: ${error.message}`)
+    throw new Error(`Failed to fetch offering prerequisites: ${getErrorMessage(error)}`)
   }
 
-  return (data || []).map((item: any) => ({
+  return (data || []).map((item) => ({
     ...item,
     prerequisite_offering: Array.isArray(item.prerequisite_offering) 
       ? item.prerequisite_offering[0]
@@ -2808,15 +2802,15 @@ export async function checkStudentPrerequisites(
   offeringId: string
 ): Promise<{
   canEnroll: boolean
-  missingPrerequisites: any[]
-  recommendations: any[]
+  missingPrerequisites: unknown[]
+  recommendations: unknown[]
   groupRequirements?: Array<{
     groupId: string
     groupType: string
     satisfied: boolean
     required: number
     completed: number
-    missing: any[]
+    missing: unknown[]
   }>
 }> {
   // 获取offering的所有先修课程
@@ -2860,17 +2854,19 @@ export async function checkStudentPrerequisites(
       satisfied: boolean
       required: number
       completed: number
-      missing: any[]
+      missing: unknown[]
     }> = []
 
     let allGroupsSatisfied = true
 
-    for (const group of groups) {
+    for (const group of groups as OfferingPrerequisiteGroupQueryRow[]) {
       const groupItems = group.items || []
-      const groupPrerequisites = groupItems.map((item: any) => item.prerequisite).filter(Boolean)
-      
-      const completedInGroup = groupPrerequisites.filter((p: any) =>
-        p.prerequisite_offering_id && completedOfferingIds.has(p.prerequisite_offering_id)
+      const groupPrerequisites = groupItems
+        .map((item: OfferingPrerequisiteGroupItemRow) => item.prerequisite)
+        .filter((p): p is OfferingPrerequisiteRow => Boolean(p))
+
+      const completedInGroup = groupPrerequisites.filter(
+        (p) => p.prerequisite_offering_id && completedOfferingIds.has(p.prerequisite_offering_id)
       )
 
       let satisfied = false
@@ -2885,14 +2881,9 @@ export async function checkStudentPrerequisites(
       }
 
       const missing = groupPrerequisites
-        .filter((p: any) => !completedOfferingIds.has(p.prerequisite_offering_id))
-        .map((p: any) => {
-          const offering = Array.isArray(p.prerequisite_offering) 
-            ? p.prerequisite_offering[0] 
-            : p.prerequisite_offering
-          return offering
-        })
-        .filter(Boolean)
+        .filter((p) => !completedOfferingIds.has(p.prerequisite_offering_id))
+        .map((p) => unwrapRelation(p.prerequisite_offering as unknown))
+        .filter((o): o is NonNullable<typeof o> => o != null)
 
       groupRequirements.push({
         groupId: group.id,
@@ -2906,8 +2897,8 @@ export async function checkStudentPrerequisites(
 
     // 检查不在组中的必填先修课程
     const prerequisitesInGroups = new Set<string>()
-    groups.forEach((group: any) => {
-      (group.items || []).forEach((item: any) => {
+    ;(groups as OfferingPrerequisiteGroupQueryRow[]).forEach((group) => {
+      (group.items || []).forEach((item: OfferingPrerequisiteGroupItemRow) => {
         if (item.prerequisite?.id) {
           prerequisitesInGroups.add(item.prerequisite.id)
         }
@@ -2987,7 +2978,7 @@ export async function checkoutInstanceEnrollments(
   enrollmentIds: string[],
   userId: string,
   paymentMethodId?: string
-): Promise<any[]> {
+): Promise<Record<string, unknown>[]> {
   // 1. 验证用户是付款人（不是学生账户）
   const isStudent = await isStudentAccount(userId)
   if (isStudent) {
@@ -3159,7 +3150,7 @@ export async function calculateInstanceEnrollmentTotal(
     .in('id', enrollmentIds)
 
   if (error) {
-    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+    throw new Error(`Failed to fetch enrollments: ${getErrorMessage(error)}`)
   }
 
   if (!enrollments || enrollments.length === 0) {
@@ -3225,7 +3216,7 @@ export async function confirmInstanceEnrollment(
   paymentTransactionId: string,
   amountPaid: number,
   stripePaymentIntentId?: string
-): Promise<any> {
+): Promise<Record<string, unknown> | null> {
   const { data: enrollment, error: fetchError } = await supabaseAdmin
     .from('instance_enrollments')
     .select('*')
@@ -3279,7 +3270,7 @@ export async function confirmInstanceEnrollment(
   }
 
   // 更新为 enrolled
-  const updateData: any = {
+  const updateData: StringKeyRecord = {
     status: 'enrolled',
     enrolled_at: new Date().toISOString(),
     payment_status: 'paid',
@@ -3307,7 +3298,7 @@ export async function confirmInstanceEnrollment(
     .single()
 
   if (error) {
-    throw new Error(`Failed to confirm enrollment: ${error.message}`)
+    throw new Error(`Failed to confirm enrollment: ${getErrorMessage(error)}`)
   }
 
   // 注意：容量更新由数据库触发器自动处理（update_instance_v2_student_count）
@@ -3318,7 +3309,7 @@ export async function confirmInstanceEnrollment(
 // 根据 Stripe Checkout Session ID 获取 instance_enrollments 记录
 export async function getInstanceEnrollmentByStripeSessionId(
   sessionId: string
-): Promise<any | null> {
+): Promise<Record<string, unknown> | null> {
   const { data, error } = await supabaseAdmin
     .from('instance_enrollments')
     .select(`
@@ -3333,7 +3324,7 @@ export async function getInstanceEnrollmentByStripeSessionId(
     .maybeSingle()
 
   if (error) {
-    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+    throw new Error(`Failed to fetch enrollment: ${getErrorMessage(error)}`)
   }
 
   return data
@@ -3342,7 +3333,7 @@ export async function getInstanceEnrollmentByStripeSessionId(
 // 根据 Stripe Payment Intent ID 获取 instance_enrollments 记录
 export async function getInstanceEnrollmentByStripePaymentIntentId(
   paymentIntentId: string
-): Promise<any | null> {
+): Promise<Record<string, unknown> | null> {
   const { data, error } = await supabaseAdmin
     .from('instance_enrollments')
     .select(`
@@ -3357,14 +3348,14 @@ export async function getInstanceEnrollmentByStripePaymentIntentId(
     .maybeSingle()
 
   if (error) {
-    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+    throw new Error(`Failed to fetch enrollment: ${getErrorMessage(error)}`)
   }
 
   return data
 }
 
 // 根据 ID 获取 instance_enrollments 记录
-export async function getInstanceEnrollmentById(enrollmentId: string): Promise<any | null> {
+export async function getInstanceEnrollmentById(enrollmentId: string): Promise<Record<string, unknown> | null> {
   const { data, error } = await supabaseAdmin
     .from('instance_enrollments')
     .select(`
@@ -3384,7 +3375,7 @@ export async function getInstanceEnrollmentById(enrollmentId: string): Promise<a
     if (error.code === 'PGRST116') {
       return null
     }
-    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+    throw new Error(`Failed to fetch enrollment: ${getErrorMessage(error)}`)
   }
 
   return data
@@ -3398,8 +3389,8 @@ export async function updateInstanceEnrollmentStripeInfo(
     payment_intent_id?: string
     customer_id?: string
   }
-): Promise<any> {
-  const updateData: any = {
+): Promise<Record<string, unknown> | null> {
+  const updateData: StringKeyRecord = {
     updated_at: new Date().toISOString(),
   }
 
@@ -3421,7 +3412,7 @@ export async function updateInstanceEnrollmentStripeInfo(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update Stripe info: ${error.message}`)
+    throw new Error(`Failed to update Stripe info: ${getErrorMessage(error)}`)
   }
 
   return data
@@ -3436,7 +3427,7 @@ export async function addToInstanceWaitlist(
   studentId: string | null,
   studentName: string,
   studentBirthDate?: string
-): Promise<any> {
+): Promise<Record<string, unknown> | null> {
   // 1. 验证用户权限（学生账户可以加入等待列表）
   // 注意：学生账户可以加入等待列表，但支付需要由付款人完成
 
@@ -3555,7 +3546,7 @@ export async function addToInstanceWaitlist(
 }
 
 // 获取用户的等待列表（使用 instance_enrollments 表）
-export async function getUserInstanceWaitlist(userId: string): Promise<any[]> {
+export async function getUserInstanceWaitlist(userId: string): Promise<Record<string, unknown>[]> {
   const { data, error } = await supabaseAdmin
     .from('instance_enrollments')
     .select(`
@@ -3572,7 +3563,7 @@ export async function getUserInstanceWaitlist(userId: string): Promise<any[]> {
     .order('waitlist_position', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch waitlist: ${error.message}`)
+    throw new Error(`Failed to fetch waitlist: ${getErrorMessage(error)}`)
   }
 
   return data || []
@@ -3819,7 +3810,7 @@ export async function processInstanceRefund(
   reason?: string
 ): Promise<{
   enrollment: any
-  credit?: any
+  credit?: unknown
   refundTransactionId?: string
 }> {
   // 1. 验证用户是付款人
@@ -3914,8 +3905,8 @@ export async function processInstanceRefund(
         enrollment: updatedEnrollment,
         refundTransactionId,
       }
-    } catch (stripeError: any) {
-      throw new Error(`Stripe refund failed: ${stripeError.message}`)
+    } catch (stripeError: unknown) {
+      throw new Error(`Stripe refund failed: ${getErrorMessage(stripeError)}`)
     }
   } else {
     // 创建信用额度
@@ -3973,7 +3964,7 @@ export async function processInstanceRefund(
 }
 
 // 获取用户的信用额度
-export async function getUserCredits(userId: string): Promise<any[]> {
+export async function getUserCredits(userId: string): Promise<Record<string, unknown>[]> {
   const { data, error } = await supabaseAdmin
     .from('user_credits')
     .select('*')
@@ -3981,301 +3972,10 @@ export async function getUserCredits(userId: string): Promise<any[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch credits: ${error.message}`)
+    throw new Error(`Failed to fetch credits: ${getErrorMessage(error)}`)
   }
 
   return data || []
-}
-
-// ==================== Learning Paths 操作 ====================
-
-// 获取所有学习路径
-export async function getAllLearningPaths(
-  filters?: {
-    category_id?: string
-    is_active?: boolean
-    difficulty_level?: 'beginner' | 'intermediate' | 'advanced'
-  }
-): Promise<LearningPathWithDetails[]> {
-  let query = supabaseAdmin
-    .from('learning_paths')
-    .select(`
-      *,
-      category:course_categories(*)
-    `)
-    .order('display_order', { ascending: true })
-    .order('created_at', { ascending: true })
-
-  if (filters?.category_id) {
-    query = query.eq('category_id', filters.category_id)
-  }
-  if (filters?.is_active !== undefined) {
-    query = query.eq('is_active', filters.is_active)
-  }
-  if (filters?.difficulty_level) {
-    query = query.eq('difficulty_level', filters.difficulty_level)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(`Failed to fetch learning paths: ${error.message}`)
-  }
-
-  // 获取每个路径的课程
-  const pathsWithCourses: LearningPathWithDetails[] = []
-  if (data) {
-    for (const path of data) {
-      const { data: coursesData } = await supabaseAdmin
-        .from('learning_path_courses')
-        .select(`
-          *,
-          course:courses(*)
-        `)
-        .eq('path_id', path.id)
-        .order('stage', { ascending: true })
-        .order('display_order', { ascending: true })
-
-      const courses = (coursesData || []).map((item: any) => ({
-        ...item,
-        course: Array.isArray(item.course) ? item.course[0] : item.course,
-      })) as LearningPathCourse[]
-
-      pathsWithCourses.push({
-        ...path,
-        category: Array.isArray(path.category) ? path.category[0] : path.category,
-        courses,
-      } as LearningPathWithDetails)
-    }
-  }
-
-  return pathsWithCourses
-}
-
-// 根据 ID 获取学习路径
-export async function getLearningPathById(pathId: string): Promise<LearningPathWithDetails | null> {
-  const { data: path, error: pathError } = await supabaseAdmin
-    .from('learning_paths')
-    .select(`
-      *,
-      category:course_categories(*)
-    `)
-    .eq('id', pathId)
-    .single()
-
-  if (pathError || !path) {
-    return null
-  }
-
-  // 获取路径中的课程
-  const { data: coursesData } = await supabaseAdmin
-    .from('learning_path_courses')
-    .select(`
-      *,
-      course:courses(*)
-    `)
-    .eq('path_id', pathId)
-    .order('stage', { ascending: true })
-    .order('display_order', { ascending: true })
-
-  const courses = (coursesData || []).map((item: any) => ({
-    ...item,
-    course: Array.isArray(item.course) ? item.course[0] : item.course,
-  })) as LearningPathCourse[]
-
-  return {
-    ...path,
-    category: Array.isArray(path.category) ? path.category[0] : path.category,
-    courses,
-  } as LearningPathWithDetails
-}
-
-// 根据 slug 获取学习路径
-export async function getLearningPathBySlug(slug: string): Promise<LearningPathWithDetails | null> {
-  const { data: path, error: pathError } = await supabaseAdmin
-    .from('learning_paths')
-    .select(`
-      *,
-      category:course_categories(*)
-    `)
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .single()
-
-  if (pathError || !path) {
-    return null
-  }
-
-  // 获取路径中的课程
-  const { data: coursesData } = await supabaseAdmin
-    .from('learning_path_courses')
-    .select(`
-      *,
-      course:courses(*)
-    `)
-    .eq('path_id', path.id)
-    .order('stage', { ascending: true })
-    .order('display_order', { ascending: true })
-
-  const courses = (coursesData || []).map((item: any) => ({
-    ...item,
-    course: Array.isArray(item.course) ? item.course[0] : item.course,
-  })) as LearningPathCourse[]
-
-  return {
-    ...path,
-    category: Array.isArray(path.category) ? path.category[0] : path.category,
-    courses,
-  } as LearningPathWithDetails
-}
-
-// 创建学习路径
-export async function createLearningPath(
-  path: Omit<LearningPath, 'id' | 'created_at' | 'updated_at' | 'category' | 'courses'>,
-  courses?: Array<Omit<LearningPathCourse, 'id' | 'path_id' | 'created_at' | 'updated_at' | 'course'>>
-): Promise<LearningPathWithDetails> {
-  // 创建路径
-  const { data: pathData, error: pathError } = await supabaseAdmin
-    .from('learning_paths')
-    .insert({
-      name: path.name,
-      slug: path.slug || null,
-      description: path.description || null,
-      category_id: path.category_id || null,
-      target_audience: path.target_audience || null,
-      estimated_duration_weeks: path.estimated_duration_weeks || null,
-      difficulty_level: path.difficulty_level || null,
-      is_active: path.is_active !== undefined ? path.is_active : true,
-      display_order: path.display_order || 0,
-    })
-    .select()
-    .single()
-
-  if (pathError || !pathData) {
-    throw new Error(`Failed to create learning path: ${pathError?.message || 'Unknown error'}`)
-  }
-
-  // 如果有课程，创建路径课程关联
-  if (courses && courses.length > 0) {
-    const pathCourses = courses.map(course => ({
-      path_id: pathData.id,
-      course_id: course.course_id,
-      stage: course.stage,
-      stage_name: course.stage_name || null,
-      is_required: course.is_required !== undefined ? course.is_required : true,
-      is_parallel: course.is_parallel !== undefined ? course.is_parallel : false,
-      display_order: course.display_order || 0,
-      estimated_weeks: course.estimated_weeks || null,
-      notes: course.notes || null,
-    }))
-
-    const { error: coursesError } = await supabaseAdmin
-      .from('learning_path_courses')
-      .insert(pathCourses)
-
-    if (coursesError) {
-      // 如果创建课程失败，删除已创建的路径
-      await supabaseAdmin.from('learning_paths').delete().eq('id', pathData.id)
-      throw new Error(`Failed to create path courses: ${coursesError.message}`)
-    }
-  }
-
-  // 返回完整路径（包含课程）
-  const fullPath = await getLearningPathById(pathData.id)
-  if (!fullPath) {
-    throw new Error('Failed to fetch created learning path')
-  }
-
-  return fullPath
-}
-
-// 更新学习路径
-export async function updateLearningPath(
-  pathId: string,
-  updates: Partial<Omit<LearningPath, 'id' | 'created_at' | 'updated_at' | 'category' | 'courses'>>,
-  courses?: Array<Omit<LearningPathCourse, 'id' | 'path_id' | 'created_at' | 'updated_at' | 'course'>>
-): Promise<LearningPathWithDetails> {
-  // 更新路径基本信息
-  const updateData: any = {}
-  if (updates.name !== undefined) updateData.name = updates.name
-  if (updates.slug !== undefined) updateData.slug = updates.slug
-  if (updates.description !== undefined) updateData.description = updates.description
-  if (updates.category_id !== undefined) updateData.category_id = updates.category_id
-  if (updates.target_audience !== undefined) updateData.target_audience = updates.target_audience
-  if (updates.estimated_duration_weeks !== undefined) updateData.estimated_duration_weeks = updates.estimated_duration_weeks
-  if (updates.difficulty_level !== undefined) updateData.difficulty_level = updates.difficulty_level
-  if (updates.is_active !== undefined) updateData.is_active = updates.is_active
-  if (updates.display_order !== undefined) updateData.display_order = updates.display_order
-
-  if (Object.keys(updateData).length > 0) {
-    const { error: pathError } = await supabaseAdmin
-      .from('learning_paths')
-      .update(updateData)
-      .eq('id', pathId)
-
-    if (pathError) {
-      throw new Error(`Failed to update learning path: ${pathError.message}`)
-    }
-  }
-
-  // 如果提供了课程列表，更新路径课程
-  if (courses !== undefined) {
-    // 删除现有课程关联
-    const { error: deleteError } = await supabaseAdmin
-      .from('learning_path_courses')
-      .delete()
-      .eq('path_id', pathId)
-
-    if (deleteError) {
-      throw new Error(`Failed to delete existing path courses: ${deleteError.message}`)
-    }
-
-    // 创建新的课程关联
-    if (courses.length > 0) {
-      const pathCourses = courses.map(course => ({
-        path_id: pathId,
-        course_id: course.course_id,
-        stage: course.stage,
-        stage_name: course.stage_name || null,
-        is_required: course.is_required !== undefined ? course.is_required : true,
-        is_parallel: course.is_parallel !== undefined ? course.is_parallel : false,
-        display_order: course.display_order || 0,
-        estimated_weeks: course.estimated_weeks || null,
-        notes: course.notes || null,
-      }))
-
-      const { error: coursesError } = await supabaseAdmin
-        .from('learning_path_courses')
-        .insert(pathCourses)
-
-      if (coursesError) {
-        throw new Error(`Failed to create path courses: ${coursesError.message}`)
-      }
-    }
-  }
-
-  // 返回更新后的完整路径
-  const fullPath = await getLearningPathById(pathId)
-  if (!fullPath) {
-    throw new Error('Failed to fetch updated learning path')
-  }
-
-  return fullPath
-}
-
-// 删除学习路径
-export async function deleteLearningPath(pathId: string): Promise<boolean> {
-  // 由于有 CASCADE 删除，只需要删除路径即可
-  const { error } = await supabaseAdmin
-    .from('learning_paths')
-    .delete()
-    .eq('id', pathId)
-
-  if (error) {
-    throw new Error(`Failed to delete learning path: ${error.message}`)
-  }
-
-  return true
 }
 
 // ==================== User Course Completions 操作 ====================
@@ -4292,10 +3992,10 @@ export async function getUserCourseCompletions(userId: string): Promise<UserCour
     .order('completion_date', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch user course completions: ${error.message}`)
+    throw new Error(`Failed to fetch user course completions: ${getErrorMessage(error)}`)
   }
 
-  return (data || []).map((item: any) => ({
+  return (data || []).map((item) => ({
     ...item,
     course: Array.isArray(item.course) ? item.course[0] : item.course,
   })) as UserCourseCompletion[]
@@ -4334,7 +4034,7 @@ export async function createUserCourseCompletion(
     .single()
 
   if (error) {
-    throw new Error(`Failed to create course completion: ${error.message}`)
+    throw new Error(`Failed to create course completion: ${getErrorMessage(error)}`)
   }
 
   return {
@@ -4351,110 +4051,10 @@ export async function deleteUserCourseCompletion(completionId: string): Promise<
     .eq('id', completionId)
 
   if (error) {
-    throw new Error(`Failed to delete course completion: ${error.message}`)
+    throw new Error(`Failed to delete course completion: ${getErrorMessage(error)}`)
   }
 
   return true
-}
-
-// ==================== User Learning Path Progress 操作 ====================
-
-// 获取用户的学习路径进度
-export async function getUserLearningPathProgress(
-  userId: string,
-  pathId?: string
-): Promise<UserLearningPathProgress[]> {
-  let query = supabaseAdmin
-    .from('user_learning_path_progress')
-    .select(`
-      *,
-      path:learning_paths(*)
-    `)
-    .eq('user_id', userId)
-    .order('last_activity_at', { ascending: false })
-
-  if (pathId) {
-    query = query.eq('path_id', pathId)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(`Failed to fetch learning path progress: ${error.message}`)
-  }
-
-  return (data || []).map((item: any) => ({
-    ...item,
-    path: Array.isArray(item.path) ? item.path[0] : item.path,
-  })) as UserLearningPathProgress[]
-}
-
-// 计算学习路径进度（实时计算，不依赖数据库）
-export async function calculateLearningPathProgress(
-  userId: string,
-  pathId: string
-): Promise<{
-  progress: number
-  currentStage: number
-  completedStages: number
-  totalStages: number
-  nextCourses: Course[]
-}> {
-  const path = await getLearningPathById(pathId)
-  if (!path || !path.courses) {
-    throw new Error('Learning path not found')
-  }
-
-  const completedCourseIds = await getUserCompletedCourseIds(userId)
-
-  // 计算总体进度
-  const requiredCourses = path.courses.filter(pc => pc.is_required)
-  const completedRequired = requiredCourses.filter(
-    pc => pc.course_id && completedCourseIds.has(pc.course_id)
-  )
-  const progress = requiredCourses.length > 0
-    ? Math.round((completedRequired.length / requiredCourses.length) * 100)
-    : 0
-
-  // 计算当前阶段
-  const stages = [...new Set(path.courses.map(pc => pc.stage))].sort()
-  let currentStage = 1
-  for (const stage of stages) {
-    const stageCourses = path.courses.filter(
-      pc => pc.stage === stage && pc.is_required
-    )
-    const allCompleted = stageCourses.every(
-      pc => pc.course_id && completedCourseIds.has(pc.course_id)
-    )
-    if (allCompleted) {
-      currentStage = stage + 1
-    } else {
-      break
-    }
-  }
-
-  // 获取下一阶段的课程（检查先修条件）
-  const nextStageCourses = path.courses.filter(
-    pc => pc.stage === currentStage && pc.is_required
-  )
-
-  const nextCourses: Course[] = []
-  for (const pathCourse of nextStageCourses) {
-    if (pathCourse.course_id && !completedCourseIds.has(pathCourse.course_id)) {
-      const check = await checkUserPrerequisites(userId, pathCourse.course_id)
-      if (check.canEnroll && pathCourse.course) {
-        nextCourses.push(pathCourse.course)
-      }
-    }
-  }
-
-  return {
-    progress,
-    currentStage,
-    completedStages: currentStage - 1,
-    totalStages: stages.length,
-    nextCourses: nextCourses.slice(0, 5), // 只返回前 5 个
-  }
 }
 
 // ==================== Prerequisite Groups 操作 ====================
@@ -4476,17 +4076,22 @@ export async function getCoursePrerequisiteGroups(courseId: string): Promise<Pre
     .order('display_order', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch prerequisite groups: ${error.message}`)
+    throw new Error(`Failed to fetch prerequisite groups: ${getErrorMessage(error)}`)
   }
 
-  return (groups || []).map((group: any) => ({
+  return (groups || []).map((group) => ({
     ...group,
-    prerequisites: (group.items || []).map((item: any) => ({
-      ...item.prerequisite,
-      prerequisite_course: Array.isArray(item.prerequisite?.prerequisite_course)
-        ? item.prerequisite.prerequisite_course[0]
-        : item.prerequisite?.prerequisite_course,
-    })).filter(Boolean),
+    prerequisites: ((group.items || []) as PrerequisiteGroupItemRow[])
+      .map((item) => {
+        const prereq = item.prerequisite
+        if (!prereq) return null
+        const course = unwrapRelation(prereq.prerequisite_course)
+        return {
+          ...prereq,
+          ...(course ? { prerequisite_course: course } : {}),
+        } as CoursePrerequisite
+      })
+      .filter((p): p is CoursePrerequisite => p != null),
   })) as PrerequisiteGroup[]
 }
 
@@ -4545,7 +4150,7 @@ export async function deletePrerequisiteGroup(groupId: string): Promise<boolean>
     .eq('id', groupId)
 
   if (error) {
-    throw new Error(`Failed to delete prerequisite group: ${error.message}`)
+    throw new Error(`Failed to delete prerequisite group: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -4563,7 +4168,7 @@ export async function addCourseSubcategoryTag(courseId: string, subcategoryId: s
     })
 
   if (error) {
-    throw new Error(`Failed to add subcategory tag: ${error.message}`)
+    throw new Error(`Failed to add subcategory tag: ${getErrorMessage(error)}`)
   }
 }
 
@@ -4576,7 +4181,7 @@ export async function removeCourseSubcategoryTag(courseId: string, subcategoryId
     .eq('subcategory_id', subcategoryId)
 
   if (error) {
-    throw new Error(`Failed to remove subcategory tag: ${error.message}`)
+    throw new Error(`Failed to remove subcategory tag: ${getErrorMessage(error)}`)
   }
 }
 
@@ -4620,7 +4225,7 @@ export async function getAllCourseAssignments(): Promise<CourseAssignmentWithDet
     .order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch course assignments: ${error.message}`)
+    throw new Error(`Failed to fetch course assignments: ${getErrorMessage(error)}`)
   }
 
   // 获取详细信息
@@ -4688,7 +4293,7 @@ export async function getCourseAssignmentsBySeries(seriesId: string): Promise<Co
     .order('display_order', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch course assignments: ${error.message}`)
+    throw new Error(`Failed to fetch course assignments: ${getErrorMessage(error)}`)
   }
 
   // 获取详细信息（类似上面的逻辑）
@@ -4782,7 +4387,7 @@ export async function createCourseAssignment(
     .single()
 
   if (error) {
-    throw new Error(`Failed to create course assignment: ${error.message}`)
+    throw new Error(`Failed to create course assignment: ${getErrorMessage(error)}`)
   }
 
   return data as CourseAssignment
@@ -4842,7 +4447,7 @@ export async function updateCourseAssignment(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update course assignment: ${error.message}`)
+    throw new Error(`Failed to update course assignment: ${getErrorMessage(error)}`)
   }
 
   return data as CourseAssignment
@@ -4856,7 +4461,7 @@ export async function deleteCourseAssignment(assignmentId: string): Promise<bool
     .eq('id', assignmentId)
 
   if (error) {
-    throw new Error(`Failed to delete course assignment: ${error.message}`)
+    throw new Error(`Failed to delete course assignment: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -4873,7 +4478,7 @@ export async function hasCategoryAssignments(categoryId: string): Promise<boolea
     .eq('is_active', true)
 
   if (error) {
-    throw new Error(`Failed to check category assignments: ${error.message}`)
+    throw new Error(`Failed to check category assignments: ${getErrorMessage(error)}`)
   }
 
   return (count || 0) > 0
@@ -4888,7 +4493,7 @@ export async function hasSeriesAssignments(seriesId: string): Promise<boolean> {
     .eq('is_active', true)
 
   if (error) {
-    throw new Error(`Failed to check series assignments: ${error.message}`)
+    throw new Error(`Failed to check series assignments: ${getErrorMessage(error)}`)
   }
 
   return (count || 0) > 0
@@ -5015,7 +4620,7 @@ export interface CourseEnrollment {
   refund_reason?: string
   refunded_at?: string
   notes?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -5193,7 +4798,7 @@ export async function addToCart(userId: string, instanceId: string, notes?: stri
     .single()
 
   if (error) {
-    throw new Error(`Failed to add to cart: ${error.message}`)
+    throw new Error(`Failed to add to cart: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollment
@@ -5238,7 +4843,7 @@ export async function addToWaitlist(userId: string, instanceId: string, notes?: 
     .single()
 
   if (error) {
-    throw new Error(`Failed to add to waitlist: ${error.message}`)
+    throw new Error(`Failed to add to waitlist: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollment
@@ -5268,7 +4873,7 @@ export async function getUserCart(userId: string): Promise<CourseEnrollmentWithD
     .order('added_to_cart_at', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch cart: ${error.message}`)
+    throw new Error(`Failed to fetch cart: ${getErrorMessage(error)}`)
   }
 
   return (data || []) as CourseEnrollmentWithDetails[]
@@ -5297,7 +4902,7 @@ export async function getUserWaitlist(userId: string): Promise<CourseEnrollmentW
     .order('waitlist_position', { ascending: true })
 
   if (error) {
-    throw new Error(`Failed to fetch waitlist: ${error.message}`)
+    throw new Error(`Failed to fetch waitlist: ${getErrorMessage(error)}`)
   }
 
   return (data || []) as CourseEnrollmentWithDetails[]
@@ -5333,7 +4938,7 @@ export async function getUserEnrollments(
   const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+    throw new Error(`Failed to fetch enrollments: ${getErrorMessage(error)}`)
   }
 
   return (data || []) as CourseEnrollmentWithDetails[]
@@ -5382,7 +4987,7 @@ export async function getAllEnrollments(
   const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+    throw new Error(`Failed to fetch enrollments: ${getErrorMessage(error)}`)
   }
 
   return (data || []) as CourseEnrollmentWithDetails[]
@@ -5432,7 +5037,7 @@ export async function removeFromCart(enrollmentId: string, userId: string): Prom
     .eq('status', 'cart')
 
   if (error) {
-    throw new Error(`Failed to remove from cart: ${error.message}`)
+    throw new Error(`Failed to remove from cart: ${getErrorMessage(error)}`)
   }
 
   return true
@@ -5453,7 +5058,7 @@ export async function removeFromWaitlist(enrollmentId: string, userId: string): 
     .eq('status', 'waitlisted')
 
   if (error) {
-    throw new Error(`Failed to remove from waitlist: ${error.message}`)
+    throw new Error(`Failed to remove from waitlist: ${getErrorMessage(error)}`)
   }
 
   // 更新等待列表位置
@@ -5490,7 +5095,7 @@ export async function extendCartExpiry(enrollmentId: string, userId: string, add
     .single()
 
   if (error) {
-    throw new Error(`Failed to extend cart expiry: ${error.message}`)
+    throw new Error(`Failed to extend cart expiry: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollment
@@ -5583,7 +5188,7 @@ export async function checkoutCart(enrollmentIds: string[], userId: string, paym
     .select()
 
   if (error) {
-    throw new Error(`Failed to checkout: ${error.message}`)
+    throw new Error(`Failed to checkout: ${getErrorMessage(error)}`)
   }
 
   return (data || []) as CourseEnrollment[]
@@ -5640,7 +5245,7 @@ export async function calculateEnrollmentTotal(
     .in('id', enrollmentIds)
 
   if (error) {
-    throw new Error(`Failed to fetch enrollments: ${error.message}`)
+    throw new Error(`Failed to fetch enrollments: ${getErrorMessage(error)}`)
   }
 
   if (!enrollments || enrollments.length === 0) {
@@ -5718,7 +5323,7 @@ export async function confirmEnrollment(
   }
 
   // 更新为 enrolled
-  const updateData: any = {
+  const updateData: StringKeyRecord = {
     status: 'enrolled',
     enrolled_at: new Date().toISOString(),
     payment_status: 'paid',
@@ -5741,7 +5346,7 @@ export async function confirmEnrollment(
     .single()
 
   if (error) {
-    throw new Error(`Failed to confirm enrollment: ${error.message}`)
+    throw new Error(`Failed to confirm enrollment: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollment
@@ -5772,7 +5377,7 @@ export async function getEnrollmentByStripeSessionId(
     .maybeSingle()
 
   if (error) {
-    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+    throw new Error(`Failed to fetch enrollment: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollmentWithDetails | null
@@ -5803,7 +5408,7 @@ export async function getEnrollmentByStripePaymentIntentId(
     .maybeSingle()
 
   if (error) {
-    throw new Error(`Failed to fetch enrollment: ${error.message}`)
+    throw new Error(`Failed to fetch enrollment: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollmentWithDetails | null
@@ -5818,7 +5423,7 @@ export async function updateEnrollmentStripeInfo(
     customer_id?: string
   }
 ): Promise<CourseEnrollment> {
-  const updateData: any = {
+  const updateData: StringKeyRecord = {
     updated_at: new Date().toISOString(),
   }
 
@@ -5840,7 +5445,7 @@ export async function updateEnrollmentStripeInfo(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update enrollment Stripe info: ${error.message}`)
+    throw new Error(`Failed to update enrollment Stripe info: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollment
@@ -5869,7 +5474,7 @@ export async function markEnrollmentPaymentFailed(
     .single()
 
   if (error) {
-    throw new Error(`Failed to mark payment as failed: ${error.message}`)
+    throw new Error(`Failed to mark payment as failed: ${getErrorMessage(error)}`)
   }
 
   return data as CourseEnrollment
@@ -5903,7 +5508,7 @@ export async function cancelEnrollment(
     .eq('user_id', userId)
 
   if (error) {
-    throw new Error(`Failed to cancel enrollment: ${error.message}`)
+    throw new Error(`Failed to cancel enrollment: ${getErrorMessage(error)}`)
   }
 
   // 如果是等待列表，更新位置
@@ -5921,7 +5526,7 @@ export async function processExpiredEnrollments(): Promise<{ processed: number; 
   const { data, error } = await supabaseAdmin.rpc('process_expired_enrollments')
 
   if (error) {
-    throw new Error(`Failed to process expired enrollments: ${error.message}`)
+    throw new Error(`Failed to process expired enrollments: ${getErrorMessage(error)}`)
   }
 
   if (data && data.length > 0) {

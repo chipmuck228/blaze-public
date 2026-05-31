@@ -1,4 +1,21 @@
 import nodemailer from 'nodemailer'
+import { getErrorCode, getErrorMessage } from "@/lib/typed-error"
+
+type NodeMailerErrorFields = {
+  code?: string
+  command?: string
+  address?: string
+  port?: number
+}
+
+function nodeMailerErrorFields(error: unknown): NodeMailerErrorFields {
+  if (!error || typeof error !== 'object') return {}
+  return error as NodeMailerErrorFields
+}
+
+function smtpErrorCode(error: unknown): string | undefined {
+  return getErrorCode(error) ?? nodeMailerErrorFields(error).code
+}
 
 // 创建 transporter 的函数，确保使用最新的环境变量
 function createTransporter() {
@@ -86,9 +103,9 @@ export async function sendVerificationEmail(email: string, token: string, name: 
     try {
       await transporter.verify()
       console.log('✅ SMTP connection verified')
-    } catch (verifyError: any) {
+    } catch (verifyError: unknown) {
       // 验证失败不影响发送，继续尝试发送
-      console.warn('⚠️ SMTP verification failed, but continuing with send:', verifyError.message)
+      console.warn('⚠️ SMTP verification failed, but continuing with send:', getErrorMessage(verifyError))
     }
     
     // 发送邮件（带超时保护）
@@ -101,27 +118,27 @@ export async function sendVerificationEmail(email: string, token: string, name: 
     
     console.log(`✅ Verification email sent to ${email}`, { messageId: info.messageId })
     return true
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Failed to send verification email:', {
-      error: error.message,
-      code: error.code,
-      command: error.command,
-      address: error.address || process.env.SMTP_HOST,
-      port: error.port || process.env.SMTP_PORT,
+      error: getErrorMessage(error),
+      code: smtpErrorCode(error),
+      command: nodeMailerErrorFields(error).command,
+      address: nodeMailerErrorFields(error).address || process.env.SMTP_HOST,
+      port: nodeMailerErrorFields(error).port || process.env.SMTP_PORT,
       host: process.env.SMTP_HOST,
     })
     
     // 提供更详细的错误信息
-    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+    if (smtpErrorCode(error) === 'ETIMEDOUT' || getErrorMessage(error).includes('timeout')) {
       throw new Error(`SMTP connection timeout. Please check your network connection and SMTP settings. Host: ${process.env.SMTP_HOST || 'not set'}, Port: ${process.env.SMTP_PORT || 'not set'}`)
-    } else if (error.code === 'ECONNREFUSED') {
+    } else if (smtpErrorCode(error) === 'ECONNREFUSED') {
       throw new Error(`SMTP connection refused. Please check your SMTP_HOST and SMTP_PORT settings.`)
-    } else if (error.code === 'EAUTH') {
+    } else if (smtpErrorCode(error) === 'EAUTH') {
       throw new Error(`SMTP authentication failed. Please check your SMTP_USER and SMTP_PASSWORD in .env.local. Make sure you're using an app-specific password for Gmail.`)
-    } else if (error.message.includes('not configured')) {
+    } else if (getErrorMessage(error).includes('not configured')) {
       throw error
     } else {
-      throw new Error(`Failed to send verification email: ${error.message}`)
+      throw new Error(`Failed to send verification email: ${getErrorMessage(error)}`)
     }
   }
 }
@@ -171,9 +188,9 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
     try {
       await transporter.verify()
       console.log('✅ SMTP connection verified')
-    } catch (verifyError: any) {
+    } catch (verifyError: unknown) {
       // 验证失败不影响发送，继续尝试发送
-      console.warn('⚠️ SMTP verification failed, but continuing with send:', verifyError.message)
+      console.warn('⚠️ SMTP verification failed, but continuing with send:', getErrorMessage(verifyError))
     }
     
     // 发送邮件（带超时保护）
@@ -186,27 +203,27 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
     
     console.log(`✅ Password reset email sent to ${email}`, { messageId: info.messageId })
     return true
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Failed to send password reset email:', {
-      error: error.message,
-      code: error.code,
-      command: error.command,
-      address: error.address || process.env.SMTP_HOST,
-      port: error.port || process.env.SMTP_PORT,
+      error: getErrorMessage(error),
+      code: smtpErrorCode(error),
+      command: nodeMailerErrorFields(error).command,
+      address: nodeMailerErrorFields(error).address || process.env.SMTP_HOST,
+      port: nodeMailerErrorFields(error).port || process.env.SMTP_PORT,
       host: process.env.SMTP_HOST,
     })
     
     // 提供更详细的错误信息
-    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+    if (smtpErrorCode(error) === 'ETIMEDOUT' || getErrorMessage(error).includes('timeout')) {
       throw new Error(`SMTP connection timeout. Please check your network connection and SMTP settings. Host: ${process.env.SMTP_HOST || 'not set'}, Port: ${process.env.SMTP_PORT || 'not set'}`)
-    } else if (error.code === 'ECONNREFUSED') {
+    } else if (smtpErrorCode(error) === 'ECONNREFUSED') {
       throw new Error(`SMTP connection refused. Please check your SMTP_HOST and SMTP_PORT settings.`)
-    } else if (error.code === 'EAUTH') {
+    } else if (smtpErrorCode(error) === 'EAUTH') {
       throw new Error(`SMTP authentication failed. Please check your SMTP_USER and SMTP_PASSWORD in .env.local. Make sure you're using an app-specific password for Gmail.`)
-    } else if (error.message.includes('not configured')) {
+    } else if (getErrorMessage(error).includes('not configured')) {
       throw error
     } else {
-      throw new Error(`Failed to send password reset email: ${error.message}`)
+      throw new Error(`Failed to send password reset email: ${getErrorMessage(error)}`)
     }
   }
 }
@@ -264,9 +281,9 @@ export async function sendInvitationEmail(
     try {
       await transporter.verify()
       console.log('✅ SMTP connection verified')
-    } catch (verifyError: any) {
+    } catch (verifyError: unknown) {
       // 验证失败不影响发送，继续尝试发送
-      console.warn('⚠️ SMTP verification failed, but continuing with send:', verifyError.message)
+      console.warn('⚠️ SMTP verification failed, but continuing with send:', getErrorMessage(verifyError))
     }
     
     // 发送邮件（带超时保护）
@@ -279,24 +296,24 @@ export async function sendInvitationEmail(
     
     console.log(`✅ Invitation email sent to ${email}`, { messageId: info.messageId })
     return true
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Failed to send invitation email:', {
-      error: error.message,
-      code: error.code,
-      command: error.command,
-      address: error.address || process.env.SMTP_HOST,
-      port: error.port || process.env.SMTP_PORT,
+      error: getErrorMessage(error),
+      code: smtpErrorCode(error),
+      command: nodeMailerErrorFields(error).command,
+      address: nodeMailerErrorFields(error).address || process.env.SMTP_HOST,
+      port: nodeMailerErrorFields(error).port || process.env.SMTP_PORT,
     })
     
     // 提供更详细的错误信息
-    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+    if (smtpErrorCode(error) === 'ETIMEDOUT' || getErrorMessage(error).includes('timeout')) {
       throw new Error(`SMTP connection timeout. Please check your network connection and SMTP settings. Host: ${process.env.SMTP_HOST || 'not set'}, Port: ${process.env.SMTP_PORT || 'not set'}`)
-    } else if (error.code === 'ECONNREFUSED') {
+    } else if (smtpErrorCode(error) === 'ECONNREFUSED') {
       throw new Error(`SMTP connection refused. Please check your SMTP_HOST and SMTP_PORT settings.`)
-    } else if (error.code === 'EAUTH') {
+    } else if (smtpErrorCode(error) === 'EAUTH') {
       throw new Error(`SMTP authentication failed. Please check your SMTP_USER and SMTP_PASSWORD.`)
     } else {
-      throw new Error(`Failed to send invitation email: ${error.message}`)
+      throw new Error(`Failed to send invitation email: ${getErrorMessage(error)}`)
     }
   }
 }
@@ -359,9 +376,9 @@ export async function sendPasswordNotificationEmail(
     try {
       await transporter.verify()
       console.log('✅ SMTP connection verified')
-    } catch (verifyError: any) {
+    } catch (verifyError: unknown) {
       // 验证失败不影响发送，继续尝试发送
-      console.warn('⚠️ SMTP verification failed, but continuing with send:', verifyError.message)
+      console.warn('⚠️ SMTP verification failed, but continuing with send:', getErrorMessage(verifyError))
     }
     
     // 发送邮件（带超时保护）
@@ -374,24 +391,24 @@ export async function sendPasswordNotificationEmail(
     
     console.log(`✅ Password notification email sent to ${email}`, { messageId: info.messageId })
     return true
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Failed to send password notification email:', {
-      error: error.message,
-      code: error.code,
-      command: error.command,
-      address: error.address || process.env.SMTP_HOST,
-      port: error.port || process.env.SMTP_PORT,
+      error: getErrorMessage(error),
+      code: smtpErrorCode(error),
+      command: nodeMailerErrorFields(error).command,
+      address: nodeMailerErrorFields(error).address || process.env.SMTP_HOST,
+      port: nodeMailerErrorFields(error).port || process.env.SMTP_PORT,
     })
     
     // 提供更详细的错误信息
-    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+    if (smtpErrorCode(error) === 'ETIMEDOUT' || getErrorMessage(error).includes('timeout')) {
       throw new Error(`SMTP connection timeout. Please check your network connection and SMTP settings. Host: ${process.env.SMTP_HOST || 'not set'}, Port: ${process.env.SMTP_PORT || 'not set'}`)
-    } else if (error.code === 'ECONNREFUSED') {
+    } else if (smtpErrorCode(error) === 'ECONNREFUSED') {
       throw new Error(`SMTP connection refused. Please check your SMTP_HOST and SMTP_PORT settings.`)
-    } else if (error.code === 'EAUTH') {
+    } else if (smtpErrorCode(error) === 'EAUTH') {
       throw new Error(`SMTP authentication failed. Please check your SMTP_USER and SMTP_PASSWORD.`)
     } else {
-      throw new Error(`Failed to send password notification email: ${error.message}`)
+      throw new Error(`Failed to send password notification email: ${getErrorMessage(error)}`)
     }
   }
 }
@@ -482,7 +499,7 @@ export async function sendInvoiceEmail(
                   </tr>
                 </thead>
                 <tbody>
-                  ${invoiceData.items.map((item: any) => `
+                  ${invoiceData.items.map((item) => `
                     <tr>
                       <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">${item.description}</td>
                       <td style="text-align: right; padding: 10px; border-bottom: 1px solid #e0e0e0;">${item.quantity}</td>
@@ -548,8 +565,8 @@ export async function sendInvoiceEmail(
     try {
       await transporter.verify()
       console.log('✅ SMTP connection verified')
-    } catch (verifyError: any) {
-      console.warn('⚠️ SMTP verification failed, but continuing with send:', verifyError.message)
+    } catch (verifyError: unknown) {
+      console.warn('⚠️ SMTP verification failed, but continuing with send:', getErrorMessage(verifyError))
     }
     
     const info = await Promise.race([
@@ -561,25 +578,25 @@ export async function sendInvoiceEmail(
     
     console.log(`✅ Invoice email sent to ${email}`, { messageId: info.messageId })
     return true
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Failed to send invoice email:', {
-      error: error.message,
-      code: error.code,
-      command: error.command,
-      address: error.address || process.env.SMTP_HOST,
-      port: error.port || process.env.SMTP_PORT,
+      error: getErrorMessage(error),
+      code: smtpErrorCode(error),
+      command: nodeMailerErrorFields(error).command,
+      address: nodeMailerErrorFields(error).address || process.env.SMTP_HOST,
+      port: nodeMailerErrorFields(error).port || process.env.SMTP_PORT,
     })
     
-    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+    if (smtpErrorCode(error) === 'ETIMEDOUT' || getErrorMessage(error).includes('timeout')) {
       throw new Error(`SMTP connection timeout. Please check your network connection and SMTP settings.`)
-    } else if (error.code === 'ECONNREFUSED') {
+    } else if (smtpErrorCode(error) === 'ECONNREFUSED') {
       throw new Error(`SMTP connection refused. Please check your SMTP_HOST and SMTP_PORT settings.`)
-    } else if (error.code === 'EAUTH') {
+    } else if (smtpErrorCode(error) === 'EAUTH') {
       throw new Error(`SMTP authentication failed. Please check your SMTP_USER and SMTP_PASSWORD.`)
-    } else if (error.message.includes('not configured')) {
+    } else if (getErrorMessage(error).includes('not configured')) {
       throw error
     } else {
-      throw new Error(`Failed to send invoice email: ${error.message}`)
+      throw new Error(`Failed to send invoice email: ${getErrorMessage(error)}`)
     }
   }
 }
@@ -631,7 +648,7 @@ export async function sendNewsletterEmail(
     console.log("Newsletter email sent via SMTP:", info.messageId)
     return { provider: "smtp", messageId: info.messageId }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Send failed"
+    const message = error instanceof Error ? getErrorMessage(error) : "Send failed"
     console.error("Error sending newsletter email:", error)
     throw new Error(`Failed to send newsletter email: ${message}`)
   }

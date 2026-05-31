@@ -1,4 +1,5 @@
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+import type { StringKeyRecord } from "@/lib/typed-error"
 
 export interface FeaturedSession {
   id: string
@@ -73,52 +74,75 @@ export function buildInstanceDetailHref(
   return base
 }
 
-export function mapInstanceRowToFeaturedSession(row: any): FeaturedSession | null {
-  const program = Array.isArray(row.program) ? row.program[0] : row.program
-  const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
+export function mapInstanceRowToFeaturedSession(row: unknown): FeaturedSession | null {
+  if (!row || typeof row !== "object") return null
+  const record = row as Record<string, unknown>
+  const program = (Array.isArray(record.program) ? record.program[0] : record.program) as
+    | Record<string, unknown>
+    | undefined
+  const offering = (Array.isArray(record.offering) ? record.offering[0] : record.offering) as
+    | Record<string, unknown>
+    | undefined
   if (!program || !offering || offering.status !== "published") return null
 
-  const offeringCategory = Array.isArray(offering.category)
+  const offeringCategory = (Array.isArray(offering.category)
     ? offering.category[0]
-    : offering.category
-  const programCategory = Array.isArray(program.category) ? program.category[0] : program.category
+    : offering.category) as Record<string, unknown> | undefined
+  const programCategory = (Array.isArray(program.category) ? program.category[0] : program.category) as
+    | Record<string, unknown>
+    | undefined
   const category = offeringCategory ?? programCategory
-  const franchise = Array.isArray(program.franchise) ? program.franchise[0] : program.franchise
+  const franchise = (Array.isArray(program.franchise) ? program.franchise[0] : program.franchise) as
+    | Record<string, unknown>
+    | undefined
   if (franchise && franchise.is_active === false) return null
-  if (!category?.name) return null
+  if (!category?.name || typeof category.name !== "string") return null
 
-  const franchiseCode = franchise?.code ?? null
-  const campus = Array.isArray(row.campus) ? row.campus[0] : row.campus
+  const franchiseCode =
+    typeof franchise?.code === "string" ? franchise.code : null
+  const campus = (Array.isArray(record.campus) ? record.campus[0] : record.campus) as
+    | Record<string, unknown>
+    | undefined
+  const instanceId = typeof record.id === "string" ? record.id : String(record.id ?? "")
 
   return {
-    id: row.id,
-    title: offering.name || program.display_name || program.name,
-    description: offering.description ?? program.description ?? null,
+    id: instanceId,
+    title: String(offering.name || program.display_name || program.name || ""),
+    description: (offering.description ?? program.description ?? null) as string | null,
     poster_url:
-      normalizeRemoteImageUrl(offering.poster_url) ??
-      normalizeRemoteImageUrl(program.poster_url),
-    href: buildInstanceDetailHref(row.id, category.name, franchiseCode),
+      normalizeRemoteImageUrl(
+        typeof offering.poster_url === "string" ? offering.poster_url : null
+      ) ??
+      normalizeRemoteImageUrl(
+        typeof program.poster_url === "string" ? program.poster_url : null
+      ),
+    href: buildInstanceDetailHref(instanceId, category.name, franchiseCode),
     franchise: franchise
-      ? { code: franchise.code ?? "", name: franchise.name ?? "" }
+      ? {
+          code: String(franchise.code ?? ""),
+          name: String(franchise.name ?? ""),
+        }
       : null,
     webLocation: campus
       ? {
-          name: campus.name ?? "",
-          display_name: campus.display_name ?? campus.name ?? "",
+          name: String(campus.name ?? ""),
+          display_name: String(campus.display_name ?? campus.name ?? ""),
         }
       : null,
     category: {
       name: category.name,
-      display_name: category.display_name ?? category.name,
+      display_name: String(category.display_name ?? category.name),
     },
   }
 }
 
-export function sortFeaturedInstanceRows(rows: any[]): any[] {
+export function sortFeaturedInstanceRows(rows: unknown[]): unknown[] {
   return [...rows].sort((a, b) => {
-    const sa = a?.start_date ?? ""
-    const sb = b?.start_date ?? ""
+    const rowA = (a && typeof a === "object" ? a : {}) as Record<string, unknown>
+    const rowB = (b && typeof b === "object" ? b : {}) as Record<string, unknown>
+    const sa = rowA.start_date ?? ""
+    const sb = rowB.start_date ?? ""
     if (sa !== sb) return String(sa).localeCompare(String(sb))
-    return String(a?.start_time ?? "").localeCompare(String(b?.start_time ?? ""))
+    return String(rowA.start_time ?? "").localeCompare(String(rowB.start_time ?? ""))
   })
 }

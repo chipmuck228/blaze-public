@@ -1,7 +1,8 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect } from 'react'
-import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
+import { loadStripe, StripeElementsOptions, type Stripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import {
   Dialog,
@@ -15,9 +16,9 @@ import { Loader2, CreditCard, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 // 初始化 Stripe（延迟加载，避免在服务端执行）
-let stripePromiseInstance: Promise<any> | null = null
+let stripePromiseInstance: Promise<Stripe | null> | null = null
 
-const getStripePromise = (): Promise<any> | null => {
+const getStripePromise = (): Promise<Stripe | null> | null => {
   if (typeof window === 'undefined') {
     return null // 服务端不执行
   }
@@ -85,8 +86,8 @@ function PaymentForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel:
 
       // 成功
       onSuccess()
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'An unexpected error occurred')
       setIsProcessing(false)
     }
   }
@@ -163,8 +164,8 @@ export function AddPaymentMethodDialog({
 
       const data = await response.json()
       setClientSecret(data.client_secret)
-    } catch (err: any) {
-      setError(err.message || 'Failed to initialize payment form')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'Failed to initialize payment form')
       console.error('Error creating setup intent:', err)
     } finally {
       setIsLoading(false)
