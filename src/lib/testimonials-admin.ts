@@ -1,6 +1,3 @@
-import bcrypt from "bcryptjs"
-import crypto from "crypto"
-import { getUserByEmail } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
 
 function toErrorMessage(error: unknown): string {
@@ -15,7 +12,7 @@ function toErrorMessage(error: unknown): string {
 export interface AdminTestimonial {
   id: string
   user_id: string
-  franchise_id: string | null
+  campus_id: string | null
   comment: string
   display_order: number
   is_active: boolean
@@ -24,26 +21,28 @@ export interface AdminTestimonial {
   name: string
   email: string | null
   image_url: string | null
-  franchise_code: string | null
-  franchise_name: string | null
+  location_name: string | null
 }
 
-export interface TestimonialWriteInput {
-  name: string
-  email?: string | null
-  image_url?: string | null
+export interface TestimonialCreateInput {
+  user_id: string
   comment: string
-  franchise_id?: string | null
+  campus_id?: string | null
   display_order?: number
   is_active?: boolean
-  user_id?: string | null
-  created_by?: string | null
+}
+
+export interface TestimonialUpdateInput {
+  comment: string
+  campus_id?: string | null
+  display_order?: number
+  is_active?: boolean
 }
 
 const TESTIMONIAL_SELECT = `
   id,
   user_id,
-  franchise_id,
+  campus_id,
   comment,
   display_order,
   is_active,
@@ -52,61 +51,92 @@ const TESTIMONIAL_SELECT = `
   user:users(id, name, email, image)
 `
 
-type V2FranchiseRef = { id: string; code: string; name: string }
+type CampusRef = { id: string; name: string; display_name: string | null }
 
-async function lookupV2FranchisesByIds(
-  franchiseIds: Array<string | null | undefined>
-): Promise<Map<string, V2FranchiseRef>> {
-  const unique = [...new Set(franchiseIds.filter((id): id is string => Boolean(id)))]
+function normalizeCampusId(campusId: string | null | undefined): string | null {
+  if (!campusId || typeof campusId !== "string") return null
+  const trimmed = campusId.trim()
+  if (!trimmed || trimmed === "all") return null
+  return trimmed
+}
+
+async function lookupCampusesByIds(
+  campusIds: Array<string | null | undefined>
+): Promise<Map<string, CampusRef>> {
+  const unique = [...new Set(campusIds.filter((id): id is string => Boolean(id)))]
   if (unique.length === 0) return new Map()
 
   const { data, error } = await supabaseAdmin
-    .from("v2_franchise")
-    .select("id, code, name")
+    .from("v2_campus")
+    .select("id, name, display_name")
     .in("id", unique)
 
   if (error) {
     throw new Error(toErrorMessage(error))
   }
 
-  const map = new Map<string, V2FranchiseRef>()
+  const map = new Map<string, CampusRef>()
   for (const row of data || []) {
     map.set(row.id, row)
   }
   return map
 }
 
-async function assertV2FranchiseId(franchiseId: string | null | undefined): Promise<void> {
-  if (!franchiseId) return
+async function resolveCampusIdForWrite(
+  campusId: string | null | undefined
+): Promise<string | null> {
+  const normalized = normalizeCampusId(campusId)
+  if (!normalized) return null
 
   const { data, error } = await supabaseAdmin
-    .from("v2_franchise")
+    .from("v2_campus")
     .select("id")
-    .eq("id", franchiseId)
+    .eq("id", normalized)
     .maybeSingle()
 
   if (error) {
     throw new Error(toErrorMessage(error))
   }
   if (!data) {
-    throw new Error("Invalid franchise_id. Campus must exist in v2_franchise.")
+    throw new Error(
+      "Location not found. Choose a location from the list or use network-wide."
+    )
+  }
+  return data.id
+}
+
+async function assertUserExists(userId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("id, role, is_test_user")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(toErrorMessage(error))
+  }
+  if (!data) {
+    throw new Error("User not found")
+  }
+  if (data.role !== "user" || data.is_test_user) {
+    throw new Error("Selected user must be a non-test user account")
   }
 }
 
 function formatRow(
   row: Record<string, unknown>,
-  franchiseById: Map<string, V2FranchiseRef>
+  campusById: Map<string, CampusRef>
 ): AdminTestimonial {
   const user = Array.isArray(row.user)
     ? (row.user[0] as Record<string, unknown> | undefined)
     : (row.user as Record<string, unknown> | undefined)
-  const franchiseId = (row.franchise_id as string | null) ?? null
-  const franchise = franchiseId ? franchiseById.get(franchiseId) : undefined
+  const campusId = (row.campus_id as string | null) ?? null
+  const campus = campusId ? campusById.get(campusId) : undefined
 
   return {
     id: row.id as string,
     user_id: row.user_id as string,
-    franchise_id: (row.franchise_id as string | null) ?? null,
+    campus_id: campusId,
     comment: row.comment as string,
     display_order: (row.display_order as number) ?? 0,
     is_active: (row.is_active as boolean) ?? true,
@@ -115,8 +145,7 @@ function formatRow(
     name: (user?.name as string) || "Anonymous",
     email: (user?.email as string | null) ?? null,
     image_url: (user?.image as string | null) ?? null,
-    franchise_code: (franchise?.code as string | null) ?? null,
-    franchise_name: (franchise?.name as string | null) ?? null,
+    location_name: campus ? campus.display_name || campus.name : null,
   }
 }
 
@@ -132,10 +161,10 @@ export async function listTestimonialsAdmin(): Promise<AdminTestimonial[]> {
   }
 
   const rows = data || []
-  const franchiseById = await lookupV2FranchisesByIds(
-    rows.map((row) => row.franchise_id as string | null)
+  const campusById = await lookupCampusesByIds(
+    rows.map((row) => row.campus_id as string | null)
   )
-  return rows.map((row) => formatRow(row as Record<string, unknown>, franchiseById))
+  return rows.map((row) => formatRow(row as Record<string, unknown>, campusById))
 }
 
 export async function getTestimonialAdmin(id: string): Promise<AdminTestimonial | null> {
@@ -151,87 +180,29 @@ export async function getTestimonialAdmin(id: string): Promise<AdminTestimonial 
 
   if (!data) return null
 
-  const franchiseById = await lookupV2FranchisesByIds([data.franchise_id as string | null])
-  return formatRow(data as Record<string, unknown>, franchiseById)
-}
-
-async function resolveTestimonialAuthor(params: TestimonialWriteInput): Promise<string> {
-  const name = params.name.trim()
-  if (!name) {
-    throw new Error("Name is required")
-  }
-
-  if (params.user_id) {
-    const updates: Record<string, string> = { name }
-    if (params.image_url) updates.image = params.image_url
-    if (params.email?.trim()) updates.email = params.email.trim().toLowerCase()
-
-    const { error } = await supabaseAdmin
-      .from("users")
-      .update(updates)
-      .eq("id", params.user_id)
-
-    if (error) {
-      throw new Error(toErrorMessage(error))
-    }
-
-    return params.user_id
-  }
-
-  const email = params.email?.trim().toLowerCase()
-  if (email) {
-    const existing = await getUserByEmail(email)
-    if (existing) {
-      const updates: Record<string, string> = { name }
-      if (params.image_url) updates.image = params.image_url
-
-      await supabaseAdmin.from("users").update(updates).eq("id", existing.id)
-      return existing.id
-    }
-  }
-
-  const userEmail = email || `testimonial-${crypto.randomUUID()}@testimonials.blaze.local`
-  const password_hash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10)
-  const insertData: Record<string, unknown> = {
-    name,
-    email: userEmail,
-    password_hash,
-    email_verified: false,
-    role: "user",
-    is_test_user: true,
-  }
-
-  if (params.image_url) insertData.image = params.image_url
-  if (params.created_by) insertData.created_by = params.created_by
-
-  const { data: user, error } = await supabaseAdmin
-    .from("users")
-    .insert(insertData)
-    .select("id")
-    .single()
-
-  if (error) {
-    throw new Error(`Failed to create testimonial author: ${toErrorMessage(error)}`)
-  }
-
-  return user.id as string
+  const campusById = await lookupCampusesByIds([data.campus_id as string | null])
+  return formatRow(data as Record<string, unknown>, campusById)
 }
 
 export async function createTestimonialAdmin(
-  input: TestimonialWriteInput
+  input: TestimonialCreateInput
 ): Promise<AdminTestimonial> {
   const comment = input.comment.trim()
   if (!comment) {
     throw new Error("Comment is required")
   }
+  if (!input.user_id?.trim()) {
+    throw new Error("User is required")
+  }
 
-  const user_id = await resolveTestimonialAuthor(input)
+  await assertUserExists(input.user_id.trim())
+  const campus_id = await resolveCampusIdForWrite(input.campus_id)
 
   const { data, error } = await supabaseAdmin
     .from("testimonials")
     .insert({
-      user_id,
-      franchise_id: input.franchise_id || null,
+      user_id: input.user_id.trim(),
+      campus_id,
       comment,
       display_order: input.display_order ?? 0,
       is_active: input.is_active ?? true,
@@ -254,7 +225,7 @@ export async function createTestimonialAdmin(
 
 export async function updateTestimonialAdmin(
   id: string,
-  input: TestimonialWriteInput
+  input: TestimonialUpdateInput
 ): Promise<AdminTestimonial> {
   const existing = await getTestimonialAdmin(id)
   if (!existing) {
@@ -266,18 +237,13 @@ export async function updateTestimonialAdmin(
     throw new Error("Comment is required")
   }
 
-  const user_id = await resolveTestimonialAuthor({
-    ...input,
-    user_id: existing.user_id,
-  })
-  await assertV2FranchiseId(input.franchise_id)
+  const campus_id = await resolveCampusIdForWrite(input.campus_id)
 
   const { error } = await supabaseAdmin
     .from("testimonials")
     .update({
-      user_id,
-      franchise_id: input.franchise_id || null,
       comment,
+      campus_id,
       display_order: input.display_order ?? 0,
       is_active: input.is_active ?? true,
       updated_at: new Date().toISOString(),

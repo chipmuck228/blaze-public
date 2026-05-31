@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { LazyRemoteImage } from "@/components/ui/LazyRemoteImage";
+import { getErrorMessage } from "@/lib/admin-toast";
 
 interface TestimonialProps {
   id: string;
@@ -9,9 +10,8 @@ interface TestimonialProps {
   email?: string | null;
   comment: string;
   image_url?: string | null;
-  franchise_id?: string | null;
-  franchise_code?: string | null;
-  franchise_name?: string | null;
+  campus_id?: string | null;
+  location_name?: string | null;
 }
 
 interface TestimonialsProps {
@@ -44,9 +44,9 @@ export const Testimonials = ({ franchiseCode, locationName }: TestimonialsProps 
         
         const data = await response.json()
         setTestimonials(data.testimonials || [])
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching testimonials:", err)
-        setError(err.message || "Failed to load testimonials")
+        setError(getErrorMessage(err) || "Failed to load testimonials")
         // 如果出错，使用空数组
         setTestimonials([])
       } finally {
@@ -229,7 +229,7 @@ export const Testimonials = ({ franchiseCode, locationName }: TestimonialsProps 
                   <div>
                     <h4 className="font-bold text-[#0f172a] dark:text-white">{testimonial.name}</h4>
                     <p className="text-sm text-slate-400 dark:text-slate-500">
-                      {locationName || testimonial.franchise_name || 'Blaze Robotics Academy'}
+                      {locationName || testimonial.location_name || 'Blaze Robotics Academy'}
                     </p>
                   </div>
                 </div>

@@ -6,6 +6,11 @@ import {
   updateTestimonialAdmin,
 } from "@/lib/testimonials-admin"
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return "Something went wrong"
+}
+
 async function requireAdmin() {
   const session = await auth()
   if (!session?.user) {
@@ -35,8 +40,10 @@ export async function GET(
     return NextResponse.json({ testimonial }, { status: 200 })
   } catch (error: unknown) {
     console.error("Error fetching testimonial:", error)
-    const message = error instanceof Error ? error.message : "Failed to fetch testimonial"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(
+      { error: toErrorMessage(error) || "Failed to fetch testimonial" },
+      { status: 500 }
+    )
   }
 }
 
@@ -50,21 +57,18 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { name, email, image_url, comment, franchise_id, display_order, is_active } = body
+    const { comment, campus_id, display_order, is_active } = body
 
-    if (!name?.trim() || !comment?.trim()) {
+    if (!comment?.trim()) {
       return NextResponse.json(
-        { error: "Missing required fields: name and comment are required" },
+        { error: "Missing required field: quote is required" },
         { status: 400 }
       )
     }
 
     const testimonial = await updateTestimonialAdmin(id, {
-      name: name.trim(),
-      email: email?.trim() || null,
-      image_url: image_url || null,
       comment: comment.trim(),
-      franchise_id: franchise_id || null,
+      campus_id: campus_id ?? null,
       display_order: display_order ?? 0,
       is_active: is_active ?? true,
     })
@@ -75,7 +79,7 @@ export async function PATCH(
     )
   } catch (error: unknown) {
     console.error("Error updating testimonial:", error)
-    const message = error instanceof Error ? error.message : "Failed to update testimonial"
+    const message = toErrorMessage(error) || "Failed to update testimonial"
     const status = message === "Testimonial not found" ? 404 : 500
     return NextResponse.json({ error: message }, { status })
   }
@@ -98,7 +102,9 @@ export async function DELETE(
     )
   } catch (error: unknown) {
     console.error("Error deleting testimonial:", error)
-    const message = error instanceof Error ? error.message : "Failed to delete testimonial"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(
+      { error: toErrorMessage(error) || "Failed to delete testimonial" },
+      { status: 500 }
+    )
   }
 }

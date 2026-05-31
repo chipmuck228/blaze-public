@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,7 +44,6 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import {
   Plus,
   MoreVertical,
@@ -59,41 +58,71 @@ import {
 } from "lucide-react"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
-interface FranchiseOption {
+interface CampusOption {
   id: string
-  code: string
   name: string
+  display_name: string | null
   is_active: boolean
+  franchise?: { id: string; name: string; code?: string } | { id: string; name: string; code?: string }[]
+}
+
+interface UserOption {
+  id: string
+  name: string
+  email: string
+  image?: string | null
+  role: string
+  is_test_user?: boolean
 }
 
 interface TestimonialRow {
   id: string
   user_id: string
-  franchise_id: string | null
+  campus_id: string | null
   comment: string
   display_order: number
   is_active: boolean
   name: string
   email: string | null
   image_url: string | null
-  franchise_code: string | null
-  franchise_name: string | null
+  location_name: string | null
 }
 
 const EMPTY_FORM = {
-  name: "",
-  email: "",
-  image_url: "",
+  user_id: "",
   comment: "",
-  franchise_id: "",
+  campus_id: "",
   display_order: 0,
   is_active: true,
+}
+
+function campusIdForSelect(
+  campusId: string | null | undefined,
+  campuses: CampusOption[]
+): string {
+  if (!campusId) return ""
+  return campuses.some((c) => c.id === campusId) ? campusId : ""
+}
+
+function unwrapFranchise(
+  franchise: CampusOption["franchise"]
+): { name: string } | null {
+  if (!franchise) return null
+  if (Array.isArray(franchise)) return franchise[0] ?? null
+  return franchise
+}
+
+function campusLabel(campus: CampusOption): string {
+  const label = campus.display_name || campus.name
+  const franchiseName = unwrapFranchise(campus.franchise)?.name
+  return franchiseName ? `${label} (${franchiseName})` : label
 }
 
 export default function TestimonialsAdminPage() {
   const [testimonials, setTestimonials] = useState<TestimonialRow[]>([])
   const [filteredTestimonials, setFilteredTestimonials] = useState<TestimonialRow[]>([])
-  const [franchises, setFranchises] = useState<FranchiseOption[]>([])
+  const [campuses, setCampuses] = useState<CampusOption[]>([])
+  const [users, setUsers] = useState<UserOption[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -101,13 +130,27 @@ export default function TestimonialsAdminPage() {
   const [editing, setEditing] = useState<TestimonialRow | null>(null)
   const [formData, setFormData] = useState(EMPTY_FORM)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const selectableUsers = useMemo(
+    () => users.filter((u) => u.role === "user" && !u.is_test_user),
+    [users]
+  )
+
+  const selectedUser = useMemo(() => {
+    if (editing) {
+      return {
+        name: editing.name,
+        email: editing.email,
+        image: editing.image_url,
+      }
+    }
+    return selectableUsers.find((u) => u.id === formData.user_id) ?? null
+  }, [editing, formData.user_id, selectableUsers])
 
   useEffect(() => {
     fetchTestimonials()
-    fetchFranchises()
+    fetchCampuses()
+    fetchUsers()
   }, [])
 
   useEffect(() => {
@@ -122,11 +165,18 @@ export default function TestimonialsAdminPage() {
         (item) =>
           item.name.toLowerCase().includes(q) ||
           item.comment.toLowerCase().includes(q) ||
-          (item.franchise_name || "").toLowerCase().includes(q) ||
+          (item.location_name || "").toLowerCase().includes(q) ||
           (item.email || "").toLowerCase().includes(q)
       )
     )
   }, [searchQuery, testimonials])
+
+  useEffect(() => {
+    if (!isDialogOpen || editing || !formData.campus_id || campuses.length === 0) return
+    if (!campuses.some((c) => c.id === formData.campus_id)) {
+      setFormData((prev) => ({ ...prev, campus_id: "" }))
+    }
+  }, [isDialogOpen, editing, campuses, formData.campus_id])
 
   const fetchTestimonials = async () => {
     setIsLoading(true)
@@ -140,46 +190,46 @@ export default function TestimonialsAdminPage() {
       const data = await res.json()
       setTestimonials(data.testimonials || [])
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load testimonials")
+      setError(e instanceof Error ? getErrorMessage(e) : "Failed to load testimonials")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const fetchFranchises = async () => {
+  const fetchCampuses = async () => {
     try {
-      const res = await fetch("/api/admin/franchises/v2?includeInactive=true")
+      const res = await fetch("/api/blaze/campuses")
       if (res.ok) {
         const data = await res.json()
-        setFranchises(data || [])
+        setCampuses(data || [])
       }
     } catch (e) {
-      console.error("Failed to fetch franchises:", e)
+      console.error("Failed to fetch campuses:", e)
     }
   }
 
-  const resetAvatarState = () => {
-    if (avatarPreviewUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(avatarPreviewUrl)
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/admin/users")
+      if (res.ok) {
+        const data = await res.json()
+        setUsers(data || [])
+      }
+    } catch (e) {
+      console.error("Failed to fetch users:", e)
     }
-    setAvatarFile(null)
-    setAvatarPreviewUrl(null)
   }
 
   const openDialog = (item?: TestimonialRow) => {
-    resetAvatarState()
     if (item) {
       setEditing(item)
       setFormData({
-        name: item.name,
-        email: item.email || "",
-        image_url: item.image_url || "",
+        user_id: item.user_id,
         comment: item.comment,
-        franchise_id: item.franchise_id || "",
+        campus_id: campusIdForSelect(item.campus_id, campuses),
         display_order: item.display_order,
         is_active: item.is_active,
       })
-      setAvatarPreviewUrl(item.image_url || null)
     } else {
       setEditing(null)
       setFormData({
@@ -193,52 +243,16 @@ export default function TestimonialsAdminPage() {
   const closeDialog = () => {
     setIsDialogOpen(false)
     setEditing(null)
-    resetAvatarState()
     setFormData(EMPTY_FORM)
   }
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (avatarPreviewUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(avatarPreviewUrl)
-    }
-
-    setAvatarFile(file)
-    setAvatarPreviewUrl(URL.createObjectURL(file))
-  }
-
-  const uploadAvatarIfNeeded = async (): Promise<string | null> => {
-    if (!avatarFile) {
-      return formData.image_url || null
-    }
-
-    setIsUploadingAvatar(true)
-    try {
-      const body = new FormData()
-      body.append("file", avatarFile)
-
-      const res = await fetch("/api/admin/teams/upload", {
-        method: "POST",
-        body,
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to upload avatar")
-      }
-
-      const data = await res.json()
-      return data.url as string
-    } finally {
-      setIsUploadingAvatar(false)
-    }
-  }
-
   const handleSubmit = async () => {
-    if (!formData.name.trim() || !formData.comment.trim()) {
-      setError("Name and comment are required")
+    if (!formData.comment.trim()) {
+      setError("Quote is required")
+      return
+    }
+    if (!editing && !formData.user_id) {
+      setError("Please select a parent user")
       return
     }
 
@@ -246,16 +260,20 @@ export default function TestimonialsAdminPage() {
     setError(null)
 
     try {
-      const image_url = await uploadAvatarIfNeeded()
-      const payload = {
-        name: formData.name.trim(),
-        email: formData.email.trim() || null,
-        image_url,
-        comment: formData.comment.trim(),
-        franchise_id: formData.franchise_id || null,
-        display_order: formData.display_order,
-        is_active: formData.is_active,
-      }
+      const payload = editing
+        ? {
+            comment: formData.comment.trim(),
+            campus_id: formData.campus_id || null,
+            display_order: formData.display_order,
+            is_active: formData.is_active,
+          }
+        : {
+            user_id: formData.user_id,
+            comment: formData.comment.trim(),
+            campus_id: formData.campus_id || null,
+            display_order: formData.display_order,
+            is_active: formData.is_active,
+          }
 
       const res = await fetch(
         editing ? `/api/admin/testimonials/${editing.id}` : "/api/admin/testimonials",
@@ -266,9 +284,11 @@ export default function TestimonialsAdminPage() {
         }
       )
 
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to save testimonial")
+        throw new Error(
+          (typeof data.error === "string" && data.error) || "Failed to save testimonial"
+        )
       }
 
       closeDialog()
@@ -340,14 +360,14 @@ export default function TestimonialsAdminPage() {
         <CardHeader>
           <CardTitle>All Testimonials</CardTitle>
           <CardDescription>
-            Leave campus empty for network-wide quotes. Lower display order appears first.
+            Leave location empty for network-wide quotes. Lower display order appears first.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, comment, or campus..."
+              placeholder="Search by name, comment, or location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -369,7 +389,7 @@ export default function TestimonialsAdminPage() {
                   <TableRow>
                     <TableHead>Parent</TableHead>
                     <TableHead>Comment</TableHead>
-                    <TableHead>Campus</TableHead>
+                    <TableHead>Location</TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]" />
@@ -413,10 +433,10 @@ export default function TestimonialsAdminPage() {
                         <p className="text-sm line-clamp-2">{item.comment}</p>
                       </TableCell>
                       <TableCell>
-                        {item.franchise_name ? (
-                          <Badge variant="secondary">{item.franchise_name}</Badge>
+                        {item.location_name ? (
+                          <Badge variant="secondary">{item.location_name}</Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">All campuses</span>
+                          <span className="text-xs text-muted-foreground">Network-wide</span>
                         )}
                       </TableCell>
                       <TableCell>{item.display_order}</TableCell>
@@ -469,47 +489,92 @@ export default function TestimonialsAdminPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Testimonial" : "Add Testimonial"}</DialogTitle>
             <DialogDescription>
-              Quotes appear in the scrolling testimonials section on the home page and campus pages.
+              Quotes appear on the home page and location pages. Author info comes from the user record only.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Parent name *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Jane Smith"
-              />
-            </div>
+            {editing ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Parent name</Label>
+                  <Input value={editing.name} readOnly disabled className="bg-muted" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    value={editing.email || ""}
+                    readOnly
+                    disabled
+                    className="bg-muted"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label>Parent name *</Label>
+                <Select
+                  value={formData.user_id || undefined}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, user_id: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectableUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="Optional — links to an existing user if found"
-              />
-              <p className="text-xs text-muted-foreground">
-                If omitted, a placeholder author account is created for display only.
-              </p>
-            </div>
-
-            <PosterUploadField
-              id="avatar"
-              label="Avatar"
-              hint="Optional profile photo (square works best)."
-              previewSrc={avatarPreviewUrl}
-              onFileChange={handleAvatarChange}
-              onClear={() => {
-                resetAvatarState()
-                setFormData({ ...formData, image_url: "" })
-              }}
-              isLoading={isUploadingAvatar}
-            />
+            {selectedUser ? (
+              <>
+                {!editing ? (
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      value={selectedUser.email || ""}
+                      readOnly
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <Label>Avatar</Label>
+                  <div className="flex items-center gap-3">
+                    {selectedUser.image ? (
+                      <Image
+                        src={selectedUser.image}
+                        alt=""
+                        width={48}
+                        height={48}
+                        className="h-12 w-12 rounded-full object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                        {(selectedUser.name || "?")
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      From user profile (not editable here).
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="comment">Quote *</Label>
@@ -523,25 +588,25 @@ export default function TestimonialsAdminPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Campus scope</Label>
+              <Label>Location scope</Label>
               <Select
-                value={formData.franchise_id || "all"}
+                value={formData.campus_id || "all"}
                 onValueChange={(value) =>
                   setFormData({
                     ...formData,
-                    franchise_id: value === "all" ? "" : value,
+                    campus_id: value === "all" ? "" : value,
                   })
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All campuses" />
+                  <SelectValue placeholder="Network-wide" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All campuses (network-wide)</SelectItem>
-                  {franchises.map((franchise) => (
-                    <SelectItem key={franchise.id} value={franchise.id}>
-                      {franchise.name}
-                      {!franchise.is_active ? " (inactive)" : ""}
+                  <SelectItem value="all">Network-wide (all locations)</SelectItem>
+                  {campuses.map((campus) => (
+                    <SelectItem key={campus.id} value={campus.id}>
+                      {campusLabel(campus)}
+                      {!campus.is_active ? " (inactive)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -584,10 +649,8 @@ export default function TestimonialsAdminPage() {
             <Button variant="outline" onClick={closeDialog} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting || isUploadingAvatar}>
-              {(isSubmitting || isUploadingAvatar) && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editing ? "Save changes" : "Create testimonial"}
             </Button>
           </DialogFooter>
