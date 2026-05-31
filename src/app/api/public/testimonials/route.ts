@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = (error as { message: unknown }).message
+    if (typeof msg === "string") return msg
+  }
+  return String(error)
+}
+
 // GET /api/public/testimonials?franchise=code
 // 返回所有可用的 testimonials，如果指定了 franchise，则返回该 franchise 的 testimonials 和通用的（franchise_id 为 NULL）的
 export async function GET(request: Request) {
@@ -21,11 +30,6 @@ export async function GET(request: Request) {
           name,
           email,
           image
-        ),
-        franchise:franchises_v2(
-          id,
-          code,
-          name
         )
       `)
       .eq("is_active", true)
@@ -34,9 +38,13 @@ export async function GET(request: Request) {
 
     // 如果指定了 franchise code，获取该 franchise 的 ID
     if (franchiseCode) {
-      const { getFranchiseV2ByCode } = await import("@/lib/db-v2")
-      const franchiseV2 = await getFranchiseV2ByCode(franchiseCode.toLowerCase())
-      
+      const { data: franchiseV2 } = await supabaseAdmin
+        .from("v2_franchise")
+        .select("id")
+        .eq("code", franchiseCode.toLowerCase())
+        .eq("is_active", true)
+        .maybeSingle()
+
       if (franchiseV2) {
         // 获取该 franchise 的 testimonials 和通用的（franchise_id 为 NULL）的
         query = query.or(`franchise_id.eq.${franchiseV2.id},franchise_id.is.null`)
@@ -53,30 +61,57 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(toErrorMessage(error))
+    }
+
+    const rows = data || []
+    const franchiseIds = [
+      ...new Set(
+        rows
+          .map((row) => row.franchise_id as string | null)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ]
+    const franchiseById = new Map<string, { id: string; code: string; name: string }>()
+    if (franchiseIds.length > 0) {
+      const { data: franchises, error: franchiseError } = await supabaseAdmin
+        .from("v2_franchise")
+        .select("id, code, name")
+        .in("id", franchiseIds)
+      if (franchiseError) {
+        throw new Error(getErrorMessage(franchiseError))
+      }
+      for (const f of franchises || []) {
+        franchiseById.set(f.id, f)
+      }
     }
 
     // 格式化返回数据
-    const testimonials = (data || []).map((testimonial: any) => {
-      const user = Array.isArray(testimonial.user) ? testimonial.user[0] : testimonial.user
+    const testimonials = rows.map((testimonial) => {
+      const user = Array.isArray(testimonial.user)
+        ? testimonial.user[0]
+        : testimonial.user
+      const franchise = testimonial.franchise_id
+        ? franchiseById.get(testimonial.franchise_id as string)
+        : undefined
       return {
         id: testimonial.id,
         user_id: testimonial.user_id,
-        name: user?.name || 'Anonymous',
+        name: user?.name || "Anonymous",
         email: user?.email || null,
         image_url: user?.image || null,
         comment: testimonial.comment,
         franchise_id: testimonial.franchise_id || null,
-        franchise_code: testimonial.franchise?.code || null,
-        franchise_name: testimonial.franchise?.name || null,
+        franchise_code: franchise?.code || null,
+        franchise_name: franchise?.name || null,
       }
     })
 
     return NextResponse.json({ testimonials }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching testimonials:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch testimonials" },
+      { error: toErrorMessage(error) || "Failed to fetch testimonials" },
       { status: 500 }
     )
   }

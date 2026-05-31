@@ -3,6 +3,15 @@ import crypto from "crypto"
 import { getUserByEmail } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = (error as { message: unknown }).message
+    if (typeof msg === "string") return msg
+  }
+  return String(error)
+}
+
 export interface AdminTestimonial {
   id: string
   user_id: string
@@ -40,17 +49,59 @@ const TESTIMONIAL_SELECT = `
   is_active,
   created_at,
   updated_at,
-  user:users(id, name, email, image),
-  franchise:franchises_v2(id, code, name)
+  user:users(id, name, email, image)
 `
 
-function formatRow(row: Record<string, unknown>): AdminTestimonial {
+type V2FranchiseRef = { id: string; code: string; name: string }
+
+async function lookupV2FranchisesByIds(
+  franchiseIds: Array<string | null | undefined>
+): Promise<Map<string, V2FranchiseRef>> {
+  const unique = [...new Set(franchiseIds.filter((id): id is string => Boolean(id)))]
+  if (unique.length === 0) return new Map()
+
+  const { data, error } = await supabaseAdmin
+    .from("v2_franchise")
+    .select("id, code, name")
+    .in("id", unique)
+
+  if (error) {
+    throw new Error(toErrorMessage(error))
+  }
+
+  const map = new Map<string, V2FranchiseRef>()
+  for (const row of data || []) {
+    map.set(row.id, row)
+  }
+  return map
+}
+
+async function assertV2FranchiseId(franchiseId: string | null | undefined): Promise<void> {
+  if (!franchiseId) return
+
+  const { data, error } = await supabaseAdmin
+    .from("v2_franchise")
+    .select("id")
+    .eq("id", franchiseId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(toErrorMessage(error))
+  }
+  if (!data) {
+    throw new Error("Invalid franchise_id. Campus must exist in v2_franchise.")
+  }
+}
+
+function formatRow(
+  row: Record<string, unknown>,
+  franchiseById: Map<string, V2FranchiseRef>
+): AdminTestimonial {
   const user = Array.isArray(row.user)
     ? (row.user[0] as Record<string, unknown> | undefined)
     : (row.user as Record<string, unknown> | undefined)
-  const franchise = Array.isArray(row.franchise)
-    ? (row.franchise[0] as Record<string, unknown> | undefined)
-    : (row.franchise as Record<string, unknown> | undefined)
+  const franchiseId = (row.franchise_id as string | null) ?? null
+  const franchise = franchiseId ? franchiseById.get(franchiseId) : undefined
 
   return {
     id: row.id as string,
@@ -77,10 +128,14 @@ export async function listTestimonialsAdmin(): Promise<AdminTestimonial[]> {
     .order("created_at", { ascending: false })
 
   if (error) {
-    throw new Error(error.message)
+    throw new Error(toErrorMessage(error))
   }
 
-  return (data || []).map((row) => formatRow(row as Record<string, unknown>))
+  const rows = data || []
+  const franchiseById = await lookupV2FranchisesByIds(
+    rows.map((row) => row.franchise_id as string | null)
+  )
+  return rows.map((row) => formatRow(row as Record<string, unknown>, franchiseById))
 }
 
 export async function getTestimonialAdmin(id: string): Promise<AdminTestimonial | null> {
@@ -91,10 +146,13 @@ export async function getTestimonialAdmin(id: string): Promise<AdminTestimonial 
     .maybeSingle()
 
   if (error) {
-    throw new Error(error.message)
+    throw new Error(toErrorMessage(error))
   }
 
-  return data ? formatRow(data as Record<string, unknown>) : null
+  if (!data) return null
+
+  const franchiseById = await lookupV2FranchisesByIds([data.franchise_id as string | null])
+  return formatRow(data as Record<string, unknown>, franchiseById)
 }
 
 async function resolveTestimonialAuthor(params: TestimonialWriteInput): Promise<string> {
@@ -114,7 +172,7 @@ async function resolveTestimonialAuthor(params: TestimonialWriteInput): Promise<
       .eq("id", params.user_id)
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(toErrorMessage(error))
     }
 
     return params.user_id
@@ -153,7 +211,7 @@ async function resolveTestimonialAuthor(params: TestimonialWriteInput): Promise<
     .single()
 
   if (error) {
-    throw new Error(`Failed to create testimonial author: ${error.message}`)
+    throw new Error(`Failed to create testimonial author: ${toErrorMessage(error)}`)
   }
 
   return user.id as string
@@ -183,7 +241,7 @@ export async function createTestimonialAdmin(
     .single()
 
   if (error) {
-    throw new Error(error.message)
+    throw new Error(toErrorMessage(error))
   }
 
   const created = await getTestimonialAdmin(data.id as string)
@@ -212,6 +270,7 @@ export async function updateTestimonialAdmin(
     ...input,
     user_id: existing.user_id,
   })
+  await assertV2FranchiseId(input.franchise_id)
 
   const { error } = await supabaseAdmin
     .from("testimonials")
@@ -226,7 +285,7 @@ export async function updateTestimonialAdmin(
     .eq("id", id)
 
   if (error) {
-    throw new Error(error.message)
+    throw new Error(toErrorMessage(error))
   }
 
   const updated = await getTestimonialAdmin(id)
@@ -240,6 +299,6 @@ export async function updateTestimonialAdmin(
 export async function deleteTestimonialAdmin(id: string): Promise<void> {
   const { error } = await supabaseAdmin.from("testimonials").delete().eq("id", id)
   if (error) {
-    throw new Error(error.message)
+    throw new Error(toErrorMessage(error))
   }
 }
