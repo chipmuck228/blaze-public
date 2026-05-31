@@ -79,7 +79,7 @@ export async function GET(request: Request) {
         .select("id, code, name")
         .in("id", franchiseIds)
       if (franchiseError) {
-        throw new Error(getErrorMessage(franchiseError))
+        throw new Error(toErrorMessage(franchiseError))
       }
       for (const f of franchises || []) {
         franchiseById.set(f.id, f)
