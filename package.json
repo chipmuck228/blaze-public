@@ -101,9 +101,5 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.21.0",
     "typescript": "^5"
-  },
-  "overrides": {
-    "baseline-browser-mapping": "$baseline-browser-mapping",
-    "caniuse-lite": "$caniuse-lite"
   }
 }
