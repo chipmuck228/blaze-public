@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from '@/auth'
 import { stripe } from '@/lib/stripe'
 import { 
@@ -8,6 +9,13 @@ import {
   confirmInstanceEnrollment
 } from '@/lib/db'
 import { supabaseAdmin } from '@/lib/supabase'
+
+type CheckoutEnrollment = {
+  id: string
+  payment_status?: string
+  payer_user_id?: string
+  user_id?: string
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -42,12 +50,13 @@ export async function GET(req: NextRequest) {
     }
 
     // 优先使用 instance_enrollments
-    let enrollment = await getInstanceEnrollmentByStripeSessionId(sessionId)
+    let enrollment: CheckoutEnrollment | null =
+      (await getInstanceEnrollmentByStripeSessionId(sessionId)) as CheckoutEnrollment | null
     let isInstanceEnrollment = true
     
     if (!enrollment) {
       // 回退到旧的 course_enrollments 表
-      enrollment = await getEnrollmentByStripeSessionId(sessionId)
+      enrollment = (await getEnrollmentByStripeSessionId(sessionId)) as CheckoutEnrollment | null
       isInstanceEnrollment = false
     }
 
@@ -66,7 +75,7 @@ export async function GET(req: NextRequest) {
           if (isInstanceEnrollment) {
             await confirmInstanceEnrollment(
               enrollment.id,
-              enrollment.payer_user_id,
+              enrollment.payer_user_id!,
               paymentIntentId,
               (checkoutSession.amount_total || 0) / 100,
               paymentIntentId
@@ -74,13 +83,13 @@ export async function GET(req: NextRequest) {
           } else {
             await confirmEnrollment(
               enrollment.id,
-              enrollment.user_id,
+              enrollment.user_id!,
               paymentIntentId,
               (checkoutSession.amount_total || 0) / 100,
               paymentIntentId
             )
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Error confirming enrollment:', error)
           // 继续返回，即使更新失败（Webhook 可能会处理）
         }
@@ -141,10 +150,10 @@ export async function GET(req: NextRequest) {
       payment_status: checkoutSession.payment_status,
       enrollments: enrollments.filter(Boolean),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error verifying payment:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to verify payment' },
+      { error: getErrorMessage(error) || 'Failed to verify payment' },
       { status: 500 }
     )
   }
