@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getErrorMessage } from "@/lib/typed-error"
 import { stripe, verifyWebhookSignature } from '@/lib/stripe'
 import { 
   getEnrollmentByStripeSessionId,
@@ -14,6 +15,14 @@ import {
 } from '@/lib/db'
 import { supabaseAdmin } from '@/lib/supabase'
 import Stripe from 'stripe'
+
+type WebhookEnrollment = {
+  id: string
+  payment_status?: string
+  status?: string
+  payer_user_id?: string
+  user_id?: string
+}
 
 // 使用 Node.js runtime（Webhook 需要处理原始 body）
 export const runtime = 'nodejs'
@@ -46,10 +55,10 @@ export async function POST(req: NextRequest) {
   try {
     // 验证 Webhook 签名
     event = verifyWebhookSignature(body, signature, webhookSecret)
-  } catch (error: any) {
-    console.error('Webhook signature verification failed:', error.message)
+  } catch (error: unknown) {
+    console.error('Webhook signature verification failed:', getErrorMessage(error))
     return NextResponse.json(
-      { error: `Webhook signature verification failed: ${error.message}` },
+      { error: `Webhook signature verification failed: ${getErrorMessage(error)}` },
       { status: 400 }
     )
   }
@@ -67,7 +76,9 @@ export async function POST(req: NextRequest) {
 
         if (enrollmentIds.length === 0) {
           // 如果没有 metadata，尝试通过 session ID 查找单个注册（优先使用 instance_enrollments）
-          let enrollment = await getInstanceEnrollmentByStripeSessionId(session.id)
+          const enrollment = (await getInstanceEnrollmentByStripeSessionId(
+            session.id
+          )) as WebhookEnrollment | null
           if (enrollment) {
             enrollmentIds.push(enrollment.id)
           } else {
@@ -102,8 +113,14 @@ export async function POST(req: NextRequest) {
           for (const enrollmentId of enrollmentIds) {
             try {
               // 先尝试使用 instance_enrollments
-              const instanceEnrollment = await getInstanceEnrollmentById(enrollmentId)
-              if (instanceEnrollment && instanceEnrollment.payment_status !== 'paid') {
+              const instanceEnrollment = (await getInstanceEnrollmentById(
+                enrollmentId
+              )) as WebhookEnrollment | null
+              if (
+                instanceEnrollment &&
+                instanceEnrollment.payment_status !== 'paid' &&
+                instanceEnrollment.payer_user_id
+              ) {
                 await confirmInstanceEnrollment(
                   instanceEnrollment.id,
                   instanceEnrollment.payer_user_id,
@@ -127,7 +144,7 @@ export async function POST(req: NextRequest) {
                 )
                 console.log(`Enrollment ${enrollment.id} confirmed via checkout.session.completed`)
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error(`Failed to confirm enrollment ${enrollmentId}:`, error)
             }
           }
@@ -139,11 +156,15 @@ export async function POST(req: NextRequest) {
         const paymentIntent = event.data.object as Stripe.PaymentIntent
         
         // 优先使用 instance_enrollments
-        let enrollment = await getInstanceEnrollmentByStripePaymentIntentId(paymentIntent.id)
+        let enrollment: WebhookEnrollment | null = (await getInstanceEnrollmentByStripePaymentIntentId(
+          paymentIntent.id
+        )) as WebhookEnrollment | null
         
         if (!enrollment) {
           // 回退到旧的 course_enrollments 表
-          enrollment = await getEnrollmentByStripePaymentIntentId(paymentIntent.id)
+          enrollment = (await getEnrollmentByStripePaymentIntentId(
+            paymentIntent.id
+          )) as WebhookEnrollment | null
         }
         
         if (!enrollment) {
@@ -155,11 +176,11 @@ export async function POST(req: NextRequest) {
               // 处理多个注册（如果支持批量支付）
               for (const id of ids) {
                 // 先尝试 instance_enrollments
-                const instanceEnrollment = await getInstanceEnrollmentById(id)
+                const instanceEnrollment = (await getInstanceEnrollmentById(id)) as WebhookEnrollment | null
                 if (instanceEnrollment && instanceEnrollment.status === 'reserved' && instanceEnrollment.payment_status !== 'paid') {
                   await confirmInstanceEnrollment(
                     instanceEnrollment.id,
-                    instanceEnrollment.payer_user_id,
+                    instanceEnrollment.payer_user_id!,
                     paymentIntent.id,
                     paymentIntent.amount / 100 / ids.length,
                     paymentIntent.id
@@ -198,7 +219,7 @@ export async function POST(req: NextRequest) {
         if (isInstanceEnrollment) {
           await confirmInstanceEnrollment(
             enrollment.id,
-            enrollment.payer_user_id,
+            enrollment.payer_user_id!,
             paymentIntent.id,
             paymentIntent.amount / 100,
             paymentIntent.id
@@ -206,7 +227,7 @@ export async function POST(req: NextRequest) {
         } else {
           await confirmEnrollment(
             enrollment.id,
-            enrollment.user_id,
+            enrollment.user_id!,
             paymentIntent.id,
             paymentIntent.amount / 100,
             paymentIntent.id
@@ -239,12 +260,16 @@ export async function POST(req: NextRequest) {
         const paymentIntentId = charge.payment_intent as string
         if (paymentIntentId) {
           // 优先使用 instance_enrollments
-          let enrollment = await getInstanceEnrollmentByStripePaymentIntentId(paymentIntentId)
+          let enrollment: WebhookEnrollment | null = (await getInstanceEnrollmentByStripePaymentIntentId(
+            paymentIntentId
+          )) as WebhookEnrollment | null
           let isInstanceEnrollment = true
           
           if (!enrollment) {
             // 回退到旧的 course_enrollments 表
-            enrollment = await getEnrollmentByStripePaymentIntentId(paymentIntentId)
+            enrollment = (await getEnrollmentByStripePaymentIntentId(
+              paymentIntentId
+            )) as WebhookEnrollment | null
             isInstanceEnrollment = false
           }
           
@@ -304,8 +329,8 @@ export async function POST(req: NextRequest) {
           .insert({
             stripe_event_id: event.id,
             event_type: event.type,
-            stripe_object_id: (event.data.object as any).id,
-            payload: event.data.object as any,
+            stripe_object_id: (event.data.object as Stripe.Event.Data.Object & { id?: string }).id,
+            payload: event.data.object as Stripe.Event.Data.Object,
             processed: true,
             processed_at: new Date().toISOString(),
           })
@@ -318,10 +343,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ received: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error processing webhook:', error)
     return NextResponse.json(
-      { error: `Webhook processing failed: ${error.message}` },
+      { error: `Webhook processing failed: ${getErrorMessage(error)}` },
       { status: 500 }
     )
   }
