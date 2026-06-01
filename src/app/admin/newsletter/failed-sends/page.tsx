@@ -133,7 +133,7 @@ function FailedSendsPageContent() {
         if (!response.ok) throw new Error("Failed to fetch campaigns")
         const data = await response.json()
         setCampaigns(data.campaigns || [])
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Error fetching campaigns:", error)
       }
     }
@@ -178,7 +178,7 @@ function FailedSendsPageContent() {
       setFailedSends(data.failed_sends || [])
       setTotal(data.total || 0)
       setTotalPages(data.totalPages || 0)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching failed sends:", error)
       adminToast.error("Failed to load failed sends")
     } finally {
@@ -212,7 +212,7 @@ function FailedSendsPageContent() {
       if (!response.ok) throw new Error("Failed to fetch stats")
       const data = await response.json()
       setStats(data)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching stats:", error)
       adminToast.error("Failed to load statistics")
     } finally {
@@ -328,9 +328,9 @@ function FailedSendsPageContent() {
       }
 
       setSelectedIds(new Set())
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating retry task:", error)
-      adminToast.error(error.message || "Failed to create retry task")
+      adminToast.error(getErrorMessage(error) || "Failed to create retry task")
     } finally {
       setIsRetrying(false)
     }

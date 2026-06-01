@@ -17,4 +17,5 @@ export const LEGACY_ADMIN_REDIRECTS = {
   courses: "/admin/guide",
   subcategories: "/admin/guide",
   "offerings-assignments": "/admin/guide",
+  "learning-paths": "/admin/guide",
 } as const

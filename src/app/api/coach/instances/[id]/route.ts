@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getCoachInstanceById } from "@/lib/db"
 
@@ -27,10 +28,10 @@ export async function GET(
     }
 
     return NextResponse.json(instance)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching coach instance:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch coach instance" },
+      { error: getErrorMessage(error) || "Failed to fetch coach instance" },
       { status: 500 }
     )
   }

@@ -3,6 +3,17 @@
  * 用于检测用户是否在移动浏览器中访问网站
  */
 
+interface LegacyNavigatorWindow extends Window {
+  opera?: string
+  MSStream?: unknown
+}
+
+function getNavigatorUserAgent(): string {
+  if (typeof window === "undefined") return ""
+  const w = window as LegacyNavigatorWindow
+  return navigator.userAgent || navigator.vendor || w.opera || ""
+}
+
 /**
  * 检测是否为移动浏览器
  * @returns {boolean} 是否为移动浏览器
@@ -10,7 +21,7 @@
 export function isMobileBrowser(): boolean {
   if (typeof window === 'undefined') return false;
   
-  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  const userAgent = getNavigatorUserAgent();
   const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
   const isSmallScreen = window.innerWidth <= 768;
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -38,8 +49,9 @@ export function getMobileBreakpoint(): 'mobile' | 'tablet' | 'desktop' {
 export function isIOS(): boolean {
   if (typeof window === 'undefined') return false;
   
-  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-  return /iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream;
+  const userAgent = getNavigatorUserAgent();
+  const w = window as LegacyNavigatorWindow
+  return /iPad|iPhone|iPod/.test(userAgent) && !w.MSStream;
 }
 
 /**
@@ -49,7 +61,7 @@ export function isIOS(): boolean {
 export function isAndroid(): boolean {
   if (typeof window === 'undefined') return false;
   
-  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  const userAgent = getNavigatorUserAgent();
   return /Android/.test(userAgent);
 }
 

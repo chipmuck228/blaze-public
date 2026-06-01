@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { 
@@ -182,7 +183,7 @@ function useLazySection<T>(url: string) {
       setData(json)
     } catch (err) {
       console.error(`Error fetching ${url}:`, err)
-      setError(err instanceof Error ? err.message : "Failed to load")
+      setError(err instanceof Error ? getErrorMessage(err) : "Failed to load")
     } finally {
       setLoading(false)
     }
@@ -723,7 +724,7 @@ export default function AdminDashboardPage() {
                         <div className="inline-flex items-center gap-1 text-xs">
                           <TrendingUp className="h-3 w-3 text-green-600" />
                           <span className="text-green-600 font-medium">
-                            +{Math.floor(Math.random() * 15 + 5)}%
+                            +12%
                           </span>
                         </div>
                       </div>

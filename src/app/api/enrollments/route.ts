@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getUserEnrollments } from "@/lib/db"
 
@@ -23,10 +24,10 @@ export async function GET(request: Request) {
       enrollments,
       total: enrollments.length,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching enrollments:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch enrollments" },
+      { error: getErrorMessage(error) || "Failed to fetch enrollments" },
       { status: 500 }
     )
   }

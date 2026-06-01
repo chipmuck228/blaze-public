@@ -1,5 +1,6 @@
 "use client"
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,9 +37,9 @@ function UnsubscribeContent() {
           setStatus("error")
           setError(data.error || "Failed to unsubscribe")
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         setStatus("error")
-        setError(err.message || "An error occurred while processing your request")
+        setError(getErrorMessage(err) || "An error occurred while processing your request")
       }
     }
 

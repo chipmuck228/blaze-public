@@ -1,7 +1,7 @@
 /**
  * 2026 VEX Worlds achievements — home page celebration block.
  *
- * Background: public/marketing/worlds-2026/awards-background.jpeg (or .jpg)
+ * Background: public/marketing/worlds-2026/awards-background.jpeg
  * Gallery: champion.webp, awards-1.webp, awards-2.webp
  */
 
@@ -21,10 +21,6 @@ export type WorldsAchievementImage = {
 
 export const WORLDS_ACHIEVEMENTS_BACKGROUND =
   "/marketing/worlds-2026/awards-background.jpeg"
-
-/** Fallback if only .jpg is present in public folder */
-export const WORLDS_ACHIEVEMENTS_BACKGROUND_JPG =
-  "/marketing/worlds-2026/awards-background.jpg"
 
 export const WORLDS_ACHIEVEMENTS_2026 = {
   badge: "Congratulations to Our High School Team 10B",
@@ -85,7 +81,7 @@ export const WORLDS_ACHIEVEMENTS_2026 = {
   },
   cta: {
     label: "Explore Competition Teams",
-    href: "/competition",
+    href: "/journey/compete",
   },
   images: [
     {

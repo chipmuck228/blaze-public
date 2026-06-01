@@ -153,7 +153,7 @@ export function CreateUserDialog({
       }
 
       setIsLoading(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError("Failed to create user. Please try again.")
       setIsLoading(false)
     }

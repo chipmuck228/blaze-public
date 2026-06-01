@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -201,10 +202,10 @@ export async function POST(
       success: true,
       message: 'Invoice sent successfully' 
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error sending invoice email:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to send invoice email" },
+      { error: getErrorMessage(error) || "Failed to send invoice email" },
       { status: 500 }
     )
   }

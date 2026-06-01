@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -67,12 +68,12 @@ export async function GET(request: Request) {
             error: errorData.error,
           })
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(`Error processing task ${task.id}:`, error)
         results.push({
           task_id: task.id,
           status: "error",
-          error: error.message,
+          error: getErrorMessage(error),
         })
       }
     }
@@ -83,11 +84,11 @@ export async function GET(request: Request) {
       results,
       timestamp: new Date().toISOString(),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing retry tasks:", error)
     return NextResponse.json(
       {
-        error: error.message || "Failed to process retry tasks",
+        error: getErrorMessage(error) || "Failed to process retry tasks",
         timestamp: new Date().toISOString(),
       },
       { status: 500 }

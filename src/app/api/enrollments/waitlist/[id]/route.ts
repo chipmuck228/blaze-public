@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { removeFromInstanceWaitlist } from "@/lib/db"
 
@@ -26,12 +27,12 @@ export async function DELETE(
       return NextResponse.json({
         message: "Removed from waitlist successfully",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 如果是权限错误，返回特殊错误码
-      if (error.message.includes('Unauthorized')) {
+      if (getErrorMessage(error).includes('Unauthorized')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "UNAUTHORIZED",
           },
           { status: 403 }
@@ -39,10 +40,10 @@ export async function DELETE(
       }
 
       // 如果是状态错误，返回特殊错误码
-      if (error.message.includes('not in waitlisted status')) {
+      if (getErrorMessage(error).includes('not in waitlisted status')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "INVALID_STATUS",
           },
           { status: 400 }
@@ -51,10 +52,10 @@ export async function DELETE(
 
       throw error
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error removing from waitlist:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to remove from waitlist" },
+      { error: getErrorMessage(error) || "Failed to remove from waitlist" },
       { status: 500 }
     )
   }

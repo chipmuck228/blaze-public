@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
-import { getInstanceAvailableCapacity, getFranchiseByCode } from "@/lib/db"
+import { getInstanceAvailableCapacity, getFranchiseByCode, type Franchise } from "@/lib/db"
 
 // GET: 获取offering的所有可用实例（公开 API，只返回已发布offerings的实例）
 export async function GET(
@@ -63,9 +64,9 @@ export async function GET(
       .order('start_time', { ascending: true })
 
     // 如果指定了franchise，获取franchise信息（包括legacy_id映射）
-    let franchise: any = null
-    let franchiseIds: string[] = []
-    let legacyToNewMap: Map<string, string> = new Map()
+    let franchise: Franchise | null = null
+    const franchiseIds: string[] = []
+    const legacyToNewMap: Map<string, string> = new Map()
     
     if (franchiseCode) {
       franchise = await getFranchiseByCode(franchiseCode)
@@ -99,7 +100,7 @@ export async function GET(
         }
       } catch (error) {
         // 如果获取失败，继续使用franchise.id
-        console.warn(`[Offerings Instances API] Could not get franchise V2 for ${franchise.id}:`, error)
+        console.warn(`[v2_franchise] Could not get franchise for ${franchise.id}:`, error)
       }
       
       // 构建查询条件：匹配franchise_id或为null
@@ -117,7 +118,7 @@ export async function GET(
 
     // 如果指定了franchise，进一步过滤（从series.franchise_id）
     if (franchiseCode && franchise && franchiseIds.length > 0) {
-      instances = instances.filter((instance: any) => {
+      instances = instances.filter((instance) => {
         // 如果instance有franchise_id，必须匹配（包括legacy_id）
         if (instance.franchise_id && franchiseIds.includes(instance.franchise_id)) {
           return true
@@ -149,7 +150,7 @@ export async function GET(
     // 批量获取所有相关的 campuses
     const locationIds = new Set<string>()
     const franchiseIdsForCampuses = new Set<string>()
-    instances.forEach((inst: any) => {
+    instances.forEach((inst) => {
       if (inst.location_id) {
         locationIds.add(inst.location_id)
       }
@@ -174,7 +175,7 @@ export async function GET(
         .eq('is_active', true)
 
       if (!campusesError && campusesData) {
-        campusesData.forEach((campus: any) => {
+        campusesData.forEach((campus) => {
           campusesMap.set(campus.id, campus)
         })
         console.log(`[Offerings Instances API] Loaded ${campusesData.length} campuses by location_id`)
@@ -195,7 +196,7 @@ export async function GET(
 
       if (!franchiseCampusesError && franchiseCampusesData) {
         // 为每个 franchise 存储第一个 campus
-        franchiseCampusesData.forEach((campus: any) => {
+        franchiseCampusesData.forEach((campus) => {
           if (!franchiseCampusesMap.has(campus.franchise_id)) {
             franchiseCampusesMap.set(campus.franchise_id, campus)
           }
@@ -207,13 +208,13 @@ export async function GET(
     // 获取每个实例的可用容量和折扣信息
     // 对于instance_v2表，直接使用表中的max_students和current_students字段
     // instance_v2表已经包含了容量信息，不需要查询course_enrollments表或考虑旧表映射
-    const instancesWithCapacity = instances.map((instance: any) => {
+    const instancesWithCapacity = instances.map((instance) => {
       const maxStudents = instance.max_students ?? 0
       const currentStudents = instance.current_students ?? 0
       const availableCapacity = Math.max(0, maxStudents - currentStudents)
       
       // 获取 location (campus) 信息
-      let location: any = null
+      let location: Record<string, unknown> | null = null
       if (instance.location_id) {
         // 优先使用 location_id 匹配的 campus
         location = campusesMap.get(instance.location_id)
@@ -281,10 +282,10 @@ export async function GET(
     }
 
     return NextResponse.json(futureInstances)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching offering instances:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch offering instances" },
+      { error: getErrorMessage(error) || "Failed to fetch offering instances" },
       { status: 500 }
     )
   }

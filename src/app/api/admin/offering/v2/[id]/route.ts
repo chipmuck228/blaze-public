@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import type { SchemaFieldConfig } from "@/lib/instance-schema"
 
 /** Flatten nested type_config_data for v2_offering table columns. */
 function flattenTypeConfigDataForTable(config: Record<string, unknown> | null | undefined): {
@@ -60,16 +62,16 @@ export async function GET(
         return NextResponse.json({ error: "Offering not found" }, { status: 404 })
       }
       return NextResponse.json(
-        { error: error.message || "Failed to fetch offering" },
+        { error: getErrorMessage(error) || "Failed to fetch offering" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching offering:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch offering" },
+      { error: getErrorMessage(error) || "Failed to fetch offering" },
       { status: 500 }
     )
   }
@@ -200,12 +202,11 @@ export async function PUT(
 
     // 如果提供了 configData，进行基础验证
     if (configData !== undefined && offeringType.offering_schema && typeof offeringType.offering_schema === 'object') {
-      const schema = offeringType.offering_schema as any
-      if (schema.fields && typeof schema.fields === 'object') {
-        const fields = schema.fields as Record<string, any>
+      const schema = offeringType.offering_schema as { fields?: Record<string, SchemaFieldConfig> }
+      if (schema.fields && typeof schema.fields === "object") {
         const missingRequiredFields: string[] = []
         
-        for (const [fieldName, fieldConfig] of Object.entries(fields)) {
+        for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
           if (fieldConfig.required && (configData[fieldName] === undefined || configData[fieldName] === null || configData[fieldName] === '')) {
             missingRequiredFields.push(fieldConfig.label || fieldName)
           }
@@ -256,7 +257,7 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {}
+    const updateData: StringKeyRecord = {}
     if (name !== undefined) updateData.name = name
     if (slug !== undefined) updateData.slug = slug ? String(slug).trim().toLowerCase() : null
     if (description !== undefined) updateData.description = description || null
@@ -312,7 +313,7 @@ export async function PUT(
       }
       
       return NextResponse.json(
-        { error: error.message || "Failed to update offering" },
+        { error: getErrorMessage(error) || "Failed to update offering" },
         { status: 500 }
       )
     }
@@ -351,10 +352,10 @@ export async function PUT(
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating offering:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update offering" },
+      { error: getErrorMessage(error) || "Failed to update offering" },
       { status: 500 }
     )
   }
@@ -417,16 +418,16 @@ export async function DELETE(
     if (error) {
       console.error("Error deleting offering:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to delete offering" },
+        { error: getErrorMessage(error) || "Failed to delete offering" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ message: "Offering deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting offering:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete offering" },
+      { error: getErrorMessage(error) || "Failed to delete offering" },
       { status: 500 }
     )
   }

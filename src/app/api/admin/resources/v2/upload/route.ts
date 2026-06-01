@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { put, del } from "@vercel/blob"
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Error uploading resource document:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to upload" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to upload" },
       { status: 500 }
     )
   }
@@ -79,7 +80,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: "Deleted successfully" }, { status: 200 })
   } catch (error: unknown) {
     console.error("Error deleting resource document:", error)
-    const msg = error instanceof Error ? error.message : ""
+    const msg = error instanceof Error ? getErrorMessage(error) : ""
     if (msg.includes("not found") || msg.includes("404")) {
       return NextResponse.json({ message: "Already deleted or not found" }, { status: 200 })
     }

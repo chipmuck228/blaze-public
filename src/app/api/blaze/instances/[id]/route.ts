@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -68,14 +69,14 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: "Instance not found" }, { status: 404 })
       }
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching instance:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch instance" },
+      { error: getErrorMessage(error) || "Failed to fetch instance" },
       { status: 500 }
     )
   }
@@ -169,7 +170,7 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {
+    const updateData: StringKeyRecord = {
       updated_at: new Date().toISOString(),
     }
 
@@ -302,16 +303,16 @@ export async function PUT(
       }
       console.error("Error updating instance:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to update instance" },
+        { error: getErrorMessage(error) || "Failed to update instance" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating instance:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update instance" },
+      { error: getErrorMessage(error) || "Failed to update instance" },
       { status: 500 }
     )
   }
@@ -372,16 +373,16 @@ export async function DELETE(
       }
       console.error("Error deleting instance:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to delete instance" },
+        { error: getErrorMessage(error) || "Failed to delete instance" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ message: "Instance deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting instance:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete instance" },
+      { error: getErrorMessage(error) || "Failed to delete instance" },
       { status: 500 }
     )
   }

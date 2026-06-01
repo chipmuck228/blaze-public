@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import type { SchemaFieldConfig } from "@/lib/instance-schema"
 
 /** Resolve v2_program ids for franchise/category filters (avoid PostgREST embed filters that null out program). */
 async function resolveProgramIdsForFilter(opts: {
@@ -113,16 +115,16 @@ export async function GET(request: Request) {
     if (error) {
       console.error("Error fetching instances v2:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch instances" },
+        { error: getErrorMessage(error) || "Failed to fetch instances" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data || [], { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching instances v2:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch instances" },
+      { error: getErrorMessage(error) || "Failed to fetch instances" },
       { status: 500 }
     )
   }
@@ -193,10 +195,12 @@ export async function POST(request: Request) {
     }
 
     // 获取 category 的 config_base 作为默认配置
-    let categoryConfigBase: Record<string, any> = {}
-    const programData = program as any
-    if (programData.category && typeof programData.category === 'object' && !Array.isArray(programData.category)) {
-      const category = programData.category as { config_base?: Record<string, any> }
+    let categoryConfigBase: Record<string, unknown> = {}
+    const programData = program as {
+      category?: { config_base?: Record<string, unknown> } | { config_base?: Record<string, unknown> }[]
+    }
+    if (programData.category && typeof programData.category === "object" && !Array.isArray(programData.category)) {
+      const category = programData.category
       if (category.config_base && typeof category.config_base === 'object') {
         categoryConfigBase = category.config_base
       }
@@ -244,8 +248,12 @@ export async function POST(request: Request) {
       )
     }
 
-    const schemaSource = Array.isArray(offering.offering_type) ? offering.offering_type[0] : offering.offering_type
-    const instanceSchemaFields = (schemaSource as any)?.instance_schema?.fields
+    const schemaSource = Array.isArray(offering.offering_type)
+      ? offering.offering_type[0]
+      : offering.offering_type
+    const instanceSchemaFields = (
+      schemaSource as { instance_schema?: { fields?: Record<string, SchemaFieldConfig> } } | null
+    )?.instance_schema?.fields
 
     // 4. 合并到 instance_data_ext（请求平铺字段 + instance_data_ext，后者覆盖）
     const flatFieldsForExt: Record<string, unknown> = {}
@@ -261,7 +269,7 @@ export async function POST(request: Request) {
       ...categoryConfigBase,
       ...flatFieldsForExt,
       ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
-    } as Record<string, any>
+    } as Record<string, unknown>
 
     // 4.1 从 instance_data_ext 的 object 组（schedule, capacity_price）推导行级字段，用于写入 v2_instance 表
     let finalStartDate = start_date
@@ -272,17 +280,17 @@ export async function POST(request: Request) {
     let finalMaxStudents = max_students
     let finalPriceOverride = price_override
     if (mergedInstanceDataExt.schedule && typeof mergedInstanceDataExt.schedule === "object") {
-      const s = mergedInstanceDataExt.schedule
-      if (finalStartDate === undefined) finalStartDate = s.start_date
-      if (finalEndDate === undefined) finalEndDate = s.end_date
-      if (finalStartTime === undefined) finalStartTime = s.start_time
-      if (finalEndTime === undefined) finalEndTime = s.end_time
-      if (finalDaysOfWeek === undefined) finalDaysOfWeek = s.days_of_week
+      const s = mergedInstanceDataExt.schedule as Record<string, unknown>
+      if (finalStartDate === undefined && typeof s.start_date === "string") finalStartDate = s.start_date
+      if (finalEndDate === undefined && typeof s.end_date === "string") finalEndDate = s.end_date
+      if (finalStartTime === undefined && typeof s.start_time === "string") finalStartTime = s.start_time
+      if (finalEndTime === undefined && typeof s.end_time === "string") finalEndTime = s.end_time
+      if (finalDaysOfWeek === undefined && Array.isArray(s.days_of_week)) finalDaysOfWeek = s.days_of_week
     }
     if (mergedInstanceDataExt.capacity_price && typeof mergedInstanceDataExt.capacity_price === "object") {
-      const c = mergedInstanceDataExt.capacity_price
-      if (finalMaxStudents === undefined) finalMaxStudents = c.max_students
-      if (finalPriceOverride === undefined) finalPriceOverride = c.price_override
+      const c = mergedInstanceDataExt.capacity_price as Record<string, unknown>
+      if (finalMaxStudents === undefined && typeof c.max_students === "number") finalMaxStudents = c.max_students
+      if (finalPriceOverride === undefined && typeof c.price_override === "number") finalPriceOverride = c.price_override
     }
 
     // 3.1 按 instance_schema 校验 start_date / end_date 必填（含 object schedule 内 required）
@@ -290,8 +298,13 @@ export async function POST(request: Request) {
       const scheduleObj = instanceSchemaFields.schedule?.type === "object" ? instanceSchemaFields.schedule : null
       const startRequired = instanceSchemaFields.start_date?.required || scheduleObj?.properties?.start_date?.required
       const endRequired = instanceSchemaFields.end_date?.required || scheduleObj?.properties?.end_date?.required
-      const startVal = finalStartDate ?? mergedInstanceDataExt.schedule?.start_date
-      const endVal = finalEndDate ?? mergedInstanceDataExt.schedule?.end_date
+      const scheduleForRequired = mergedInstanceDataExt.schedule as Record<string, unknown> | undefined
+      const startVal =
+        finalStartDate ??
+        (typeof scheduleForRequired?.start_date === "string" ? scheduleForRequired.start_date : undefined)
+      const endVal =
+        finalEndDate ??
+        (typeof scheduleForRequired?.end_date === "string" ? scheduleForRequired.end_date : undefined)
       if (startRequired && (startVal === undefined || startVal === null || startVal === "")) {
         return NextResponse.json(
           { error: (scheduleObj?.properties?.start_date?.label || instanceSchemaFields.start_date?.label || "Start date") + " is required" },
@@ -314,10 +327,10 @@ export async function POST(request: Request) {
 
     // 5. 验证 instance_data_ext 是否符合 instance_schema（含 type=object 的嵌套校验）
     if (schemaSource?.instance_schema && typeof schemaSource.instance_schema === "object") {
-      const schema = schemaSource.instance_schema as { fields?: Record<string, any> }
+      const schema = schemaSource.instance_schema as { fields?: Record<string, SchemaFieldConfig> }
       if (schema.fields) {
         const errors: string[] = []
-        const validateField = (val: any, fieldConfig: any, fieldLabel: string) => {
+        const validateField = (val: unknown, fieldConfig: SchemaFieldConfig, fieldLabel: string) => {
           if (fieldConfig.required && (val === undefined || val === null || val === "")) {
             errors.push(`${fieldLabel} is required`)
             return
@@ -336,8 +349,10 @@ export async function POST(request: Request) {
           }
           if (fieldConfig.type === "multiselect" && fieldConfig.options) {
             const values = Array.isArray(val) ? val : [val]
-            const optSet = new Set(fieldConfig.options.map((o: any) => String(o)))
-            const invalid = values.filter((v: any) => !optSet.has(String(v)))
+            const optSet = new Set(
+              (fieldConfig.options as unknown[]).map((o) => String(o))
+            )
+            const invalid = values.filter((v) => !optSet.has(String(v)))
             if (invalid.length > 0) errors.push(`${fieldLabel} contains invalid values: ${invalid.join(", ")}`)
           }
         }
@@ -350,8 +365,9 @@ export async function POST(request: Request) {
               continue
             }
             if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-              for (const [propKey, propConfig] of Object.entries(fieldConfig.properties as Record<string, any>)) {
-                validateField(obj[propKey], propConfig, propConfig?.label || propKey)
+              const objRecord = obj as Record<string, unknown>
+              for (const [propKey, propConfig] of Object.entries(fieldConfig.properties ?? {})) {
+                validateField(objRecord[propKey], propConfig, propConfig.label || propKey)
               }
             }
           } else {
@@ -407,13 +423,23 @@ export async function POST(request: Request) {
       }
     }
 
+    type OfferingPortalConfig = {
+      type_config_data?: {
+        portal_config?: { is_course_type?: boolean }
+        portal_service_role?: string
+      }
+      offering_type?: { portal_service_role?: string } | Array<{ portal_service_role?: string }>
+    }
+    const offeringPortal = offering as OfferingPortalConfig
     // 7.1 is_course_type：从 v2_offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
-    const isCourseType = !!(offering as any)?.type_config_data?.portal_config?.is_course_type
+    const isCourseType = !!offeringPortal.type_config_data?.portal_config?.is_course_type
     // 7.2 portal_service_role：从 type_config_data 平铺，缺省时用 v2_offering_type.portal_service_role（设计文档 INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3）
-    const rawRole = (offering as any)?.type_config_data?.portal_service_role
+    const rawRole = offeringPortal.type_config_data?.portal_service_role
     const typeRole = (() => {
-      const ot = Array.isArray((offering as any)?.offering_type) ? (offering as any).offering_type[0] : (offering as any)?.offering_type
-      return (ot as any)?.portal_service_role
+      const ot = Array.isArray(offeringPortal.offering_type)
+        ? offeringPortal.offering_type[0]
+        : offeringPortal.offering_type
+      return ot?.portal_service_role
     })()
     const portalServiceRole =
       rawRole === "meal_service" || rawRole === "care_service"
@@ -481,10 +507,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(instance, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating instance v2:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create instance" },
+      { error: getErrorMessage(error) || "Failed to create instance" },
       { status: 500 }
     )
   }

@@ -213,7 +213,7 @@ export default function NewsletterTemplatesPage() {
     } catch (error: unknown) {
       console.error("Error saving template:", error)
       adminToast.error(
-        error instanceof Error ? error.message : "Failed to save template"
+        error instanceof Error ? getErrorMessage(error) : "Failed to save template"
       )
     } finally {
       setIsSubmitting(false)

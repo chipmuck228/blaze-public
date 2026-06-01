@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import {
@@ -36,10 +37,10 @@ export async function GET(
       { ...data, ...enriched },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching template:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch template" },
+      { error: getErrorMessage(error) || "Failed to fetch template" },
       { status: 500 }
     )
   }
@@ -86,7 +87,7 @@ export async function PUT(
           editor,
         })
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Invalid template body"
+        const message = err instanceof Error ? getErrorMessage(err) : "Invalid template body"
         return NextResponse.json({ error: message }, { status: 400 })
       }
     }
@@ -105,10 +106,10 @@ export async function PUT(
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating template:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update template" },
+      { error: getErrorMessage(error) || "Failed to update template" },
       { status: 500 }
     )
   }
@@ -134,7 +135,7 @@ export async function DELETE(
     )
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to delete template"
+      error instanceof Error ? getErrorMessage(error) : "Failed to delete template"
     console.error("Error deleting template:", error)
     return NextResponse.json({ error: message }, { status: 500 })
   }

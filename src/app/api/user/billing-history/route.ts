@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -66,11 +67,11 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      throw new Error(`Failed to fetch billing history: ${error.message}`)
+      throw new Error(`Failed to fetch billing history: ${getErrorMessage(error)}`)
     }
 
     // 格式化数据
-    const billingHistory = (data || []).map((enrollment: any) => {
+    const billingHistory = (data || []).map((enrollment) => {
       const instance = Array.isArray(enrollment.instance) ? enrollment.instance[0] : enrollment.instance
       const assignment = instance?.assignment ? (Array.isArray(instance.assignment) ? instance.assignment[0] : instance.assignment) : null
       const course = assignment?.course ? (Array.isArray(assignment.course) ? assignment.course[0] : assignment.course) : null
@@ -118,10 +119,10 @@ export async function GET() {
     })
 
     return NextResponse.json({ billingHistory })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching billing history:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch billing history" },
+      { error: getErrorMessage(error) || "Failed to fetch billing history" },
       { status: 500 }
     )
   }

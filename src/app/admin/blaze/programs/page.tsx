@@ -43,9 +43,10 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Calendar, Eye, Clock, Users, DollarSign, MapPin, X, AlertTriangle, Save, Star, ImageIcon, Info } from "lucide-react"
 import { adminToast, getErrorMessage } from "@/lib/admin-toast"
+import type { StringKeyRecord } from "@/lib/typed-error"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
-import { iterateInstanceSchemaFieldsForDisplay } from "@/lib/instance-schema"
+import { iterateInstanceSchemaFieldsForDisplay, type SchemaFieldConfig } from "@/lib/instance-schema"
 import { adminUiLabels } from "@/lib/admin-ui-labels"
 
 interface BlazeProgram {
@@ -143,6 +144,80 @@ interface HierarchyData {
   }>
 }
 
+interface BlazeInstance {
+  id: string
+  offering_id: string
+  start_date: string
+  end_date: string
+  start_time?: string
+  end_time?: string
+  max_students?: number
+  current_students?: number
+  status: string
+  price_override?: number
+  age_min?: number
+  age_max?: number
+  campus_id?: string
+  program_id?: string
+  notes?: string
+  is_active?: boolean
+  instance_data_ext?: Record<string, unknown>
+  offering?: {
+    id: string
+    name: string
+    slug?: string
+    description?: string
+    base_price?: number
+    currency?: string
+    offering_type?: {
+      code: string
+      name: string
+      instance_schema?: { fields?: Record<string, SchemaFieldConfig> }
+    }
+  }
+  campus?: {
+    id: string
+    name: string
+    display_name: string
+  }
+}
+
+interface FranchiseCategoryMapRow {
+  category: {
+    id: string
+    name: string
+    display_name: string
+  }
+}
+
+interface BlazeCampus {
+  id: string
+  name: string
+  display_name: string
+  city?: string
+}
+
+interface BlazeOffering {
+  id: string
+  name: string
+}
+
+interface InstanceEditFormData {
+  start_date?: string
+  end_date?: string
+  start_time?: string
+  end_time?: string
+  max_students?: string
+  current_students?: string
+  price_override?: string
+  status?: string
+  notes?: string
+  is_active?: boolean
+  campus_id?: string | null
+  age_min?: string
+  age_max?: string
+}
+
 export default function BlazeProgramsManagementPage() {
   const [hierarchyData, setHierarchyData] = useState<HierarchyData[]>([])
   const [programs, setPrograms] = useState<BlazeProgram[]>([])
@@ -156,15 +231,15 @@ export default function BlazeProgramsManagementPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedInstance, setSelectedInstance] = useState<any | null>(null)
+  const [selectedInstance, setSelectedInstance] = useState<BlazeInstance | null>(null)
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'delete' | null>(null)
-  const [editFormData, setEditFormData] = useState<any>({})
+  const [editFormData, setEditFormData] = useState<InstanceEditFormData>({})
   const [isUpdating, setIsUpdating] = useState(false)
-  const [campuses, setCampuses] = useState<any[]>([])
-  const [offerings, setOfferings] = useState<any[]>([])
+  const [campuses, setCampuses] = useState<BlazeCampus[]>([])
+  const [offerings, setOfferings] = useState<BlazeOffering[]>([])
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false)
-  const [editingInstance, setEditingInstance] = useState<any | null>(null)
+  const [editingInstance, setEditingInstance] = useState<BlazeInstance | null>(null)
   const [programToDelete, setProgramToDelete] = useState<{
     id: string
     display_name: string
@@ -213,9 +288,9 @@ export default function BlazeProgramsManagementPage() {
 
       const data = await response.json()
       setHierarchyData(data.hierarchy || [])
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching hierarchy:", err)
-      setError(err.message || "Failed to load hierarchy")
+      setError(getErrorMessage(err) || "Failed to load hierarchy")
     } finally {
       setIsLoading(false)
     }
@@ -252,7 +327,7 @@ export default function BlazeProgramsManagementPage() {
       if (response.ok) {
         const data = await response.json()
         // 从 franchise_category_map 中提取 category 信息
-        const categories = data.map((item: any) => ({
+        const categories = (data as FranchiseCategoryMapRow[]).map((item) => ({
           id: item.category.id,
           name: item.category.name,
           display_name: item.category.display_name,
@@ -482,7 +557,7 @@ export default function BlazeProgramsManagementPage() {
           description: error.error || undefined,
         })
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving program:", error)
       adminToast.error("Failed to save program", {
         description: getErrorMessage(error),
@@ -493,20 +568,20 @@ export default function BlazeProgramsManagementPage() {
   }
 
   // Handle instance view
-  const handleInstanceView = (instance: any) => {
+  const handleInstanceView = (instance: BlazeInstance) => {
     setSelectedInstance(instance)
     setModalMode('view')
   }
 
   // Handle instance edit (pass programId so dialog can show correct program in dropdown when hierarchy instance lacks program_id)
-  const handleInstanceEdit = (instance: any, programId?: string) => {
+  const handleInstanceEdit = (instance: BlazeInstance, programId?: string) => {
     setEditingInstance(instance)
     setSelectedProgramId(programId ?? instance.program_id ?? null)
     setIsInstanceDialogOpen(true)
   }
 
   // Handle instance delete
-  const handleInstanceDeleteClick = (instance: any) => {
+  const handleInstanceDeleteClick = (instance: BlazeInstance) => {
     setSelectedInstance(instance)
     setModalMode('delete')
   }
@@ -551,7 +626,7 @@ export default function BlazeProgramsManagementPage() {
 
     setIsUpdating(true)
     try {
-      const updateData: any = {
+      const updateData: StringKeyRecord = {
         start_date: editFormData.start_date,
         end_date: editFormData.end_date,
         start_time: editFormData.start_time || null,
@@ -636,9 +711,9 @@ export default function BlazeProgramsManagementPage() {
   }
 
   // Render schema-driven instance_data_ext fields for the View modal (supports object groups; display_scope admin or both)
-  const renderInstanceSchemaFields = (instance: any) => {
+  const renderInstanceSchemaFields = (instance: BlazeInstance) => {
     const schema = instance?.offering?.offering_type?.instance_schema?.fields
-    const ext = (instance?.instance_data_ext || {}) as Record<string, unknown>
+    const ext = instance?.instance_data_ext ?? {}
     if (!schema || typeof schema !== "object") return null
     const entries = Array.from(
       iterateInstanceSchemaFieldsForDisplay(schema, ext, { displayScope: "both", flatten: true })
@@ -927,7 +1002,7 @@ export default function BlazeProgramsManagementPage() {
                                           {programItem.instances && programItem.instances.length > 0 ? (
                                             <div className="space-y-2">
                                               <div className="space-y-2">
-                                                {programItem.instances.map((instance: any) => {
+                                                {programItem.instances.map((instance) => {
                                                   const formatTime = (time?: string) => {
                                                     if (!time) return ''
                                                     const [hours, minutes] = time.split(':')
@@ -1790,7 +1865,7 @@ export default function BlazeProgramsManagementPage() {
                     <h3 className="text-2xl font-bold text-slate-900 mb-2">Are you absolutely sure?</h3>
                     <p className="text-slate-500 max-w-sm mx-auto">
                       Deleting instance <span className="font-black text-slate-900">{selectedInstance.id.substring(0, 8)}...</span> will permanently remove it from the system.
-                      {selectedInstance.current_students > 0 && (
+                      {(selectedInstance.current_students ?? 0) > 0 && (
                         <span className="block mt-2 text-red-600 font-semibold">
                           Warning: This instance has {selectedInstance.current_students} enrolled students. It will be deactivated instead of deleted.
                         </span>

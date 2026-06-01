@@ -37,6 +37,7 @@ import { UserEditDialog } from "@/components/admin/UserEditDialog"
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog"
 import Link from "next/link"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import type { StringKeyRecord } from "@/lib/typed-error"
 
 interface User {
   id: string
@@ -103,10 +104,10 @@ export default function UsersManagementPage() {
         // 同时获取 Teams 信息，检查哪些 coach 有 Teams 记录
         const teamsResponse = await fetch("/api/admin/teams")
         if (teamsResponse.ok) {
-          const teams = await teamsResponse.json()
+          const teams = (await teamsResponse.json()) as Array<{ id: string; user_id: string }>
           const usersWithTeams = data.map((user: User) => {
             if (user.role === 'coach') {
-              const team = teams.find((t: any) => t.user_id === user.id)
+              const team = teams.find((t) => t.user_id === user.id)
               return {
                 ...user,
                 has_team_profile: !!team,

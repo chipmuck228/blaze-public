@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { sendNewsletterEmail } from "@/lib/email"
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
           { status: 200 }
         )
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Send failed"
+        const message = error instanceof Error ? getErrorMessage(error) : "Send failed"
         return NextResponse.json(
           { error: `Failed to send test email: ${message}` },
           { status: 500 }
@@ -148,7 +149,7 @@ export async function POST(request: Request) {
     )
   } catch (error: unknown) {
     console.error("Error sending newsletter:", error)
-    const message = error instanceof Error ? error.message : "Failed to send newsletter"
+    const message = error instanceof Error ? getErrorMessage(error) : "Failed to send newsletter"
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

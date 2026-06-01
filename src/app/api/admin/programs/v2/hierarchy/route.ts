@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { unwrapRelation } from "@/lib/supabase-relation"
 
 // 获取 programs 的层级结构（Franchise -> Category -> Program -> Instance）
 export async function GET(request: Request) {
@@ -70,16 +72,16 @@ export async function GET(request: Request) {
 
         // 过滤 categories
         let categories = (categoryMaps || [])
-          .map((map: any) => map.category)
-          .filter((cat: any) => cat && cat.is_active)
+          .map((map) => unwrapRelation(map.category))
+          .filter((cat): cat is NonNullable<typeof cat> => !!cat && cat.is_active === true)
 
         if (categoryId) {
-          categories = categories.filter((cat: any) => cat.id === categoryId)
+          categories = categories.filter((cat) => cat.id === categoryId)
         }
 
         // 为每个 category 获取 programs
         const categoriesWithPrograms = await Promise.all(
-          categories.map(async (category: any) => {
+          categories.map(async (category) => {
             // 获取该 category 下的 programs
             const { data: programs, error: programsError } = await supabaseAdmin
               .from("v2_program")
@@ -112,7 +114,7 @@ export async function GET(request: Request) {
 
             // 为每个 program 获取 instances
             const programsWithInstances = await Promise.all(
-              (programs || []).map(async (program: any) => {
+              (programs || []).map(async (program) => {
                 const { data: instances, error: instancesError } = await supabaseAdmin
                   .from("v2_instance")
                   .select(`
@@ -184,10 +186,10 @@ export async function GET(request: Request) {
     )
 
     return NextResponse.json({ hierarchy }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching hierarchy:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch hierarchy" },
+      { error: getErrorMessage(error) || "Failed to fetch hierarchy" },
       { status: 500 }
     )
   }

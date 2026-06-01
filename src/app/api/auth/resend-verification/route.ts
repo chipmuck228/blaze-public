@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { resendVerificationEmail } from "@/lib/db"
 import { sendVerificationEmail } from "@/lib/email"
 
@@ -31,9 +32,9 @@ export async function POST(request: Request) {
       { message: "Verification email has been resent. Please check your inbox." },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Operation failed" },
+      { error: getErrorMessage(error) || "Operation failed" },
       { status: 400 }
     )
   }

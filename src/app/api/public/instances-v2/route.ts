@@ -1,6 +1,29 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+
+type InstanceV2Row = Record<string, unknown>
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return undefined
+}
+
+function instanceDataExt(row: InstanceV2Row): Record<string, unknown> {
+  return asRecord(row.instance_data_ext) ?? {}
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && !Number.isNaN(value)) return value
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value)
+    return Number.isNaN(n) ? fallback : n
+  }
+  return fallback
+}
 
 /**
  * GET /api/public/instances-v2?category=xxx&location=yyy&offering_type=camp|course|all&portal_service_role=meal_service|care_service
@@ -23,7 +46,7 @@ export async function GET(request: Request) {
         ? portalServiceRoleParam
         : null
 
-    console.log("[Public instances-v2] Request params:", { categoryId, locationCode, offeringTypeParam, portalServiceRole })
+    console.log("[v2_instance] Request params:", { categoryId, locationCode, offeringTypeParam, portalServiceRole })
 
     let franchiseId: string | null = null
     if (locationCode) {
@@ -34,7 +57,7 @@ export async function GET(request: Request) {
         .eq("is_active", true)
         .maybeSingle()
       franchiseId = f?.id ?? null
-      console.log("[Public instances-v2] Franchise lookup by code:", { locationCode, franchiseId, error: fErr?.message })
+      console.log("[v2_instance] Franchise lookup by code:", { locationCode, franchiseId, error: fErr?.message })
     }
 
     // v2_instance: select both table columns (start_date, end_date, etc.) and instance_data_ext; prefer table columns when present
@@ -119,50 +142,68 @@ export async function GET(request: Request) {
 
     const { data: rows, error } = await query
 
-    console.log("[Public instances-v2] Supabase response:", {
+    console.log("[v2_instance] Supabase response:", {
       rowsCount: rows?.length ?? 0,
-      error: error ? { message: error.message, code: error.code, details: error.details } : null,
-      firstRow: rows?.[0] ? { id: (rows[0] as any).id, program_id: (rows[0] as any).program_id, hasProgram: !!(rows[0] as any).program, hasOffering: !!(rows[0] as any).offering } : null,
+      error: error ? { message: getErrorMessage(error), code: error.code, details: error.details } : null,
+      firstRow: rows?.[0]
+        ? {
+            id: rows[0].id,
+            program_id: rows[0].program_id,
+            hasProgram: !!rows[0].program,
+            hasOffering: !!rows[0].offering,
+          }
+        : null,
     })
 
     if (error) {
-      console.error("[Public instances-v2] Error:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error("[v2_instance] Error:", error)
+      return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
 
-    const getOfferingTypeCode = (row: any): string | null => {
-      const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
-      const ot = Array.isArray(offering?.offering_type) ? offering.offering_type[0] : offering?.offering_type
-      return ot?.code?.toLowerCase() ?? null
+    const getOfferingTypeCode = (row: InstanceV2Row): string | null => {
+      const offering = asRecord(Array.isArray(row.offering) ? row.offering[0] : row.offering)
+      const ot = asRecord(
+        Array.isArray(offering?.offering_type) ? offering.offering_type[0] : offering?.offering_type
+      )
+      const code = ot?.code
+      return typeof code === "string" ? code.toLowerCase() : null
     }
 
     // C-end: portal_service_role filter for detail-page Meal/Care blocks; otherwise catalog by offering_type param
-    let list = (rows || []) as any[]
+    let list: InstanceV2Row[] = (rows || []) as InstanceV2Row[]
     if (portalServiceRole) {
-      list = list.filter((row: any) => row?.portal_service_role === portalServiceRole)
+      list = list.filter((row) => row?.portal_service_role === portalServiceRole)
     } else if (offeringTypeParam === "all") {
-      list = list.filter((row: any) => !row?.portal_service_role)
+      list = list.filter((row) => !row?.portal_service_role)
     } else if (offeringTypeParam) {
-      list = list.filter((row: any) => getOfferingTypeCode(row) === offeringTypeParam)
+      list = list.filter((row) => getOfferingTypeCode(row) === offeringTypeParam)
     } else {
-      list = list.filter((row: any) => row?.is_course_type === true)
+      list = list.filter((row) => row?.is_course_type === true)
     }
     if (categoryId) {
-      list = list.filter((row: any) => {
-        const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
-        const cat = Array.isArray(offering?.category) ? offering.category[0] : offering?.category
+      list = list.filter((row) => {
+        const offering = asRecord(Array.isArray(row.offering) ? row.offering[0] : row.offering)
+        const cat = asRecord(
+          Array.isArray(offering?.category) ? offering.category[0] : offering?.category
+        )
         return cat?.id === categoryId
       })
     }
-    const getStart = (row: any) => {
-      const ext = row?.instance_data_ext
-      const s = ext?.schedule
-      return row?.start_date ?? ext?.start_date ?? (s && typeof s === "object" ? s.start_date : undefined) ?? ""
+    const getStart = (row: InstanceV2Row) => {
+      const ext = instanceDataExt(row)
+      const s = asRecord(ext.schedule)
+      const scheduleStart = typeof s?.start_date === "string" ? s.start_date : undefined
+      const extStart = typeof ext.start_date === "string" ? ext.start_date : undefined
+      const rowStart = typeof row.start_date === "string" ? row.start_date : undefined
+      return rowStart ?? extStart ?? scheduleStart ?? ""
     }
-    const getStartTime = (row: any) => {
-      const ext = row?.instance_data_ext
-      const s = ext?.schedule
-      return row?.start_time ?? ext?.start_time ?? (s && typeof s === "object" ? s.start_time : undefined) ?? ""
+    const getStartTime = (row: InstanceV2Row) => {
+      const ext = instanceDataExt(row)
+      const s = asRecord(ext.schedule)
+      const scheduleTime = typeof s?.start_time === "string" ? s.start_time : undefined
+      const extTime = typeof ext.start_time === "string" ? ext.start_time : undefined
+      const rowTime = typeof row.start_time === "string" ? row.start_time : undefined
+      return rowTime ?? extTime ?? scheduleTime ?? ""
     }
     list = list.sort((a, b) => {
       const sa = getStart(a)
@@ -173,7 +214,7 @@ export async function GET(request: Request) {
 
     if (list.length === 0) {
       const { count: instanceCount } = await supabaseAdmin.from("v2_instance").select("*", { count: "exact", head: true })
-      console.log("[Public instances-v2] No rows returned. Diagnostic (v2_instance only): total count=", instanceCount, "filter: categoryId=", categoryId, "franchiseId=", franchiseId, "portal_service_role=", portalServiceRole)
+      console.log("[v2_instance] No rows returned. Diagnostic (v2_instance only): total count=", instanceCount, "filter: categoryId=", categoryId, "franchiseId=", franchiseId, "portal_service_role=", portalServiceRole)
     }
 
     const franchiseMap = new Map<
@@ -190,56 +231,62 @@ export async function GET(request: Request) {
             display_name: string
             description?: string
             category: { id: string; name: string; display_name: string }
-            instances: any[]
+            instances: unknown[]
           }
         >
       }
     >()
 
     for (const row of list) {
-      const program = Array.isArray(row.program) ? row.program[0] : row.program
-      const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
-      const campus = Array.isArray(row.campus) ? row.campus[0] : row.campus
-      if (!program?.franchise?.id) continue
+      const program = asRecord(Array.isArray(row.program) ? row.program[0] : row.program)
+      if (!program) continue
+      const offering = asRecord(Array.isArray(row.offering) ? row.offering[0] : row.offering)
+      const campus = asRecord(Array.isArray(row.campus) ? row.campus[0] : row.campus)
+      const fr = asRecord(program.franchise)
+      if (!fr?.id || typeof fr.id !== "string") continue
       if (!offering || offering.status !== "published") continue
-      const offeringCategory = Array.isArray(offering.category)
-        ? offering.category[0]
-        : offering.category
-      if (!offeringCategory?.id) continue
-      const fr = program.franchise
-      const franchiseKey = fr.id
+      const offeringCategory = asRecord(
+        Array.isArray(offering.category) ? offering.category[0] : offering.category
+      )
+      if (!offeringCategory?.id || typeof offeringCategory.id !== "string") continue
+      const franchiseKey = fr.id as string
       if (!franchiseMap.has(franchiseKey)) {
         franchiseMap.set(franchiseKey, {
-          id: fr.id,
-          code: fr.code ?? "",
-          name: fr.name ?? "",
+          id: franchiseKey,
+          code: String(fr.code ?? ""),
+          name: String(fr.name ?? ""),
           programs: new Map(),
         })
       }
       const franchiseData = franchiseMap.get(franchiseKey)!
       // Same v2_program can appear under multiple C-end Programs when offerings differ by category
-      const programKey = `${program.id}:${offeringCategory.id}`
+      const programId = String(program.id ?? "")
+      const programKey = `${programId}:${offeringCategory.id}`
       if (!franchiseData.programs.has(programKey)) {
         franchiseData.programs.set(programKey, {
-          id: program.id,
-          name: program.name ?? "",
-          display_name: program.display_name ?? program.name ?? "",
-          description: program.description ?? undefined,
+          id: programId,
+          name: String(program.name ?? ""),
+          display_name: String(program.display_name ?? program.name ?? ""),
+          description:
+            typeof program.description === "string" ? program.description : undefined,
           category: {
-            id: offeringCategory.id,
-            name: offeringCategory.name ?? "",
-            display_name: offeringCategory.display_name ?? offeringCategory.name ?? "",
+            id: offeringCategory.id as string,
+            name: String(offeringCategory.name ?? ""),
+            display_name: String(offeringCategory.display_name ?? offeringCategory.name ?? ""),
           },
           instances: [],
         })
       }
       const programData = franchiseData.programs.get(programKey)!
-      const extData = row.instance_data_ext ?? {}
-      const schedule = extData.schedule && typeof extData.schedule === "object" ? extData.schedule : null
-      const capacityPrice = extData.capacity_price && typeof extData.capacity_price === "object" ? extData.capacity_price : null
-      const audience = extData.audience && typeof extData.audience === "object" ? extData.audience : null
-      const maxStudents = row.max_students ?? extData.max_students ?? capacityPrice?.max_students ?? 0
-      const currentStudents = row.current_students ?? 0
+      const extData = instanceDataExt(row)
+      const schedule = asRecord(extData.schedule) ?? null
+      const capacityPrice = asRecord(extData.capacity_price) ?? null
+      const audience = asRecord(extData.audience) ?? null
+      const maxStudents = asNumber(
+        row.max_students,
+        asNumber(extData.max_students, asNumber(capacityPrice?.max_students, 0))
+      )
+      const currentStudents = asNumber(row.current_students, 0)
       const targetGrades = audience?.target_grades ?? extData.target_grades
       const gradeLevel = Array.isArray(targetGrades) && targetGrades.length > 0 ? targetGrades[0] : null
       const rawDaysOfWeek =
@@ -252,11 +299,23 @@ export async function GET(request: Request) {
             .sort((a: number, b: number) => a - b)
         : []
       programData.instances.push({
-        id: row.id,
-        start_date: row.start_date ?? extData.start_date ?? schedule?.start_date ?? null,
-        end_date: row.end_date ?? extData.end_date ?? schedule?.end_date ?? null,
-        start_time: row.start_time ?? extData.start_time ?? schedule?.start_time ?? null,
-        end_time: row.end_time ?? extData.end_time ?? schedule?.end_time ?? null,
+        id: String(row.id ?? ""),
+        start_date:
+          (typeof row.start_date === "string" ? row.start_date : null) ??
+          (typeof extData.start_date === "string" ? extData.start_date : null) ??
+          (typeof schedule?.start_date === "string" ? schedule.start_date : null),
+        end_date:
+          (typeof row.end_date === "string" ? row.end_date : null) ??
+          (typeof extData.end_date === "string" ? extData.end_date : null) ??
+          (typeof schedule?.end_date === "string" ? schedule.end_date : null),
+        start_time:
+          (typeof row.start_time === "string" ? row.start_time : null) ??
+          (typeof extData.start_time === "string" ? extData.start_time : null) ??
+          (typeof schedule?.start_time === "string" ? schedule.start_time : null),
+        end_time:
+          (typeof row.end_time === "string" ? row.end_time : null) ??
+          (typeof extData.end_time === "string" ? extData.end_time : null) ??
+          (typeof schedule?.end_time === "string" ? schedule.end_time : null),
         max_students: maxStudents || null,
         current_students: currentStudents,
         status: row.status,
@@ -281,21 +340,32 @@ export async function GET(request: Request) {
           age_min: extData.age_min ?? null,
           age_max: extData.age_max ?? null,
           base_price: offering?.base_price,
-          poster_url: normalizeRemoteImageUrl(offering?.poster_url),
+          poster_url: normalizeRemoteImageUrl(
+            typeof offering.poster_url === "string" ? offering.poster_url : null
+          ),
         },
         offering: offering
           ? {
               id: offering.id,
               name: offering.name,
-              description: offering.description ?? null,
-              poster_url: normalizeRemoteImageUrl(offering.poster_url),
+              description:
+                typeof offering.description === "string" ? offering.description : null,
+              poster_url: normalizeRemoteImageUrl(
+                typeof offering.poster_url === "string" ? offering.poster_url : null
+              ),
               base_price: offering.base_price,
               offering_type: (() => {
-                const ot = Array.isArray(offering.offering_type)
-                  ? offering.offering_type[0]
-                  : offering.offering_type
+                const ot = asRecord(
+                  Array.isArray(offering.offering_type)
+                    ? offering.offering_type[0]
+                    : offering.offering_type
+                )
                 return ot
-                  ? { id: ot.id, code: ot.code, name: ot.name }
+                  ? {
+                      id: ot.id,
+                      code: ot.code,
+                      name: ot.name,
+                    }
                   : undefined
               })(),
             }
@@ -314,7 +384,7 @@ export async function GET(request: Request) {
       }))
       .filter((f) => f.programs.length > 0)
 
-    console.log("[Public instances-v2] Result:", {
+    console.log("[v2_instance] Result:", {
       franchiseMapSize: franchiseMap.size,
       franchisesCount: franchises.length,
       programsPerFranchise: franchises.map((f) => ({ code: f.code, programs: f.programs.length, instances: f.programs.reduce((s, p) => s + p.instances.length, 0) })),
@@ -322,9 +392,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ franchises }, { status: 200 })
   } catch (err: unknown) {
-    console.error("[Public instances-v2] Error:", err)
+    console.error("[v2_instance] Error:", err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch instances" },
+      { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch instances" },
       { status: 500 }
     )
   }

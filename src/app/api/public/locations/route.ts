@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
+import { unwrapRelation } from "@/lib/supabase-relation"
+
+interface FranchiseRef {
+  id: string
+  code: string
+  name: string
+  is_active?: boolean
+}
 
 // Public endpoint: 获取所有 active locations（带所属 franchise 基本信息）
 // 优先使用 v2_campus 表（关联 v2_franchise），如果没有则回退到 course_locations
@@ -30,19 +39,20 @@ export async function GET() {
 
     // 如果 v2_campus 有数据，直接使用
     if (!v2CampusesError && v2Campuses && v2Campuses.length > 0) {
-      const enrichedLocations = v2Campuses.map((campus: any) => ({
-        id: campus.id,
-        name: campus.display_name || campus.name,
-        address: campus.address || undefined,
-        city: campus.city || undefined,
-        state: campus.state || undefined,
-        zip_code: campus.zip_code || undefined,
-        franchise: {
-          id: campus.franchise.id,
-          code: campus.franchise.code,
-          name: campus.franchise.name,
+      const enrichedLocations = v2Campuses.map((campus) => {
+        const franchise = unwrapRelation(campus.franchise) as FranchiseRef | null
+        return {
+          id: campus.id,
+          name: campus.display_name || campus.name,
+          address: campus.address || undefined,
+          city: campus.city || undefined,
+          state: campus.state || undefined,
+          zip_code: campus.zip_code || undefined,
+          franchise: franchise
+            ? { id: franchise.id, code: franchise.code, name: franchise.name }
+            : undefined,
         }
-      }))
+      })
 
       return NextResponse.json(enrichedLocations, { status: 200 })
     }
@@ -72,11 +82,11 @@ export async function GET() {
       .eq("is_active", true)
 
     if (v2FranchisesError) {
-      console.warn("Error fetching v2_franchise:", v2FranchisesError)
+      console.warn("[v2_franchise] Error fetching:", v2FranchisesError)
     }
 
     // 如果没有 v2_franchise 数据，尝试查询 franchises_v2（过渡表）
-    let franchiseMap = new Map<string, any>()
+    const franchiseMap = new Map<string, FranchiseRef>()
     
     if (v2Franchises && v2Franchises.length > 0) {
       // 使用 v2_franchise
@@ -102,7 +112,7 @@ export async function GET() {
 
     // 处理每个 location，查找对应的 franchise
     const enrichedLocations = (locationsData || [])
-      .map((location: any) => {
+      .map((location) => {
         if (!location.franchise_id) {
           return null
         }
@@ -123,16 +133,16 @@ export async function GET() {
           }
         }
       })
-      .filter((loc: any) => loc !== null)
+      .filter((loc) => loc !== null)
 
     // 过滤掉 null 值
-    const filteredData = enrichedLocations.filter((loc: any) => loc !== null)
+    const filteredData = enrichedLocations.filter((loc) => loc !== null)
 
     return NextResponse.json(filteredData, { status: 200 })
-  } catch (error: any) {
-    console.error("Error fetching public locations:", error)
+  } catch (error: unknown) {
+    console.error("[v2_campus] Error fetching public locations:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch locations" },
+      { error: getErrorMessage(error) || "Failed to fetch locations" },
       { status: 500 }
     )
   }

@@ -60,11 +60,17 @@ function richTextValueForEditor(raw: unknown): string {
 /** Radix Select does not allow empty string as SelectItem value; use this sentinel and map to/from "" when saving. */
 const SELECT_EMPTY_SENTINEL = "__none__"
 
+function configInputValue(value: unknown): string {
+  if (value == null) return ""
+  if (typeof value === "string" || typeof value === "number") return String(value)
+  return ""
+}
+
 /** Inflate flat type_config_data into nested shape when schema uses object groups (e.g. course pricing/content). */
 function inflateTypeConfigData(
   schemaFields: Record<string, SchemaFieldConfig> | undefined,
-  data: Record<string, any> | null | undefined
-): Record<string, any> {
+  data: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
   if (!data || typeof data !== 'object') return {}
   if (!schemaFields || typeof schemaFields !== 'object') return { ...data }
   const out = { ...data }
@@ -72,8 +78,13 @@ function inflateTypeConfigData(
     if (fieldConfig.type === 'object' && fieldConfig.properties) {
       const existing = out[fieldName]
       if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
-        const obj: Record<string, any> = {}
-        const def = fieldConfig.default && typeof fieldConfig.default === 'object' ? fieldConfig.default : {}
+        const obj: Record<string, unknown> = {}
+        const def: Record<string, unknown> =
+          fieldConfig.default &&
+          typeof fieldConfig.default === "object" &&
+          !Array.isArray(fieldConfig.default)
+            ? (fieldConfig.default as Record<string, unknown>)
+            : {}
         for (const propKey of Object.keys(fieldConfig.properties)) {
           if (data[propKey] !== undefined) obj[propKey] = data[propKey]
           else if (def[propKey] !== undefined) obj[propKey] = def[propKey]
@@ -90,7 +101,7 @@ type SchemaFieldConfig = {
   type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'array' | 'date' | 'time' | 'object'
   label?: string
   required?: boolean
-  default?: any
+  default?: unknown
   min?: number
   max?: number
   step?: number
@@ -104,9 +115,16 @@ type SchemaFieldConfig = {
   display_scope?: 'admin' | 'web' | 'both'
   condition?: {
     field: string
-    equals?: any
-    in?: any[]
+    equals?: unknown
+    in?: unknown[]
   }
+}
+
+interface OfferingTypeConfigData {
+  base_price?: number
+  currency?: string
+  portal_service_role?: string
+  [key: string]: unknown
 }
 
 interface V2Offering {
@@ -121,8 +139,8 @@ interface V2Offering {
   currency: string
   poster_url?: string | null
   offering_type_id: string
-  type_config?: Record<string, any>
-  type_config_data?: Record<string, any>
+  type_config?: Record<string, unknown>
+  type_config_data?: OfferingTypeConfigData
   status: 'draft' | 'published' | 'suspended' | 'archived'
   created_at: string
   updated_at: string
@@ -170,7 +188,7 @@ export default function BlazeOfferingsManagementPage() {
   const [offeringTypes, setOfferingTypes] = useState<V2OfferingType[]>([])
   const [isLoadingTypes, setIsLoadingTypes] = useState(true)
   const [selectedOfferingType, setSelectedOfferingType] = useState<V2OfferingType | null>(null)
-  const [typeConfigData, setTypeConfigData] = useState<Record<string, any>>({})
+  const [typeConfigData, setTypeConfigData] = useState<Record<string, unknown>>({})
   const [isUploadingPoster, setIsUploadingPoster] = useState(false)
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null)
   const [posterFile, setPosterFile] = useState<File | null>(null)
@@ -252,9 +270,9 @@ export default function BlazeOfferingsManagementPage() {
       const data = await response.json()
       setOfferings(data)
       setFilteredOfferings(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching offerings:", err)
-      setError(err.message || "Failed to load offerings")
+      setError(getErrorMessage(err) || "Failed to load offerings")
     } finally {
       setIsLoading(false)
     }
@@ -284,13 +302,13 @@ export default function BlazeOfferingsManagementPage() {
         setSelectedOfferingType(type)
         // 初始化 type_config_data 的默认值（含 portal_service_role：type 级默认覆盖 schema default）
         if (type.offering_schema?.fields) {
-          const defaults: Record<string, any> = {}
+          const defaults: Record<string, unknown> = {}
           Object.entries(type.offering_schema.fields).forEach(([fieldName, fieldConfig]) => {
             if (fieldName === "portal_service_role" && (type as V2OfferingType).portal_service_role != null && (type as V2OfferingType).portal_service_role !== "") {
               defaults[fieldName] = (type as V2OfferingType).portal_service_role
             } else if (fieldConfig.default !== undefined) {
               if (fieldConfig.type === 'object' && typeof fieldConfig.default === 'object' && fieldConfig.default !== null && !Array.isArray(fieldConfig.default)) {
-                defaults[fieldName] = { ...(fieldConfig.default as Record<string, any>) }
+                defaults[fieldName] = { ...(fieldConfig.default as Record<string, unknown>) }
               } else {
                 defaults[fieldName] = fieldConfig.default
               }
@@ -777,7 +795,10 @@ export default function BlazeOfferingsManagementPage() {
                                   )}
                                   <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                                     {(offering.type_config_data?.base_price ?? offering.base_price) != null && (
-                                      <span>{(offering.type_config_data?.currency ?? offering.currency) || 'USD'} ${Number(offering.type_config_data?.base_price ?? offering.base_price).toFixed(2)}</span>
+                                      <span>
+                                        {String(offering.type_config_data?.currency ?? offering.currency ?? "USD")}{" "}
+                                        ${Number(offering.type_config_data?.base_price ?? offering.base_price).toFixed(2)}
+                                      </span>
                                     )}
                                     <span>Created: {formatDate(offering.created_at)}</span>
                                   </div>
@@ -1036,10 +1057,10 @@ export default function BlazeOfferingsManagementPage() {
                                   disabled={isSubmitting}
                                 />
                               ) : fieldConfig.type === 'text' && (
-                                <Input id={`config_${fieldName}`} value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} required={fieldConfig.required} className="h-9 text-sm" />
+                                <Input id={`config_${fieldName}`} value={configInputValue(fieldValue)} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} placeholder={fieldConfig.placeholder} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
                               {fieldConfig.type === 'number' && (
-                                <Input id={`config_${fieldName}`} type="number" value={fieldValue} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder={fieldConfig.placeholder} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step} required={fieldConfig.required} className="h-9 text-sm" />
+                                <Input id={`config_${fieldName}`} type="number" value={configInputValue(fieldValue)} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder={fieldConfig.placeholder} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
                               {fieldConfig.type === 'boolean' && (
                                 <div className="flex items-center gap-2">
@@ -1104,16 +1125,25 @@ export default function BlazeOfferingsManagementPage() {
                                 </div>
                               )}
                               {fieldConfig.type === 'date' && (
-                                <Input id={`config_${fieldName}`} type="date" value={fieldValue || ''} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
+                                <Input id={`config_${fieldName}`} type="date" value={configInputValue(fieldValue)} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
                               {fieldConfig.type === 'time' && (
-                                <Input id={`config_${fieldName}`} type="time" value={fieldValue || ''} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
+                                <Input id={`config_${fieldName}`} type="time" value={configInputValue(fieldValue)} onChange={(e) => setTypeConfigData({ ...typeConfigData, [fieldName]: e.target.value })} required={fieldConfig.required} className="h-9 text-sm" />
                               )}
                                   {(() => {
-                                    const objValue = typeof fieldValue === 'object' && fieldValue !== null
-                                      ? { ...(fieldConfig.default ?? {}), ...fieldValue }
-                                      : (fieldConfig.default ?? {})
-                                    const setObj = (next: Record<string, any>) => setTypeConfigData({ ...typeConfigData, [fieldName]: next })
+                                    const defaultObj: Record<string, unknown> =
+                                      fieldConfig.default &&
+                                      typeof fieldConfig.default === "object" &&
+                                      !Array.isArray(fieldConfig.default)
+                                        ? (fieldConfig.default as Record<string, unknown>)
+                                        : {}
+                                    const objValue: Record<string, unknown> =
+                                      typeof fieldValue === "object" &&
+                                      fieldValue !== null &&
+                                      !Array.isArray(fieldValue)
+                                        ? { ...defaultObj, ...(fieldValue as Record<string, unknown>) }
+                                        : defaultObj
+                                    const setObj = (next: Record<string, unknown>) => setTypeConfigData({ ...typeConfigData, [fieldName]: next })
                                     return (
                                       <div className="space-y-3">
                                         {Object.entries(fieldConfig.properties ?? {}).map(([propKey, propConfig]) => {
@@ -1156,7 +1186,7 @@ export default function BlazeOfferingsManagementPage() {
                                                     <Label htmlFor={`config_${fieldName}_${propKey}`} className="text-xs">{propConfig.label || propKey}</Label>
                                                     <Input
                                                       id={`config_${fieldName}_${propKey}`}
-                                                      value={propValue}
+                                                      value={configInputValue(propValue)}
                                                       onChange={(e) => setObj({ ...objValue, [propKey]: e.target.value })}
                                                       placeholder={propConfig.placeholder}
                                                       className="h-9 text-sm mt-0.5"
@@ -1170,7 +1200,7 @@ export default function BlazeOfferingsManagementPage() {
                                                   <Input
                                                     id={`config_${fieldName}_${propKey}`}
                                                     type="number"
-                                                    value={propValue}
+                                                    value={configInputValue(propValue)}
                                                     onChange={(e) => setObj({ ...objValue, [propKey]: e.target.value ? parseFloat(e.target.value) : undefined })}
                                                     placeholder={propConfig.placeholder}
                                                     min={propConfig.min}
@@ -1210,7 +1240,7 @@ export default function BlazeOfferingsManagementPage() {
                                                   {(Array.isArray(propValue) ? propValue : []).map((item, index) => (
                                                     <div key={index} className="flex items-center gap-2">
                                                       <Input
-                                                        value={item}
+                                                        value={configInputValue(item)}
                                                         onChange={(e) => {
                                                           const arr = [...(Array.isArray(propValue) ? propValue : [])]
                                                           arr[index] = e.target.value

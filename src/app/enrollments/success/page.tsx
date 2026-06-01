@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -66,8 +67,8 @@ function PaymentSuccessContent() {
             setError(data.error || 'Failed to verify payment')
           }
         }
-      } catch (err: any) {
-        setError(err.message || 'Failed to verify payment')
+      } catch (err: unknown) {
+        setError(getErrorMessage(err) || 'Failed to verify payment')
       } finally {
         setIsLoading(false)
       }
@@ -155,7 +156,7 @@ function PaymentSuccessContent() {
               <Link href="/enrollments">View My Enrollments</Link>
             </Button>
             <Button asChild variant="outline" className="flex-1">
-              <Link href="/course-catalog">Browse More Courses</Link>
+              <Link href="/programs">Browse More Programs</Link>
             </Button>
           </div>
         </CardContent>

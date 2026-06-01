@@ -1,5 +1,6 @@
 'use client'
 
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { useState, useEffect, type ReactElement } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,13 +33,39 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { adminUiLabels } from "@/lib/admin-ui-labels"
+import type { SchemaFieldConfig } from "@/lib/instance-schema"
+import type { JsonRecord } from "@/types/json"
+
+interface InstanceForEdit {
+  id?: string
+  program_id?: string
+  offering_id?: string
+  campus_id?: string
+  price_override?: number
+  start_date?: string
+  end_date?: string
+  start_time?: string
+  end_time?: string
+  session_count?: number
+  days_of_week?: number[]
+  max_students?: number
+  current_students?: number
+  status?: string
+  notes?: string
+  is_active?: boolean
+  featured?: boolean
+  amilia_link?: string
+  instance_data_ext?: Record<string, unknown>
+  offering?: Offering
+  program?: Program
+}
 
 interface InstanceCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   programId?: string
   onSuccess?: () => void
-  editingInstance?: any | null
+  editingInstance?: InstanceForEdit | null
 }
 
 interface Offering {
@@ -46,17 +73,17 @@ interface Offering {
   name: string
   base_price?: number
   currency?: string
-  category_id: string
-  type_config_data?: Record<string, any>
+  category_id?: string
+  type_config_data?: Record<string, unknown>
   offering_type?: {
-    id: string
+    id?: string
     code: string
     name: string
     instance_schema?: {
-      fields?: Record<string, any>
+      fields?: Record<string, SchemaFieldConfig>
     }
     offering_schema?: {
-      fields?: Record<string, any>
+      fields?: Record<string, unknown>
     }
   }
 }
@@ -65,8 +92,8 @@ interface Program {
   id: string
   name: string
   display_name: string
-  category_id: string
-  franchise_id: string
+  category_id?: string
+  franchise_id?: string
   category?: { id: string; name: string; display_name?: string }
   franchise?: { id: string; code: string; name: string }
 }
@@ -109,11 +136,17 @@ const HORIZONTAL_BOOLEAN_ROW_FIELDS = new Set<string>(['camp_shirt_provided', 'm
 // Object groups whose data lives in formData (start_date, end_date, ...) not in instance_data_ext; we sync to instance_data_ext on submit
 const INSTANCE_OBJECT_GROUPS_FROM_FORMDATA = new Set<string>(['schedule', 'capacity_price'])
 
+function configInputValue(value: unknown): string {
+  if (value === undefined || value === null) return ""
+  if (typeof value === "string" || typeof value === "number") return String(value)
+  return ""
+}
+
 /** Inflate flat instance_data_ext into nested shape when schema uses object groups (e.g. course schedule, age_range). */
 function inflateInstanceDataExt(
-  schemaFields: Record<string, { type?: string; properties?: Record<string, any>; default?: any }> | undefined,
-  data: Record<string, any> | null | undefined
-): Record<string, any> {
+  schemaFields: Record<string, SchemaFieldConfig> | undefined,
+  data: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
   if (!data || typeof data !== 'object') return {}
   if (!schemaFields || typeof schemaFields !== 'object') return { ...data }
   const out = { ...data }
@@ -121,8 +154,13 @@ function inflateInstanceDataExt(
     if (fieldConfig.type === 'object' && fieldConfig.properties) {
       const existing = out[fieldName]
       if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
-        const obj: Record<string, any> = {}
-        const def = fieldConfig.default && typeof fieldConfig.default === 'object' ? fieldConfig.default : {}
+        const obj: Record<string, unknown> = {}
+        const def: Record<string, unknown> =
+          fieldConfig.default &&
+          typeof fieldConfig.default === "object" &&
+          !Array.isArray(fieldConfig.default)
+            ? (fieldConfig.default as Record<string, unknown>)
+            : {}
         for (const propKey of Object.keys(fieldConfig.properties)) {
           if (data[propKey] !== undefined) obj[propKey] = data[propKey]
           else if (def[propKey] !== undefined) obj[propKey] = def[propKey]
@@ -137,9 +175,9 @@ function inflateInstanceDataExt(
 
 /** Build nested instance_data_ext for payload: schedule/capacity_price from formData, rest from formData.instance_data_ext. */
 function buildNestedInstanceDataExtForPayload(
-  formData: { start_date?: string; end_date?: string; start_time?: string; end_time?: string; days_of_week?: number[]; max_students?: string; price_override?: string; instance_data_ext?: Record<string, any> },
-  schemaFields: Record<string, { type?: string; properties?: Record<string, any> }> | undefined
-): Record<string, any> {
+  formData: { start_date?: string; end_date?: string; start_time?: string; end_time?: string; days_of_week?: number[]; max_students?: string; price_override?: string; instance_data_ext?: Record<string, unknown> },
+  schemaFields: Record<string, { type?: string; properties?: Record<string, unknown> }> | undefined
+): Record<string, unknown> {
   const out = { ...(formData.instance_data_ext || {}) }
   if (!schemaFields) return out
   if (schemaFields.schedule?.type === 'object' && schemaFields.schedule.properties) {
@@ -190,7 +228,7 @@ export function InstanceCreateDialog({
     days_of_week: [] as number[],
     max_students: "",
     current_students: "0",
-    instance_data_ext: {} as Record<string, any>,
+    instance_data_ext: {} as Record<string, unknown>,
     status: "scheduled",
     notes: "",
     is_active: true,
@@ -204,20 +242,27 @@ export function InstanceCreateDialog({
       const schema = editingInstance.offering?.offering_type?.instance_schema?.fields
       const rawExt = editingInstance.instance_data_ext || {}
       const inflatedExt = schema ? inflateInstanceDataExt(schema, rawExt) : rawExt
-      const schedule = inflatedExt.schedule
-      const capacityPrice = inflatedExt.capacity_price
+      const schedule = inflatedExt.schedule as Record<string, unknown> | undefined
+      const capacityPrice = inflatedExt.capacity_price as Record<string, unknown> | undefined
+      const scheduleStartDate = typeof schedule?.start_date === "string" ? schedule.start_date : undefined
+      const scheduleEndDate = typeof schedule?.end_date === "string" ? schedule.end_date : undefined
+      const scheduleStartTime = typeof schedule?.start_time === "string" ? schedule.start_time : undefined
+      const scheduleEndTime = typeof schedule?.end_time === "string" ? schedule.end_time : undefined
+      const scheduleDays = Array.isArray(schedule?.days_of_week)
+        ? (schedule.days_of_week as number[])
+        : undefined
       setFormData({
         program_id: editingInstance.program_id || programId || "",
         offering_id: editingInstance.offering_id || "",
         campus_id: editingInstance.campus_id || "",
-        price_override: (capacityPrice?.price_override ?? editingInstance.price_override)?.toString() ?? "",
-        start_date: schedule?.start_date ?? editingInstance.start_date ?? "",
-        end_date: schedule?.end_date ?? editingInstance.end_date ?? "",
-        start_time: schedule?.start_time ?? editingInstance.start_time ?? "",
-        end_time: schedule?.end_time ?? editingInstance.end_time ?? "",
+        price_override: String(capacityPrice?.price_override ?? editingInstance.price_override ?? ""),
+        start_date: scheduleStartDate ?? editingInstance.start_date ?? "",
+        end_date: scheduleEndDate ?? editingInstance.end_date ?? "",
+        start_time: scheduleStartTime ?? editingInstance.start_time ?? "",
+        end_time: scheduleEndTime ?? editingInstance.end_time ?? "",
         session_count: editingInstance.session_count?.toString() ?? "",
-        days_of_week: Array.isArray(schedule?.days_of_week) ? schedule.days_of_week : (editingInstance.days_of_week ?? []),
-        max_students: (capacityPrice?.max_students ?? editingInstance.max_students)?.toString() ?? "",
+        days_of_week: scheduleDays ?? editingInstance.days_of_week ?? [],
+        max_students: String(capacityPrice?.max_students ?? editingInstance.max_students ?? ""),
         current_students: editingInstance.current_students?.toString() ?? "0",
         instance_data_ext: inflatedExt,
         status: editingInstance.status ?? "scheduled",
@@ -226,8 +271,8 @@ export function InstanceCreateDialog({
         featured: editingInstance.featured === true,
         amilia_link: editingInstance.amilia_link ?? "",
       })
-      setSelectedOffering(editingInstance.offering)
-      setSelectedProgram(editingInstance.program)
+      setSelectedOffering(editingInstance.offering ?? null)
+      setSelectedProgram(editingInstance.program ?? null)
     } else if (open && programId) {
       setFormData(prev => ({ ...prev, program_id: programId }))
     }
@@ -271,7 +316,7 @@ export function InstanceCreateDialog({
     if (selectedOffering?.offering_type?.instance_schema?.fields && !isEditMode) {
       const schema = selectedOffering.offering_type.instance_schema.fields
       const commonDefaults: Partial<typeof formData> = {}
-      const extendedDefaults: Record<string, any> = {}
+      const extendedDefaults: Record<string, unknown> = {}
       
       // 获取所有公共字段名
       const commonFieldNames = new Set(Object.values(COMMON_FIELD_MAPPING))
@@ -291,10 +336,19 @@ export function InstanceCreateDialog({
           // 只在字段没有值且存在默认值时设置默认值
           const currentValue = formData[dbFieldName as keyof typeof formData]
           if ((currentValue === undefined || currentValue === null || currentValue === '') && fieldConfig.default !== undefined) {
-            if (dbFieldName === 'days_of_week') {
-              commonDefaults[dbFieldName] = Array.isArray(fieldConfig.default) ? fieldConfig.default : []
-            } else {
-              commonDefaults[dbFieldName as keyof typeof formData] = fieldConfig.default
+            if (dbFieldName === "days_of_week") {
+              commonDefaults.days_of_week = Array.isArray(fieldConfig.default)
+                ? (fieldConfig.default as number[])
+                : []
+            } else if (typeof fieldConfig.default === "boolean") {
+              if (dbFieldName === "is_active" || dbFieldName === "featured") {
+                commonDefaults[dbFieldName] = fieldConfig.default
+              }
+            } else if (
+              typeof fieldConfig.default === "string" ||
+              typeof fieldConfig.default === "number"
+            ) {
+              ;(commonDefaults as Record<string, string>)[dbFieldName] = String(fieldConfig.default)
             }
           }
         } else {
@@ -414,21 +468,28 @@ export function InstanceCreateDialog({
       const payloadSchema = selectedOffering?.offering_type?.instance_schema?.fields
       // Build nested instance_data_ext when schema has object groups (schedule, capacity_price from formData; rest from formData.instance_data_ext)
       const instanceDataExtForPayload = buildNestedInstanceDataExtForPayload(formData, payloadSchema)
+      const schedulePayload = instanceDataExtForPayload.schedule as Record<string, unknown> | undefined
       // Schema-driven: send start_date/end_date etc. for API backward compat (API may flatten from instance_data_ext when present)
-      const payload: any = {
+      const payload: StringKeyRecord = {
         program_id: formData.program_id,
         offering_id: formData.offering_id,
         campus_id: formData.campus_id || null,
         price_override: formData.price_override ? parseFloat(formData.price_override) : null,
-        start_date: payloadSchema?.start_date || instanceDataExtForPayload?.schedule?.start_date ? (formData.start_date || instanceDataExtForPayload?.schedule?.start_date || null) : null,
-        end_date: payloadSchema?.end_date || instanceDataExtForPayload?.schedule?.end_date ? (formData.end_date || instanceDataExtForPayload?.schedule?.end_date || null) : null,
+        start_date:
+          payloadSchema?.start_date || schedulePayload?.start_date
+            ? (formData.start_date || (schedulePayload?.start_date as string) || null)
+            : null,
+        end_date:
+          payloadSchema?.end_date || schedulePayload?.end_date
+            ? (formData.end_date || (schedulePayload?.end_date as string) || null)
+            : null,
         start_time: formData.start_time || null,
         end_time: formData.end_time || null,
         session_count: formData.session_count ? parseInt(formData.session_count) : null,
         days_of_week: formData.days_of_week.length > 0 ? formData.days_of_week : null,
         max_students: formData.max_students ? parseInt(formData.max_students) : null,
         current_students: parseInt(formData.current_students) || 0,
-        instance_data_ext: instanceDataExtForPayload,
+        instance_data_ext: instanceDataExtForPayload as JsonRecord,
         status: formData.status,
         notes: formData.notes || null,
         is_active: formData.is_active,
@@ -477,8 +538,8 @@ export function InstanceCreateDialog({
         amilia_link: "",
       })
       setSelectedOffering(null)
-    } catch (error: any) {
-      setErrors([error.message || `Failed to save ${adminUiLabels.instance.singular.toLowerCase()}`])
+    } catch (error: unknown) {
+      setErrors([getErrorMessage(error) || `Failed to save ${adminUiLabels.instance.singular.toLowerCase()}`])
     } finally {
       setIsSubmitting(false)
     }
@@ -487,16 +548,16 @@ export function InstanceCreateDialog({
   // 渲染单个字段（可复用函数）；objValue 用于嵌套 object 内条件判断
   const renderField = (
     fieldName: string,
-    fieldConfig: any,
-    value: any,
-    onChange: (value: any) => void,
+    fieldConfig: SchemaFieldConfig,
+    value: unknown,
+    onChange: (value: unknown) => void,
     isCommonField: boolean = false,
-    objValue?: Record<string, any>
+    objValue?: Record<string, unknown>
   ): ReactElement | null => {
     // 检查条件显示（支持 offering.xxx 从当前选中的 offering 取值）
     if (fieldConfig.condition) {
       const conditionField = fieldConfig.condition.field
-      let conditionValue: any
+      let conditionValue: unknown
       if (conditionField.startsWith('offering.')) {
         const key = conditionField.slice(9)
         const tc = selectedOffering?.type_config_data as Record<string, unknown> | undefined
@@ -540,7 +601,7 @@ export function InstanceCreateDialog({
             {labelEl}
             {fieldConfig.multiline ? (
               <Textarea
-                value={value || ''}
+                value={configInputValue(value)}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={fieldConfig.placeholder}
                 className="text-sm resize-none min-h-[52px]"
@@ -549,7 +610,7 @@ export function InstanceCreateDialog({
               />
             ) : (
               <Input
-                value={value || ''}
+                value={configInputValue(value)}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={fieldConfig.placeholder}
                 className="h-9 text-sm"
@@ -565,7 +626,7 @@ export function InstanceCreateDialog({
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
-            <Input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} required={isRequired} className="h-9 text-sm" />
+            <Input type="time" value={configInputValue(value)} onChange={(e) => onChange(e.target.value)} required={isRequired} className="h-9 text-sm" />
             {descEl}
           </div>
         )
@@ -574,7 +635,7 @@ export function InstanceCreateDialog({
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
-            <Input type="number" value={value || ''} onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : undefined)} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step || 1} placeholder={fieldConfig.placeholder} className="h-9 text-sm" />
+            <Input type="number" value={configInputValue(value)} onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : undefined)} min={fieldConfig.min} max={fieldConfig.max} step={fieldConfig.step || 1} placeholder={fieldConfig.placeholder} className="h-9 text-sm" />
             {descEl}
           </div>
         )
@@ -591,12 +652,15 @@ export function InstanceCreateDialog({
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
-            <Select value={value || undefined} onValueChange={(val) => onChange(val)}>
+            <Select
+              value={typeof value === "string" ? value : undefined}
+              onValueChange={(val) => onChange(val)}
+            >
               <SelectTrigger className="h-9">
                 <SelectValue placeholder={fieldConfig.placeholder || "Select..."} />
               </SelectTrigger>
               <SelectContent>
-                {fieldConfig.options?.map((option: string) => (
+                {((fieldConfig.options ?? []) as string[]).map((option) => (
                   <SelectItem key={option} value={option}>{option}</SelectItem>
                 ))}
               </SelectContent>
@@ -607,18 +671,18 @@ export function InstanceCreateDialog({
 
       case 'multiselect': {
         const valueArr = Array.isArray(value) ? value : []
-        const norm = (v: any) => String(v)
+        const norm = (v: unknown) => String(v)
         const optionSet = new Set(valueArr.map(norm))
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-              {fieldConfig.options?.map((option: string) => (
+              {((fieldConfig.options ?? []) as string[]).map((option) => (
                 <div key={option} className="flex items-center gap-2">
                   <Checkbox
                     checked={optionSet.has(option)}
                     onCheckedChange={(checked) => {
-                      const newValues = checked ? [...valueArr, option] : valueArr.filter((v: any) => norm(v) !== option)
+                      const newValues = checked ? [...valueArr, option] : valueArr.filter((v) => norm(v) !== option)
                       onChange(newValues)
                     }}
                   />
@@ -655,19 +719,20 @@ export function InstanceCreateDialog({
         }
         // array of objects (e.g. recurrence.schedule_patterns: [{ frequency, weekday }])
         if (fieldConfig.items?.type === 'object' && fieldConfig.items?.properties) {
-          const itemSchema = fieldConfig.items.properties as Record<string, any>
+          const itemSchema = fieldConfig.items.properties as Record<string, SchemaFieldConfig>
           const arr = Array.isArray(value) ? value : []
-          const str = (v: any) => (v === undefined || v === null ? '' : String(v))
+          const str = (v: unknown) => (v === undefined || v === null ? "" : String(v))
           return (
             <div key={fieldName} className="space-y-1.5">
               {labelEl}
               <div className="space-y-3">
-                {arr.map((item: Record<string, any>, index: number) => (
+                {arr.map((item: Record<string, unknown>, index: number) => (
                   <div key={index} className="flex flex-wrap items-end gap-2 rounded border p-2 bg-muted/30">
                     {Object.entries(itemSchema).map(([propKey, propConfig]) => {
                       const propVal = item && item[propKey]
-                      const optValues = propConfig.options ?? []
-                      const optionLabels = propConfig.option_labels ?? optValues.map(str)
+                      const optValues = (propConfig.options ?? []) as (string | number)[]
+                      const optionLabels =
+                        propConfig.option_labels ?? optValues.map((o) => str(o))
                       if (propConfig.type === 'select') {
                         return (
                           <div key={propKey} className="space-y-1 min-w-[100px]">
@@ -677,7 +742,9 @@ export function InstanceCreateDialog({
                               onValueChange={(val) => {
                                 const next = [...arr]
                                 const numVal = Number(val)
-                                const isNumericOption = !isNaN(numVal) && optValues.some((o: any) => Number(o) === numVal)
+                                const isNumericOption =
+                                  !isNaN(numVal) &&
+                                  optValues.some((o: string | number) => Number(o) === numVal)
                                 const stored = isNumericOption ? numVal : val
                                 const nextItem = { ...(next[index] ?? {}), [propKey]: stored }
                                 next[index] = nextItem
@@ -688,7 +755,7 @@ export function InstanceCreateDialog({
                                 <SelectValue placeholder={propConfig.placeholder ?? 'Select...'} />
                               </SelectTrigger>
                               <SelectContent>
-                                {optValues.map((opt: any, idx: number) => (
+                                {optValues.map((opt: string | number, idx: number) => (
                                   <SelectItem key={str(opt)} value={str(opt)}>{optionLabels[idx] ?? str(opt)}</SelectItem>
                                 ))}
                               </SelectContent>
@@ -704,7 +771,7 @@ export function InstanceCreateDialog({
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
-                  const defaultItem: Record<string, any> = {}
+                  const defaultItem: Record<string, unknown> = {}
                   Object.entries(itemSchema).forEach(([k, c]) => {
                     if (c?.type === 'select' && c.options?.length) defaultItem[k] = c.options[0]
                     else defaultItem[k] = c?.default ?? ''
@@ -725,7 +792,7 @@ export function InstanceCreateDialog({
         return (
           <div key={fieldName} className="space-y-1.5">
             {labelEl}
-            <Input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} required={isRequired} className="h-9 text-sm" />
+            <Input type="date" value={configInputValue(value)} onChange={(e) => onChange(e.target.value)} required={isRequired} className="h-9 text-sm" />
             {descEl}
           </div>
         )
@@ -763,7 +830,7 @@ export function InstanceCreateDialog({
 
       if (fieldConfig.type === 'object' && fieldConfig.properties) {
         const fromFormData = INSTANCE_OBJECT_GROUPS_FROM_FORMDATA.has(name)
-        const objValue: Record<string, any> = fromFormData
+        const objValue: Record<string, unknown> = fromFormData
           ? (name === 'schedule'
             ? {
                 start_date: formData.start_date ?? '',
@@ -777,18 +844,18 @@ export function InstanceCreateDialog({
                 price_override: formData.price_override ?? '',
               })
           : { ...(fieldConfig.default ?? {}), ...(formData.instance_data_ext[name] ?? {}) }
-        const setObj = (next: Record<string, any>) => {
+        const setObj = (next: Record<string, unknown>) => {
           if (fromFormData) {
             if (name === 'schedule') {
               const dow = Array.isArray(next.days_of_week)
-                ? next.days_of_week.map((v: any) => (typeof v === 'string' ? parseInt(v, 10) : v)).filter((v: any) => !isNaN(v))
+                ? next.days_of_week.map((v) => (typeof v === 'string' ? parseInt(v, 10) : v)).filter((v) => !isNaN(v))
                 : formData.days_of_week
               setFormData({
                 ...formData,
-                start_date: next.start_date ?? formData.start_date,
-                end_date: next.end_date ?? formData.end_date,
-                start_time: next.start_time ?? formData.start_time,
-                end_time: next.end_time ?? formData.end_time,
+                start_date: String(next.start_date ?? formData.start_date),
+                end_date: String(next.end_date ?? formData.end_date),
+                start_time: String(next.start_time ?? formData.start_time),
+                end_time: String(next.end_time ?? formData.end_time),
                 days_of_week: dow,
               })
             } else {
@@ -806,9 +873,14 @@ export function InstanceCreateDialog({
           }
         }
         const propNodes: ReactElement[] = []
-        for (const [propKey, propConfig] of Object.entries(fieldConfig.properties as Record<string, any>)) {
-          const propValue = objValue[propKey] ?? propConfig?.default ?? (propConfig?.type === 'boolean' ? false : (propConfig?.type === 'multiselect' ? [] : ''))
-          const propOnChange = (v: any) => setObj({ ...objValue, [propKey]: v })
+        for (const [propKey, propConfig] of Object.entries(
+          fieldConfig.properties as Record<string, SchemaFieldConfig>
+        )) {
+          const propValue =
+            objValue[propKey] ??
+            propConfig.default ??
+            (propConfig.type === "boolean" ? false : propConfig.type === "multiselect" ? [] : "")
+          const propOnChange = (v: unknown) => setObj({ ...objValue, [propKey]: v })
           const el = renderField(propKey, propConfig, propValue, propOnChange, false, objValue)
           if (el) propNodes.push(el)
         }
@@ -1004,15 +1076,27 @@ export function InstanceCreateDialog({
 
             const dateFields: ReactElement[] = []
             if (hasStartDate) {
-              const fieldConfig = schema!.start_date!
-              const value = formData.start_date || (fieldConfig as any).default || ''
-              const field = renderField('start_date', fieldConfig, value, (newValue) => setFormData({ ...formData, start_date: newValue }), true)
+              const fieldConfig = schema!.start_date as SchemaFieldConfig
+              const value = formData.start_date || configInputValue(fieldConfig.default)
+              const field = renderField(
+                "start_date",
+                fieldConfig,
+                value,
+                (newValue) => setFormData({ ...formData, start_date: String(newValue ?? "") }),
+                true
+              )
               if (field) dateFields.push(field)
             }
             if (hasEndDate) {
-              const fieldConfig = schema!.end_date!
-              const value = formData.end_date || (fieldConfig as any).default || ''
-              const field = renderField('end_date', fieldConfig, value, (newValue) => setFormData({ ...formData, end_date: newValue }), true)
+              const fieldConfig = schema!.end_date as SchemaFieldConfig
+              const value = formData.end_date || configInputValue(fieldConfig.default)
+              const field = renderField(
+                "end_date",
+                fieldConfig,
+                value,
+                (newValue) => setFormData({ ...formData, end_date: String(newValue ?? "") }),
+                true
+              )
               if (field) dateFields.push(field)
             }
             if (dateFields.length === 0) return null
@@ -1038,15 +1122,27 @@ export function InstanceCreateDialog({
             const capacityPriceAsObject = schema?.capacity_price?.type === 'object'
             const commonFields: ReactElement[] = []
             if (!scheduleAsObject && schema?.start_time) {
-              const c = schema.start_time
-              const v = formData.start_time || c.default || ''
-              const f = renderField('start_time', c, v, (x) => setFormData({ ...formData, start_time: x }), true)
+              const c = schema.start_time as SchemaFieldConfig
+              const v = formData.start_time || configInputValue(c.default)
+              const f = renderField(
+                "start_time",
+                c,
+                v,
+                (x) => setFormData({ ...formData, start_time: String(x ?? "") }),
+                true
+              )
               if (f) commonFields.push(f)
             }
             if (!scheduleAsObject && schema?.end_time) {
-              const c = schema.end_time
-              const v = formData.end_time || c.default || ''
-              const f = renderField('end_time', c, v, (x) => setFormData({ ...formData, end_time: x }), true)
+              const c = schema.end_time as SchemaFieldConfig
+              const v = formData.end_time || configInputValue(c.default)
+              const f = renderField(
+                "end_time",
+                c,
+                v,
+                (x) => setFormData({ ...formData, end_time: String(x ?? "") }),
+                true
+              )
               if (f) commonFields.push(f)
             }
             if (!capacityPriceAsObject && schema?.max_students) {
@@ -1078,15 +1174,27 @@ export function InstanceCreateDialog({
               if (f) commonFields.push(f)
             }
             if (schema?.notes) {
-              const c = schema.notes
-              const v = formData.notes || c.default || ''
-              const f = renderField('notes', c, v, (x) => setFormData({ ...formData, notes: x }), true)
+              const c = schema.notes as SchemaFieldConfig
+              const v = formData.notes || configInputValue(c.default)
+              const f = renderField(
+                "notes",
+                c,
+                v,
+                (x) => setFormData({ ...formData, notes: String(x ?? "") }),
+                true
+              )
               if (f) commonFields.push(f)
             }
             if (schema?.status) {
-              const c = schema.status
-              const v = formData.status || c.default || 'scheduled'
-              const f = renderField('status', c, v, (x) => setFormData({ ...formData, status: x }), true)
+              const c = schema.status as SchemaFieldConfig
+              const v = formData.status || configInputValue(c.default) || "scheduled"
+              const f = renderField(
+                "status",
+                c,
+                v,
+                (x) => setFormData({ ...formData, status: String(x ?? "scheduled") }),
+                true
+              )
               if (f) commonFields.push(f)
             }
 

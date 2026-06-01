@@ -2,6 +2,7 @@ import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
 import { notFound } from "next/navigation"
 import { supabaseAdmin } from "@/lib/supabase"
+import { unwrapRelation } from "@/lib/supabase-relation"
 import { LocationProgramsByCategory } from "@/components/location/LocationProgramsByCategory"
 import type { CategoryGroup, LocationProgram } from "@/components/location/LocationProgramsByCategory"
 import { LocationHero } from "@/components/location/LocationHero"
@@ -12,6 +13,7 @@ import { Advantages } from "@/components/Advantages"
 import { Testimonials } from "@/components/Testimonials"
 import { Newsletter } from "@/components/Newsletter"
 import { LocationCta } from "@/components/location/LocationCta"
+import type { StringKeyRecord } from "@/lib/typed-error"
 import {
   FEATURED_INSTANCE_SELECT,
   mapInstanceRowToFeaturedSession,
@@ -295,8 +297,9 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     }
   }
 
-  const programs: LocationProgram[] = (programsData || []).map(
-    (row: any) => ({
+  const programs: LocationProgram[] = (programsData || []).map((row) => {
+    const category = unwrapRelation(row.category)
+    return {
       id: row.id,
       name: row.name,
       display_name: row.display_name,
@@ -304,15 +307,15 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
       poster_url: row.poster_url ?? null,
       featured: row.featured === true,
       session_count: sessionCountByProgramId.get(row.id) ?? 0,
-      category: row.category
+      category: category
         ? {
-            id: row.category.id,
-            name: row.category.name,
-            display_name: row.category.display_name,
+            id: category.id,
+            name: category.name,
+            display_name: category.display_name,
           }
         : null,
-    })
-  )
+    }
+  })
 
   // 该 franchise 订阅的 category；仅展示至少有一个 activity 的 program
   const programsGroupedByCategory: CategoryGroup[] = (() => {

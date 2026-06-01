@@ -88,7 +88,10 @@ export default function EnrollmentsPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; label: string; className?: string }> = {
+    const variants: Record<
+      string,
+      { variant: "default" | "secondary" | "destructive" | "outline"; label: string; className?: string }
+    > = {
       enrolled: { variant: 'default', label: 'Enrolled', className: 'bg-green-100 text-green-700' },
       waitlisted: { variant: 'secondary', label: 'Waitlisted', className: 'bg-yellow-100 text-yellow-700' },
       cancelled: { variant: 'destructive', label: 'Cancelled', className: 'bg-red-100 text-red-700' },
@@ -240,7 +243,9 @@ export default function EnrollmentsPage() {
                   ].map((filterOption) => (
                     <button
                       key={filterOption.key}
-                      onClick={() => setFilter(filterOption.key as any)}
+                      onClick={() =>
+                        setFilter(filterOption.key as typeof filter)
+                      }
                       className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
                         filter === filterOption.key
                           ? 'bg-slate-900 text-white'
@@ -262,7 +267,7 @@ export default function EnrollmentsPage() {
                         : `No ${filter} enrollments found`}
                     </p>
                     <Button asChild>
-                      <Link href="/course-catalog">Browse Courses</Link>
+                      <Link href="/programs">Browse Programs</Link>
                     </Button>
                   </div>
                 ) : (

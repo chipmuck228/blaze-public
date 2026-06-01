@@ -117,9 +117,9 @@ export default function BlazeCampusesManagementPage() {
       const data = await response.json()
       setCampuses(data)
       setFilteredCampuses(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching campuses:", err)
-      setError(err.message || "Failed to load campuses")
+      setError(getErrorMessage(err) || "Failed to load campuses")
     } finally {
       setIsLoading(false)
     }

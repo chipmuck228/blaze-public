@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { canManageStudent } from "@/lib/permissions"
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
     }
     
     // 格式化返回数据
-    const students = (userStudents || []).map((item: any) => {
+    const students = (userStudents || []).map((item) => {
       const student = Array.isArray(item.student) ? item.student[0] : item.student
       // 如果student为null或undefined，跳过这条记录
       if (!student) {
@@ -86,7 +87,7 @@ export async function GET(request: Request) {
         created_at: student.created_at,
         updated_at: student.updated_at,
       }
-    }).filter((student: any) => student !== null && student.is_active !== false)  // 只返回活跃的学生
+    }).filter((student) => student !== null && student.is_active !== false)  // 只返回活跃的学生
     
     // 调试日志（开发环境）
     if (process.env.NODE_ENV === 'development') {
@@ -97,10 +98,10 @@ export async function GET(request: Request) {
       students,
       total: students.length
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching students:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch students" },
+      { error: getErrorMessage(error) || "Failed to fetch students" },
       { status: 500 }
     )
   }
@@ -244,10 +245,10 @@ export async function POST(request: Request) {
       },
       message: "Student created successfully"
     }, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating student:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create student" },
+      { error: getErrorMessage(error) || "Failed to create student" },
       { status: 500 }
     )
   }

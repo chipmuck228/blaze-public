@@ -111,18 +111,7 @@ function getWeekDates(): Date[] {
   return weekDates
 }
 
-export function BusinessHours({ businessHours }: BusinessHoursProps) {
-  if (!businessHours) {
-    return null
-  }
-
-  // 检查是否有任何营业时间数据
-  const hasAnyHours = dayOrder.some(day => businessHours[day as keyof typeof businessHours])
-  
-  if (!hasAnyHours) {
-    return null
-  }
-
+function BusinessHoursContent({ businessHours }: { businessHours: NonNullable<BusinessHoursProps['businessHours']> }) {
   // 获取本周的日期列表
   const weekDates = useMemo(() => getWeekDates(), [])
   
@@ -229,4 +218,20 @@ export function BusinessHours({ businessHours }: BusinessHoursProps) {
       </div>
     </div>
   )
+}
+
+export function BusinessHours({ businessHours }: BusinessHoursProps) {
+  if (!businessHours) {
+    return null
+  }
+
+  const hasAnyHours = dayOrder.some(
+    (day) => businessHours[day as keyof typeof businessHours]
+  )
+
+  if (!hasAnyHours) {
+    return null
+  }
+
+  return <BusinessHoursContent businessHours={businessHours} />
 }

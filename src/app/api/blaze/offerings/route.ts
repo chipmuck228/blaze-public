@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
         if (error.code === 'PGRST116') {
           return NextResponse.json({ error: "Offering not found" }, { status: 404 })
         }
-        throw new Error(error.message)
+        throw new Error(getErrorMessage(error))
       }
 
       return NextResponse.json(data, { status: 200 })
@@ -95,7 +96,7 @@ export async function GET(request: Request) {
     const { data: offerings, error } = await query
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     // 如果提供了搜索参数，进行过滤
@@ -103,7 +104,7 @@ export async function GET(request: Request) {
     if (search) {
       const searchLower = search.toLowerCase()
       filteredOfferings = filteredOfferings.filter(
-        (offering: any) =>
+        (offering) =>
           offering.name?.toLowerCase().includes(searchLower) ||
           offering.description?.toLowerCase().includes(searchLower) ||
           offering.slug?.toLowerCase().includes(searchLower)
@@ -111,10 +112,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(filteredOfferings, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching offerings:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch offerings" },
+      { error: getErrorMessage(error) || "Failed to fetch offerings" },
       { status: 500 }
     )
   }
@@ -257,16 +258,16 @@ export async function POST(request: Request) {
     if (error) {
       console.error("Error creating offering:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to create offering" },
+        { error: getErrorMessage(error) || "Failed to create offering" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating offering:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create offering" },
+      { error: getErrorMessage(error) || "Failed to create offering" },
       { status: 500 }
     )
   }

@@ -1,6 +1,5 @@
 Background (section backdrop):
-  awards-background.jpeg  — preferred
-  awards-background.jpg   — auto-fallback if .jpeg missing
+  awards-background.jpeg
 
 Gallery (WebP):
   champion.webp

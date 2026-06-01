@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { verifyEmail } from "@/lib/db"
 
 export async function GET(request: Request) {
@@ -19,9 +20,9 @@ export async function GET(request: Request) {
       { message: "Email verified successfully!", user: { id: user.id, name: user.name, email: user.email } },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Verification failed" },
+      { error: getErrorMessage(error) || "Verification failed" },
       { status: 400 }
     )
   }
@@ -45,9 +46,9 @@ export async function POST(request: Request) {
       { message: "Email verified successfully!", user: { id: user.id, name: user.name, email: user.email } },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Verification failed" },
+      { error: getErrorMessage(error) || "Verification failed" },
       { status: 400 }
     )
   }

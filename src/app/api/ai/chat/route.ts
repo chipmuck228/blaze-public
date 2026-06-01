@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { getErrorMessage } from "@/lib/typed-error"
 import { streamText, UIMessage, convertToModelMessages } from 'ai'
 import { google } from '@ai-sdk/google'
 import { getFranchiseDetailsByCode, getFranchiseLocations } from '@/lib/db'
@@ -143,14 +144,14 @@ Important guidelines:
 
     // 返回 UIMessage 流式响应，与 @ai-sdk/react 的 useChat hook 兼容
     return result.toUIMessageStreamResponse()
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in AI chat API:', error)
     
     // 提供更友好的错误信息
     let errorMessage = "I'm experiencing some technical difficulties. Please try again in a moment, or feel free to contact our campus directly."
     let statusCode = 500
 
-    const errorMsg = error.message?.toLowerCase() || ''
+    const errorMsg = getErrorMessage(error)?.toLowerCase() || ''
 
     if (errorMsg.includes('timeout') || errorMsg.includes('connect timeout')) {
       errorMessage = "I'm having trouble connecting right now. Please check your internet connection and try again in a moment."
@@ -172,7 +173,7 @@ Important guidelines:
     return new Response(
       JSON.stringify({ 
         error: errorMessage,
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: process.env.NODE_ENV === 'development' ? getErrorMessage(error) : undefined
       }),
       {
         status: statusCode,

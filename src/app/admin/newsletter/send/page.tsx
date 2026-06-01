@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress"
 import { Loader2, Send, Clock, CheckCircle, XCircle } from "lucide-react"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 import { NewsletterDeliveryPanel } from "@/components/admin/newsletter/NewsletterDeliveryPanel"
+import type { StringKeyRecord } from "@/lib/typed-error"
 
 interface NewsletterTemplate {
   id: string
@@ -129,7 +130,7 @@ export default function NewsletterSendPage() {
       // 只显示 active 的 templates
       const activeTemplates = (data.templates || []).filter((t: NewsletterTemplate) => t.is_active)
       setTemplates(activeTemplates)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching templates:", error)
       adminToast.error("Failed to load templates")
     } finally {
@@ -204,7 +205,7 @@ export default function NewsletterSendPage() {
 
       adminToast.success("Test email sent")
       setTestEmail("")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error sending test email:", error)
       adminToast.error("Failed to send test email", {
         description: getErrorMessage(error),
@@ -240,7 +241,7 @@ export default function NewsletterSendPage() {
         ? "/api/admin/newsletter/campaigns/send"
         : "/api/admin/newsletter/campaigns/schedule"
 
-      const body: any = {
+      const body: StringKeyRecord = {
         template_id: selectedTemplateId,
       }
 
@@ -291,7 +292,7 @@ export default function NewsletterSendPage() {
         setPreviewContent("")
         setIsSending(false)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error sending newsletter:", error)
       adminToast.error(`Failed to ${sendMode === "now" ? "send" : "schedule"} newsletter`, {
         description: getErrorMessage(error),

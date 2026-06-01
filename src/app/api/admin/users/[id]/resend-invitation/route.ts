@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { resendInvitation } from "@/lib/db"
 import { sendInvitationEmail } from "@/lib/email"
@@ -50,9 +51,9 @@ export async function POST(
         user.role || 'user'
       )
       emailSent = true
-    } catch (emailErrorObj: any) {
+    } catch (emailErrorObj: unknown) {
       console.error("Failed to send invitation email:", emailErrorObj)
-      emailError = emailErrorObj.message || "Failed to send invitation email"
+      emailError = getErrorMessage(emailErrorObj, "Failed to send invitation email")
     }
 
     return NextResponse.json(
@@ -67,10 +68,10 @@ export async function POST(
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error resending invitation:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to resend invitation" },
+      { error: getErrorMessage(error) || "Failed to resend invitation" },
       { status: 400 }
     )
   }

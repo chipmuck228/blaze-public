@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { calculateRefundPolicy, processInstanceRefund } from "@/lib/db"
 import { isStudentAccount } from "@/lib/permissions"
@@ -43,10 +44,10 @@ export async function GET(
       policy,
       message: "Refund policy calculated successfully",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error calculating refund policy:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to calculate refund policy" },
+      { error: getErrorMessage(error) || "Failed to calculate refund policy" },
       { status: 500 }
     )
   }
@@ -108,12 +109,12 @@ export async function POST(
           ? "Refund processed successfully" 
           : "Credit created successfully",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 如果是权限错误，返回特殊错误码
-      if (error.message.includes('Unauthorized')) {
+      if (getErrorMessage(error).includes('Unauthorized')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "UNAUTHORIZED",
           },
           { status: 403 }
@@ -121,10 +122,10 @@ export async function POST(
       }
 
       // 如果是状态错误，返回特殊错误码
-      if (error.message.includes('not eligible') || error.message.includes('not paid')) {
+      if (getErrorMessage(error).includes('not eligible') || getErrorMessage(error).includes('not paid')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "INVALID_STATUS",
           },
           { status: 400 }
@@ -132,10 +133,10 @@ export async function POST(
       }
 
       // 如果是退款不可用，返回特殊错误码
-      if (error.message.includes('not available')) {
+      if (getErrorMessage(error).includes('not available')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "REFUND_NOT_AVAILABLE",
           },
           { status: 400 }
@@ -143,10 +144,10 @@ export async function POST(
       }
 
       // 如果是Stripe错误，返回特殊错误码
-      if (error.message.includes('Stripe')) {
+      if (getErrorMessage(error).includes('Stripe')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "STRIPE_ERROR",
           },
           { status: 500 }
@@ -155,10 +156,10 @@ export async function POST(
 
       throw error
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing refund:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to process refund" },
+      { error: getErrorMessage(error) || "Failed to process refund" },
       { status: 500 }
     )
   }

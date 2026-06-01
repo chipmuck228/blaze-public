@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface TrafficSSEData {
@@ -33,6 +34,7 @@ export function useTrafficSSE({
   const reconnectAttemptsRef = useRef(0)
   const maxReconnectAttempts = 5
   const onUpdateRef = useRef(onUpdate)
+  const connectRef = useRef<() => void>(() => {})
 
   // 使用 useRef 存储 onUpdate 回调，避免触发重新连接
   useEffect(() => {
@@ -107,7 +109,7 @@ export function useTrafficSSE({
             console.log(`[SSE] Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`)
 
             reconnectTimeoutRef.current = setTimeout(() => {
-              connect()
+              connectRef.current()
             }, delay)
           } else {
             console.error('[SSE] Max reconnection attempts reached')
@@ -115,11 +117,15 @@ export function useTrafficSSE({
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SSE] Error creating EventSource:', err)
-      setError(err.message || 'Failed to create connection')
+      setError(getErrorMessage(err) || 'Failed to create connection')
     }
   }, [enabled, period, startDate, endDate])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   useEffect(() => {
     if (enabled) {

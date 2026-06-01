@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -75,10 +76,12 @@ export async function GET(request: Request) {
     }
 
     // 格式化响应数据
-    const failedSends = (data || []).map((send: any) => ({
+    const failedSends = (data || []).map((send) => {
+      const campaign = Array.isArray(send.campaign) ? send.campaign[0] : send.campaign
+      return {
       id: send.id,
       campaign_id: send.campaign_id,
-      campaign_subject: send.campaign?.subject || "Unknown",
+      campaign_subject: campaign?.subject || "Unknown",
       subscriber_id: send.subscriber_id,
       email: send.email,
       status: send.status,
@@ -89,7 +92,8 @@ export async function GET(request: Request) {
       resend_email_id: send.resend_email_id || null,
       created_at: send.created_at,
       updated_at: send.updated_at,
-    }))
+    }
+    })
 
     const totalPages = count ? Math.ceil(count / limit) : 0
 
@@ -103,10 +107,10 @@ export async function GET(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching failed sends:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch failed sends" },
+      { error: getErrorMessage(error) || "Failed to fetch failed sends" },
       { status: 500 }
     )
   }

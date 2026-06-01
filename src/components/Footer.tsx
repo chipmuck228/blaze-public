@@ -1,4 +1,5 @@
 'use client'
+import Link from "next/link"
 import { ExternalLink } from "lucide-react";
 import { BlazeLogoIcon } from "./Icons";
 import { FacebookIcon, InstagramIcon, YoutubeIcon, XiaohongshuIcon } from "./Icons";
@@ -10,13 +11,9 @@ export const Footer = () => {
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start justify-between">
           {/* Logo */}
           <div className="shrink-0 flex flex-col gap-4">
-            <a
-              rel="noreferrer noopener"
-              href="/"
-              className="font-bold text-xl flex"
-            >
+            <Link href="/" className="font-bold text-xl flex">
               <BlazeLogoIcon />
-            </a>
+            </Link>
             {/* Copyright */}
             <div className="text-sm text-muted-foreground pl-4">
               &copy; 2025{" "}

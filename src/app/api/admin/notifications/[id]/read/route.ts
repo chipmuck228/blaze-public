@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -38,10 +39,10 @@ export async function PUT(
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error marking notification as read:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to mark notification as read" },
+      { error: getErrorMessage(error) || "Failed to mark notification as read" },
       { status: 500 }
     )
   }

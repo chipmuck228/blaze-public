@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useEffect, useState } from "react"
 import { Loader2, MapPin, Mail, Phone, Clock, BookOpen, Calendar, Target } from "lucide-react"
 import {
@@ -74,9 +75,9 @@ export function LocationFeatures({ franchiseCode, primaryAddressFromCampus }: Lo
         }
         const franchiseData = await response.json()
         setFranchise(franchiseData)
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching franchise:", err)
-        setError(err.message || "Failed to load franchise data")
+        setError(getErrorMessage(err) || "Failed to load franchise data")
       } finally {
         setIsLoading(false)
       }

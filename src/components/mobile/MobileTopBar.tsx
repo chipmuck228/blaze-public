@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, User, LogIn, LayoutDashboard, CreditCard, FileText } from 'lucide-react'
+import { Search, Bell, User, LogIn, LayoutDashboard, FileText } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -57,7 +57,7 @@ export function MobileTopBar() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push('/course-catalog')}
+            onClick={() => router.push('/programs')}
             className="h-9 w-9"
           >
             <Search className="h-5 w-5" />
@@ -118,12 +118,6 @@ export function MobileTopBar() {
                   <Link href="/profile">
                     <User className="mr-2 h-4 w-4" />
                     Profile
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/billing">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Billing
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

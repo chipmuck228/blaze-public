@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -25,14 +26,14 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: "Offering type not found" }, { status: 404 })
       }
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     return NextResponse.json(offeringType, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching offering type:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch offering type" },
+      { error: getErrorMessage(error) || "Failed to fetch offering type" },
       { status: 500 }
     )
   }
@@ -109,7 +110,7 @@ export async function PUT(
         : null
 
     // 更新 offering type
-    const updateData: any = {}
+    const updateData: StringKeyRecord = {}
     if (code !== undefined) updateData.code = code
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
@@ -133,10 +134,10 @@ export async function PUT(
     }
 
     return NextResponse.json(offeringType, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating offering type:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update offering type" },
+      { error: getErrorMessage(error) || "Failed to update offering type" },
       { status: 500 }
     )
   }
@@ -194,14 +195,14 @@ export async function DELETE(
       .eq("id", id)
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     return NextResponse.json({ success: true }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting offering type:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete offering type" },
+      { error: getErrorMessage(error) || "Failed to delete offering type" },
       { status: 500 }
     )
   }

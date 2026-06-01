@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { Navbar } from '@/components/Navbar'
 import { Footer } from '@/components/Footer'
 import { AboutHero } from '@/components/about/AboutHero'
-import { faqData, type FaqTabKey } from '@/app/about/faq/faq-data'
+import { faqData, type FaqTabKey } from '@/lib/faq-data'
 import { HelpCircle, Plus, Minus } from 'lucide-react'
 import Script from 'next/script'
 

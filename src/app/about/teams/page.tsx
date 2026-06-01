@@ -9,6 +9,7 @@ import Image from 'next/image'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { YoutubeIcon, XiaohongshuIcon, FacebookIcon, InstagramIcon } from '@/components/Icons'
+import { isUsableTeamImageUrl } from '@/lib/team-avatar'
 
 interface TeamMember {
   id: string
@@ -136,7 +137,7 @@ export default function AboutTeamsPage() {
                   return (
                     <div key={member.id} className="group bg-white rounded-[40px] overflow-hidden border border-slate-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300">
                       <div className="h-72 overflow-hidden relative bg-gradient-to-br from-blue-50 to-blue-100">
-                        {member.image_url?.trim() ? (
+                        {isUsableTeamImageUrl(member.image_url) ? (
                           <Image
                             src={member.image_url}
                             alt={member.name}
@@ -149,7 +150,7 @@ export default function AboutTeamsPage() {
                             }}
                           />
                         ) : null}
-                        {!member.image_url?.trim() && (
+                        {!isUsableTeamImageUrl(member.image_url) && (
                           <div className="w-full h-full flex items-center justify-center">
                             <div className="h-32 w-32 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-4xl font-bold shadow-lg">
                               {initials}
@@ -173,7 +174,7 @@ export default function AboutTeamsPage() {
                               <div className="space-y-3">
                                 <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
                                   <Avatar className="h-12 w-12 shrink-0">
-                                    {member.image_url?.trim() ? (
+                                    {isUsableTeamImageUrl(member.image_url) ? (
                                       <>
                                         <AvatarImage src={member.image_url} alt={member.name} />
                                         <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">{initials}</AvatarFallback>

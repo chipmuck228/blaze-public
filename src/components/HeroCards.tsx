@@ -1,4 +1,5 @@
 'use client'
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect, useRef } from "react"
 import { Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import type { FeaturedSession } from "@/lib/featured-sessions"
@@ -25,7 +26,7 @@ export const HeroCards = () => {
         setFeaturedSessions(data.instances || [])
       } catch (err) {
         console.error('Error fetching featured sessions:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load featured sessions')
+        setError(err instanceof Error ? getErrorMessage(err) : 'Failed to load featured sessions')
       } finally {
         setIsLoading(false)
       }

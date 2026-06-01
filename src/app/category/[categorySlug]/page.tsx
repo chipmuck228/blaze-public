@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect, useMemo, Suspense } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
@@ -146,7 +147,7 @@ function CategoryPageContent() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load category")
+        if (!cancelled) setError(err instanceof Error ? getErrorMessage(err) : "Failed to load category")
       })
       .finally(() => {
         if (!cancelled) setIsLoadingCategory(false)
@@ -178,18 +179,18 @@ function CategoryPageContent() {
     params.set("category", category.id)
     if (locationFromUrl) params.set("location", locationFromUrl)
     const apiUrl = `/api/public/instances-v2?${params.toString()}`
-    console.log("[Category page] Fetching instances-v2:", apiUrl, { categoryId: category.id, locationFromUrl })
+    console.log("[v2_instance] category page fetch:", apiUrl, { categoryId: category.id, locationFromUrl })
     fetch(apiUrl)
       .then((res) => {
         if (cancelled) return res.json()
-        console.log("[Category page] instances-v2 response:", { ok: res.ok, status: res.status })
+        console.log("[v2_instance] category page response:", { ok: res.ok, status: res.status })
         if (!res.ok) throw new Error("Failed to fetch programs")
         return res.json()
       })
       .then((data) => {
         if (cancelled) return
         const list = data?.franchises ?? []
-        console.log("[Category page] instances-v2 data:", {
+        console.log("[v2_instance] category page data:", {
           franchisesCount: list.length,
           franchises: list.map((f: Franchise) => ({ code: f.code, name: f.name, programsCount: f.programs?.length ?? 0, instancesCount: f.programs?.reduce((s, p) => s + (p.instances?.length ?? 0), 0) ?? 0 })),
           rawKeys: data ? Object.keys(data) : [],
@@ -198,7 +199,7 @@ function CategoryPageContent() {
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error("[Category page] instances-v2 fetch error:", err)
+          console.error("[v2_instance] category page fetch error:", err)
           setFranchises([])
         }
       })

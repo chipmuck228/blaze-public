@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect } from "react"
 import { Button } from "./ui/button"
 import { ArrowRight, Loader2, BookOpen, GraduationCap, Sparkles, Trophy, Rocket } from "lucide-react"
@@ -116,7 +117,7 @@ export const Categories = () => {
         setCategories(items)
       } catch (err) {
         console.error('Error fetching categories:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load programs')
+        setError(err instanceof Error ? getErrorMessage(err) : 'Failed to load programs')
       } finally {
         setIsLoading(false)
       }

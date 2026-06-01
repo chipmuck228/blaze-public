@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { sendNewsletterEmail } from "@/lib/email"
 import { prepareNewsletterHtmlForSend } from "@/lib/newsletter-template-runtime"
@@ -198,7 +199,7 @@ export async function POST(request: Request) {
           .eq("id", send.id)
 
         successCount++
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(`Failed to retry send ${send.id}:`, error)
 
         // 更新重试次数和错误信息
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
           .update({
             retry_count: (send.retry_count || 0) + 1,
             last_retry_at: new Date().toISOString(),
-            error_message: error.message || "Retry failed",
+            error_message: getErrorMessage(error) || "Retry failed",
             updated_at: new Date().toISOString(),
           })
           .eq("id", send.id)
@@ -281,7 +282,7 @@ export async function POST(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing retry task:", error)
 
     // 如果任务存在，更新为失败状态
@@ -291,7 +292,7 @@ export async function POST(request: Request) {
           .from("newsletter_retry_tasks")
           .update({
             status: "failed",
-            error_message: error.message || "Task processing failed",
+            error_message: getErrorMessage(error) || "Task processing failed",
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -311,10 +312,10 @@ export async function POST(request: Request) {
               user_id: task.user_id,
               type: "retry_task_failed",
               title: "Retry Task Failed",
-              message: `Retry task failed: ${error.message || "Unknown error"}`,
+              message: `Retry task failed: ${getErrorMessage(error) || "Unknown error"}`,
               data: {
                 task_id: taskId,
-                error_message: error.message,
+                error_message: getErrorMessage(error),
               },
               is_read: false,
             })
@@ -323,13 +324,13 @@ export async function POST(request: Request) {
             console.error("Error creating failure notification:", notificationInsertError)
           }
         }
-      } catch (updateError: any) {
+      } catch (updateError: unknown) {
         console.error("Error updating task status:", updateError)
       }
     }
 
     return NextResponse.json(
-      { error: error.message || "Failed to process retry task" },
+      { error: getErrorMessage(error) || "Failed to process retry task" },
       { status: 500 }
     )
   }

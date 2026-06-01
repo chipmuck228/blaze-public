@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { updateTeamMember, deleteTeamMember } from "@/lib/db"
 
@@ -38,7 +39,7 @@ export async function PATCH(
       social_networks 
     } = body
 
-    const updates: any = {}
+    const updates: StringKeyRecord = {}
     if (user_id !== undefined) updates.user_id = user_id
     if (image_url !== undefined) updates.image_url = image_url
     if (name !== undefined) updates.name = name
@@ -56,10 +57,10 @@ export async function PATCH(
       { message: "Team member updated successfully", team },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating team member:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update team member" },
+      { error: getErrorMessage(error) || "Failed to update team member" },
       { status: 500 }
     )
   }
@@ -93,10 +94,10 @@ export async function DELETE(
       { message: "Team member deleted successfully" },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting team member:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete team member" },
+      { error: getErrorMessage(error) || "Failed to delete team member" },
       { status: 500 }
     )
   }

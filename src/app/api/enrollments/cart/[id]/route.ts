@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -102,10 +103,10 @@ export async function DELETE(
     return NextResponse.json({
       message: "Removed from cart successfully"
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error removing from cart:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to remove from cart" },
+      { error: getErrorMessage(error) || "Failed to remove from cart" },
       { status: 500 }
     )
   }

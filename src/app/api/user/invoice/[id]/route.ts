@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { stripe } from "@/lib/stripe"
@@ -195,10 +196,10 @@ export async function GET(
     }
 
     return NextResponse.json({ invoice })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error generating invoice:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to generate invoice" },
+      { error: getErrorMessage(error) || "Failed to generate invoice" },
       { status: 500 }
     )
   }

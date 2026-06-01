@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -45,16 +46,16 @@ export async function GET(
       }
       console.error("Error fetching program:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch program" },
+        { error: getErrorMessage(error) || "Failed to fetch program" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching program:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch program" },
+      { error: getErrorMessage(error) || "Failed to fetch program" },
       { status: 500 }
     )
   }
@@ -115,7 +116,7 @@ export async function PUT(
     }
 
     // 更新 program（不允许修改 franchise_id, category_id, name）
-    const updateData: any = {
+    const updateData: StringKeyRecord = {
       display_name,
       description: description || null,
       start_date,
@@ -152,16 +153,16 @@ export async function PUT(
     if (error) {
       console.error("Error updating program:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to update program" },
+        { error: getErrorMessage(error) || "Failed to update program" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating program:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update program" },
+      { error: getErrorMessage(error) || "Failed to update program" },
       { status: 500 }
     )
   }
@@ -224,16 +225,16 @@ export async function DELETE(
     if (error) {
       console.error("Error deleting program:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to delete program" },
+        { error: getErrorMessage(error) || "Failed to delete program" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ message: "Program deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting program:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete program" },
+      { error: getErrorMessage(error) || "Failed to delete program" },
       { status: 500 }
     )
   }

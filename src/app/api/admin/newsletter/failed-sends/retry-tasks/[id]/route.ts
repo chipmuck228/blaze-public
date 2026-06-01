@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -36,10 +37,10 @@ export async function GET(
     }
 
     return NextResponse.json(task, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching retry task:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch retry task" },
+      { error: getErrorMessage(error) || "Failed to fetch retry task" },
       { status: 500 }
     )
   }

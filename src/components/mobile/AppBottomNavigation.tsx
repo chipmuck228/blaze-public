@@ -81,7 +81,7 @@ export function AppBottomNavigation() {
       id: 'courses',
       label: 'Courses',
       icon: BookOpen,
-      href: '/course-catalog',
+      href: '/programs',
     },
     ...(PUBLIC_USER_AUTH_ENABLED
       ? ([

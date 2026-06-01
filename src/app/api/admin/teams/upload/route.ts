@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { put } from "@vercel/blob"
 
@@ -63,10 +64,10 @@ export async function POST(request: NextRequest) {
       { url: blob.url },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error uploading file:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to upload file" },
+      { error: getErrorMessage(error) || "Failed to upload file" },
       { status: 500 }
     )
   }

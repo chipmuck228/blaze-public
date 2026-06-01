@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { getErrorCode, getErrorMessage } from "@/lib/typed-error"
 import { auth } from '@/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getDateRangeFromParams } from '@/lib/traffic-api-utils'
@@ -121,14 +122,17 @@ export async function GET(request: NextRequest) {
             const message = `data: ${JSON.stringify(data)}\n\n`
             controller.enqueue(encoder.encode(message))
             console.log('[SSE Stream] Data sent:', data)
-          } catch (error: any) {
+          } catch (error: unknown) {
             // 如果流已关闭，忽略错误
             if (isStreamClosed) {
               return
             }
 
             // 检查是否是流关闭错误
-            if (error?.message?.includes('closed') || error?.code === 'ERR_INVALID_STATE') {
+            if (
+              getErrorMessage(error).includes("closed") ||
+              getErrorCode(error) === "ERR_INVALID_STATE"
+            ) {
               isStreamClosed = true
               return
             }
@@ -178,10 +182,10 @@ export async function GET(request: NextRequest) {
         'X-Accel-Buffering': 'no', // 禁用 Nginx 缓冲
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating SSE stream:', error)
     return new Response(
-      `data: ${JSON.stringify({ error: error.message || 'Failed to create stream' })}\n\n`,
+      `data: ${JSON.stringify({ error: getErrorMessage(error) || 'Failed to create stream' })}\n\n`,
       {
         status: 500,
         headers: {

@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect, useMemo, Suspense, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/Navbar"
@@ -353,7 +354,7 @@ function ProgramsPageContent() {
       console.error("Error loading programs page:", err)
       setInstancesFranchises([])
       setCatalogCategories([])
-      setError(err instanceof Error ? err.message : "Failed to load programs")
+      setError(err instanceof Error ? getErrorMessage(err) : "Failed to load programs")
     } finally {
       setIsLoading(false)
     }

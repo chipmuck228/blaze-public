@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import type { CourseEnrollment } from "@/lib/db"
 import { getFranchiseByCode } from "@/lib/db"
+
+type AdminEnrollmentListRow = {
+  user?: { name?: string; email?: string }
+  instance?: { assignment?: { course?: { id?: string; name?: string } } }
+}
 
 // GET: 获取所有注册（支持筛选、分页、排序）
 export async function GET(request: Request) {
@@ -99,14 +105,15 @@ export async function GET(request: Request) {
     const { data, error, count } = await query
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     // 如果有关键词搜索，在内存中过滤（因为涉及关联表）
     let filteredData = data || []
     if (search) {
       const searchLower = search.toLowerCase()
-      filteredData = filteredData.filter((enrollment: any) => {
+      filteredData = filteredData.filter((row) => {
+        const enrollment = row as AdminEnrollmentListRow
         const userName = enrollment.user?.name?.toLowerCase() || ""
         const userEmail = enrollment.user?.email?.toLowerCase() || ""
         const courseName = enrollment.instance?.assignment?.course?.name?.toLowerCase() || ""
@@ -120,7 +127,8 @@ export async function GET(request: Request) {
 
     // 如果指定了 course_id，在内存中过滤
     if (courseId) {
-      filteredData = filteredData.filter((enrollment: any) => {
+      filteredData = filteredData.filter((row) => {
+        const enrollment = row as AdminEnrollmentListRow
         return enrollment.instance?.assignment?.course?.id === courseId
       })
     }
@@ -132,10 +140,10 @@ export async function GET(request: Request) {
       limit,
       totalPages: Math.ceil((count || filteredData.length) / limit),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching enrollments:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch enrollments" },
+      { error: getErrorMessage(error) || "Failed to fetch enrollments" },
       { status: 500 }
     )
   }

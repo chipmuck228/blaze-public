@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
         throw fetchError
       }
 
-      sendIds = (failedSends || []).map((s: any) => s.id)
+      sendIds = (failedSends || []).map((s) => String(s.id))
     } else if (send_ids && Array.isArray(send_ids)) {
       sendIds = send_ids
     } else {
@@ -115,7 +116,7 @@ export async function POST(request: Request) {
       .catch((error) => {
         console.error(`[Retry API] Error triggering task processing:`, error)
         console.error(`[Retry API] Error details:`, {
-          message: error.message,
+          message: getErrorMessage(error),
           stack: error.stack,
           baseUrl,
           taskId: task.id,
@@ -132,10 +133,10 @@ export async function POST(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating retry task:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create retry task" },
+      { error: getErrorMessage(error) || "Failed to create retry task" },
       { status: 500 }
     )
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -30,7 +31,7 @@ export async function GET() {
       .order("name", { ascending: true })
 
     if (campusesError) {
-      console.warn("Error fetching campuses for franchise addresses:", campusesError)
+      console.warn("[v2_campus] Error fetching campuses for franchise addresses:", campusesError)
     }
 
     const franchiseIdToAddress = new Map<string, { address?: string; city?: string; state?: string; zip_code?: string }>()
@@ -61,7 +62,7 @@ export async function GET() {
       .eq("is_visible", true)
 
     if (categoryMapsError) {
-      console.warn("Error fetching category subscriptions for franchise counts:", categoryMapsError)
+      console.warn("[v2_franchise_category_map] Error fetching category subscriptions:", categoryMapsError)
     }
 
     const franchiseIdToProgramCount = new Map<string, number>()
@@ -94,10 +95,10 @@ export async function GET() {
     })
 
     return NextResponse.json(result, { status: 200 })
-  } catch (error: any) {
-    console.error("Error fetching public franchises v2:", error)
+  } catch (error: unknown) {
+    console.error("[v2_franchise] Error fetching public franchises:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch franchises" },
+      { error: getErrorMessage(error) || "Failed to fetch franchises" },
       { status: 500 }
     )
   }

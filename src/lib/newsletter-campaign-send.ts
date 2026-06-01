@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase"
+import { getErrorMessage } from "@/lib/typed-error"
 import { sendNewsletterEmail } from "@/lib/email"
 import {
   createAndSendNewsletterBroadcast,
@@ -144,7 +145,7 @@ async function sendNewsletterCampaignPerRecipient(
         })
         .eq("id", campaignId)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Send failed"
+      const message = error instanceof Error ? getErrorMessage(error) : "Send failed"
       console.error(`Failed to send to ${subscriber.email}:`, error)
 
       await supabaseAdmin

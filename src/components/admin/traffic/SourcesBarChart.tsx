@@ -1,5 +1,6 @@
 'use client'
 
+import type { StringKeyRecord } from "@/lib/typed-error"
 import {
   BarChart,
   Bar,
@@ -80,9 +81,9 @@ export function SourcesBarChart({ data }: SourcesBarChartProps) {
             fontWeight: 600,
             marginBottom: '4px',
           }}
-          formatter={(value: number, payload: any) => {
-            const item = payload?.payload || payload
-            const percentage = item?.percentage || 0
+          formatter={(value: number, _name: string, item) => {
+            const row = (item?.payload ?? item) as { percentage?: number }
+            const percentage = row?.percentage ?? 0
             return [`${value.toLocaleString()} (${percentage}%)`, 'Visits']
           }}
         />

@@ -4,6 +4,7 @@
  */
 
 import { supabaseAdmin } from "@/lib/supabase"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 
 // ==================== Offerings V2 ====================
 
@@ -15,7 +16,7 @@ export interface OfferingV2 {
   poster_url: string | null
   offering_type: string
   status: string
-  type_config: Record<string, any>
+  type_config: Record<string, unknown>
   target_audience: string | null
   learning_outcomes: string | null
   prerequisites: string | null
@@ -45,17 +46,17 @@ export async function getOfferingV2(offeringId: string): Promise<OfferingV2 | nu
       // 如果是网络错误或其他错误，提供更详细的错误信息
       console.error(`Error fetching offering v2 (id: ${offeringId}):`, {
         code: error.code,
-        message: error.message,
+        message: getErrorMessage(error),
         details: error.details,
         hint: error.hint
       })
-      throw new Error(`Failed to fetch offering v2: ${error.message || error.code || 'Unknown error'}`)
+      throw new Error(`Failed to fetch offering v2: ${getErrorMessage(error) || error.code || 'Unknown error'}`)
     }
 
     return data as OfferingV2
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 捕获非 Supabase 错误（如网络错误）
-    if (err instanceof TypeError && err.message.includes('fetch')) {
+    if (err instanceof TypeError && getErrorMessage(err).includes('fetch')) {
       console.error(`Network error fetching offering v2 (id: ${offeringId}):`, err)
       throw new Error(`Network error: Unable to connect to database. Please check your connection and try again.`)
     }
@@ -81,17 +82,17 @@ export async function getOfferingV2ByLegacyId(legacyOfferingId: string): Promise
       }
       console.error(`Error fetching offering v2 by legacy id (${legacyOfferingId}):`, {
         code: error.code,
-        message: error.message,
+        message: getErrorMessage(error),
         details: error.details,
         hint: error.hint
       })
-      throw new Error(`Failed to fetch offering v2 by legacy id: ${error.message || error.code || 'Unknown error'}`)
+      throw new Error(`Failed to fetch offering v2 by legacy id: ${getErrorMessage(error) || error.code || 'Unknown error'}`)
     }
 
     return data as OfferingV2
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 捕获非 Supabase 错误（如网络错误）
-    if (err instanceof TypeError && err.message.includes('fetch')) {
+    if (err instanceof TypeError && getErrorMessage(err).includes('fetch')) {
       console.error(`Network error fetching offering v2 by legacy id (${legacyOfferingId}):`, err)
       throw new Error(`Network error: Unable to connect to database. Please check your connection and try again.`)
     }
@@ -141,7 +142,7 @@ export async function getAvailableOfferingsV2(
   const { data, error } = await query
 
   if (error) {
-    throw new Error(`Failed to fetch available offerings v2: ${error.message}`)
+    throw new Error(`Failed to fetch available offerings v2: ${getErrorMessage(error)}`)
   }
 
   let offerings = (data || []) as OfferingV2[]
@@ -168,7 +169,7 @@ export interface FranchiseV2 {
   name: string
   primary_domain: string | null
   timezone: string
-  branding_config: Record<string, any> | null
+  branding_config: Record<string, unknown> | null
   is_active: boolean
   cancellation_policy: string | null
   legacy_franchise_id: string | null
@@ -190,7 +191,7 @@ export async function getFranchiseV2(franchiseId: string): Promise<FranchiseV2 |
     if (error.code === 'PGRST116') {
       return null // Not found
     }
-    throw new Error(`Failed to fetch franchise v2: ${error.message}`)
+    throw new Error(`Failed to fetch franchise v2: ${getErrorMessage(error)}`)
   }
 
   return data as FranchiseV2
@@ -210,7 +211,7 @@ export async function getFranchiseV2ByLegacyId(legacyFranchiseId: string): Promi
     if (error.code === 'PGRST116') {
       return null // Not found
     }
-    throw new Error(`Failed to fetch franchise v2 by legacy id: ${error.message}`)
+    throw new Error(`Failed to fetch franchise v2 by legacy id: ${getErrorMessage(error)}`)
   }
 
   return data as FranchiseV2
@@ -230,7 +231,7 @@ export async function getFranchiseV2ByCode(code: string): Promise<FranchiseV2 | 
     if (error.code === 'PGRST116') {
       return null // Not found
     }
-    throw new Error(`Failed to fetch franchise v2 by code: ${error.message}`)
+    throw new Error(`Failed to fetch franchise v2 by code: ${getErrorMessage(error)}`)
   }
 
   return data as FranchiseV2
@@ -251,7 +252,7 @@ export async function updateFranchiseV2(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update franchise v2: ${error.message}`)
+    throw new Error(`Failed to update franchise v2: ${getErrorMessage(error)}`)
   }
 
   return data as FranchiseV2
@@ -340,7 +341,7 @@ export async function createInstanceV2(
     .single()
 
   if (error) {
-    throw new Error(`Failed to create instance v2: ${error.message}`)
+    throw new Error(`Failed to create instance v2: ${getErrorMessage(error)}`)
   }
 
   return data as InstanceV2
@@ -355,7 +356,7 @@ export async function getInstancesV2(filters: {
   franchiseId?: string
   categoryId?: string
   status?: string
-}): Promise<any[]> {
+}): Promise<Record<string, unknown>[]> {
   let query = supabaseAdmin
     .from("instance_v2")
     .select(`
@@ -393,11 +394,11 @@ export async function getInstancesV2(filters: {
   const { data, error } = await query
 
   if (error) {
-    throw new Error(`Failed to fetch instances v2: ${error.message}`)
+    throw new Error(`Failed to fetch instances v2: ${getErrorMessage(error)}`)
   }
 
   // 处理返回数据，确保关联数据格式正确
-  return (data || []).map((instance: any) => {
+  return (data || []).map((instance) => {
     // 处理关联数据（Supabase 返回的格式可能是数组或对象）
     const offering = Array.isArray(instance.offering) ? instance.offering[0] : instance.offering
     const series = Array.isArray(instance.series) ? instance.series[0] : instance.series
@@ -437,7 +438,7 @@ export async function getInstanceV2(instanceId: string): Promise<InstanceV2 | nu
     if (error.code === 'PGRST116') {
       return null // Not found
     }
-    throw new Error(`Failed to fetch instance v2: ${error.message}`)
+    throw new Error(`Failed to fetch instance v2: ${getErrorMessage(error)}`)
   }
 
   return data as InstanceV2
@@ -474,7 +475,7 @@ export async function updateInstanceV2(
     }
   }
 
-  const updateData: any = {
+  const updateData: StringKeyRecord = {
     ...updates,
   }
 
@@ -501,7 +502,7 @@ export async function updateInstanceV2(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update instance v2: ${error.message}`)
+    throw new Error(`Failed to update instance v2: ${getErrorMessage(error)}`)
   }
 
   return data as InstanceV2
@@ -517,7 +518,7 @@ export async function deleteInstanceV2(instanceId: string): Promise<void> {
     .eq("id", instanceId)
 
   if (error) {
-    throw new Error(`Failed to delete instance v2: ${error.message}`)
+    throw new Error(`Failed to delete instance v2: ${getErrorMessage(error)}`)
   }
 }
 
@@ -548,13 +549,13 @@ export async function validateOfferingStatus(offeringId: string): Promise<void> 
         `Cannot create instance for offering with status '${offering.status}'. Only 'published' offerings can have instances.`
       )
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 如果错误信息已经包含详细信息，直接抛出
-    if (err.message && (err.message.includes('Offering not found') || err.message.includes('Network error'))) {
+    if (getErrorMessage(err) && (getErrorMessage(err).includes('Offering not found') || getErrorMessage(err).includes('Network error'))) {
       throw err
     }
     // 否则包装错误
-    throw new Error(`Failed to validate offering status: ${err.message || err}`)
+    throw new Error(`Failed to validate offering status: ${getErrorMessage(err) || err}`)
   }
 }
 

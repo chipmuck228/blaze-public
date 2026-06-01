@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { confirmInstanceEnrollment } from "@/lib/db"
 
@@ -46,12 +47,12 @@ export async function POST(
         enrollment,
         message: "Enrollment confirmed successfully",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 如果是状态错误，返回特殊错误码
-      if (error.message.includes('not in reserved status')) {
+      if (getErrorMessage(error).includes('not in reserved status')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "INVALID_STATUS",
           },
           { status: 400 }
@@ -59,10 +60,10 @@ export async function POST(
       }
 
       // 如果是过期，返回特殊错误码
-      if (error.message.includes('expired')) {
+      if (getErrorMessage(error).includes('expired')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "RESERVATION_EXPIRED",
           },
           { status: 400 }
@@ -70,10 +71,10 @@ export async function POST(
       }
 
       // 如果是权限错误，返回特殊错误码
-      if (error.message.includes('Unauthorized') || error.message.includes('not the payer')) {
+      if (getErrorMessage(error).includes('Unauthorized') || getErrorMessage(error).includes('not the payer')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "UNAUTHORIZED",
           },
           { status: 403 }
@@ -82,10 +83,10 @@ export async function POST(
 
       throw error
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error confirming enrollment:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to confirm enrollment" },
+      { error: getErrorMessage(error) || "Failed to confirm enrollment" },
       { status: 500 }
     )
   }

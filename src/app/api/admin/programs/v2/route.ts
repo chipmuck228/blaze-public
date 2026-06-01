@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -54,16 +55,16 @@ export async function GET(request: Request) {
     if (error) {
       console.error("Error fetching programs:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch programs" },
+        { error: getErrorMessage(error) || "Failed to fetch programs" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data || [], { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching programs:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch programs" },
+      { error: getErrorMessage(error) || "Failed to fetch programs" },
       { status: 500 }
     )
   }
@@ -222,16 +223,16 @@ export async function POST(request: Request) {
       }
       
       return NextResponse.json(
-        { error: error.message || "Failed to create program" },
+        { error: getErrorMessage(error) || "Failed to create program" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating program:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create program" },
+      { error: getErrorMessage(error) || "Failed to create program" },
       { status: 500 }
     )
   }

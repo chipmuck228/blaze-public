@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { updateUser, deleteUser } from "@/lib/db"
 
@@ -27,7 +28,7 @@ export async function PATCH(
     const body = await request.json()
     const { name, email, email_verified, role } = body
 
-    const updates: any = {}
+    const updates: StringKeyRecord = {}
     if (name !== undefined) updates.name = name
     if (email !== undefined) updates.email = email
     if (email_verified !== undefined) updates.email_verified = email_verified
@@ -39,10 +40,10 @@ export async function PATCH(
       { message: "User updated successfully", user },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating user:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update user" },
+      { error: getErrorMessage(error) || "Failed to update user" },
       { status: 500 }
     )
   }
@@ -93,10 +94,10 @@ export async function DELETE(
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting user:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete user" },
+      { error: getErrorMessage(error) || "Failed to delete user" },
       { status: 500 }
     )
   }

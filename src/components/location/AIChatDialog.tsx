@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useRef, useEffect } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
@@ -53,7 +54,7 @@ export function AIChatDialog({
   const getFriendlyErrorMessage = (error: Error | undefined): string => {
     if (!error) return 'Sorry, something went wrong. Please try again.'
 
-    const errorMessage = error.message.toLowerCase()
+    const errorMessage = getErrorMessage(error).toLowerCase()
 
     // 网络连接错误
     if (

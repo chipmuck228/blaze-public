@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -53,10 +54,10 @@ export async function GET(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching subscribers:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch subscribers" },
+      { error: getErrorMessage(error) || "Failed to fetch subscribers" },
       { status: 500 }
     )
   }
@@ -94,10 +95,10 @@ export async function DELETE(request: Request) {
       { success: true, message: "Subscriber removed successfully" },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting subscriber:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete subscriber" },
+      { error: getErrorMessage(error) || "Failed to delete subscriber" },
       { status: 500 }
     )
   }

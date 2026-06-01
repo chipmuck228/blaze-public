@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { resolveTemplateContentHtml } from "@/lib/newsletter-template-save"
@@ -20,10 +21,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ templates: data || [] }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching templates:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch templates" },
+      { error: getErrorMessage(error) || "Failed to fetch templates" },
       { status: 500 }
     )
   }
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
         editor,
       })
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Invalid template body"
+      const message = err instanceof Error ? getErrorMessage(err) : "Invalid template body"
       return NextResponse.json({ error: message }, { status: 400 })
     }
 
@@ -77,10 +78,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating template:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create template" },
+      { error: getErrorMessage(error) || "Failed to create template" },
       { status: 500 }
     )
   }

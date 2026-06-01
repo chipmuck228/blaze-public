@@ -36,6 +36,7 @@ import {
   Shapes,
   LayoutGrid,
   MessageSquareQuote,
+  Bell,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -58,6 +59,7 @@ const menuItems: MenuItem[] = [
     : []),
   { title: "Team Management", href: "/admin/teams", icon: UserCircle },
   { title: "Traffic", href: "/admin/traffic", icon: BarChart3 },
+  { title: "Notifications", href: "/admin/notifications", icon: Bell },
   { title: "Admin Guide", href: "/admin/guide", icon: Settings },
 ]
 
@@ -94,6 +96,11 @@ const blazeContentMenuItems: MenuItem[] = [
     title: "Testimonials",
     href: "/admin/testimonials",
     icon: MessageSquareQuote,
+  },
+  {
+    title: "Resources",
+    href: "/admin/blaze/resources",
+    icon: FileText,
   },
 ]
 

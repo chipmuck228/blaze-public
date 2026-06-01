@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorCode, getErrorMessage, type StringKeyRecord } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getAllUsers, createUserByAdmin } from "@/lib/db"
 import { sendInvitationEmail, sendPasswordNotificationEmail } from "@/lib/email"
@@ -24,10 +25,10 @@ export async function GET(request: Request) {
     const users = await getAllUsers()
 
     return NextResponse.json(users, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching users:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch users" },
+      { error: getErrorMessage(error) || "Failed to fetch users" },
       { status: 500 }
     )
   }
@@ -146,12 +147,12 @@ export async function POST(request: Request) {
         )
         emailSent = true
       }
-    } catch (emailErrorObj: any) {
+    } catch (emailErrorObj: unknown) {
       console.error("Failed to send email:", emailErrorObj)
-      emailError = emailErrorObj.message || "Failed to send email"
+      emailError = getErrorMessage(emailErrorObj, "Failed to send email")
       
       // 如果是超时错误，提供更友好的提示
-      if (emailErrorObj.message?.includes('timeout') || emailErrorObj.code === 'ETIMEDOUT') {
+      if (getErrorMessage(emailErrorObj).includes("timeout") || getErrorCode(emailErrorObj) === "ETIMEDOUT") {
         emailError = "Email sending timed out. The user has been created, but the email was not sent. You can resend the invitation later from the user management page."
       }
       
@@ -159,7 +160,7 @@ export async function POST(request: Request) {
     }
 
     // 准备返回数据（不返回生成的密码，除非邮件发送失败）
-    const responseData: any = {
+    const responseData: StringKeyRecord = {
       message: "User created successfully",
       user: {
         id: result.user.id,
@@ -179,10 +180,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(responseData, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating user:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create user" },
+      { error: getErrorMessage(error) || "Failed to create user" },
       { status: 400 }
     )
   }

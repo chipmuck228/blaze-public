@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { prepareNewsletterHtmlForSend } from "@/lib/newsletter-template-runtime"
 import { resolveTemplateContentHtml } from "@/lib/newsletter-template-save"
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
         editor: body?.editor,
       })
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Invalid preview payload"
+      const message = err instanceof Error ? getErrorMessage(err) : "Invalid preview payload"
       return NextResponse.json({ error: message }, { status: 400 })
     }
 
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ html }, { status: 200 })
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to render preview"
+      error instanceof Error ? getErrorMessage(error) : "Failed to render preview"
     console.error("[newsletter/templates/preview]", error)
     return NextResponse.json({ error: message }, { status: 500 })
   }

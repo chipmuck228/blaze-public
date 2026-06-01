@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -21,8 +22,8 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (error) {
-      console.error("[Categories by-name API] Error:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error("[v2_category] Error:", error)
+      return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
 
     if (!data) {
@@ -31,9 +32,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(data, { status: 200 })
   } catch (err: unknown) {
-    console.error("[Categories by-name API] Error:", err)
+    console.error("[v2_category] Error:", err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch category" },
+      { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch category" },
       { status: 500 }
     )
   }

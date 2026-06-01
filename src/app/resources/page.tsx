@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect } from "react"
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
@@ -63,7 +64,7 @@ export default function ResourcesPage() {
         const data = await res.json()
         if (!cancelled) setCategories(data.categories ?? [])
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
+        if (!cancelled) setError(e instanceof Error ? getErrorMessage(e) : "Failed to load")
       } finally {
         if (!cancelled) setLoading(false)
       }

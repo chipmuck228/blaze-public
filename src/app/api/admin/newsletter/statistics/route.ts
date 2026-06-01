@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { unwrapRelation } from "@/lib/supabase-relation"
 
 /**
  * GET /api/admin/newsletter/statistics
@@ -18,7 +20,7 @@ export async function GET(request: Request) {
     const endDate = searchParams.get("end_date")
 
     // 构建日期范围查询
-    let dateFilter: any = {}
+    const dateFilter: StringKeyRecord = {}
     if (startDate) {
       dateFilter.gte = startDate
     }
@@ -141,8 +143,8 @@ export async function GET(request: Request) {
       recipients: number
     }> = {}
 
-    templateStats?.forEach((stat: any) => {
-      const template = stat.newsletter_templates
+    templateStats?.forEach((stat) => {
+      const template = unwrapRelation(stat.newsletter_templates)
       if (template) {
         if (!templateStatsMap[template.id]) {
           templateStatsMap[template.id] = {
@@ -184,10 +186,10 @@ export async function GET(request: Request) {
       daily_stats: dailyStatsArray,
       template_stats: templateStatsArray,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching newsletter statistics:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch statistics" },
+      { error: getErrorMessage(error) || "Failed to fetch statistics" },
       { status: 500 }
     )
   }

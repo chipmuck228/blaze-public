@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,7 +76,7 @@ export function SchemaEditor({
       onChange(jsonInput)
       setJsonError(null)
     } catch (e) {
-      setJsonError(e instanceof Error ? e.message : 'Invalid JSON')
+      setJsonError(e instanceof Error ? getErrorMessage(e) : 'Invalid JSON')
     }
   }, [jsonInput, onChange])
 
@@ -148,7 +149,7 @@ export function SchemaEditor({
       onChange(jsonInput)
       setMode('visual')
     } catch (e) {
-      setJsonError(e instanceof Error ? e.message : 'Invalid JSON')
+      setJsonError(e instanceof Error ? getErrorMessage(e) : 'Invalid JSON')
     }
   }
 
@@ -219,7 +220,7 @@ export function SchemaEditor({
                   onChange(v)
                   setJsonError(null)
                 } catch (err) {
-                  setJsonError(err instanceof Error ? err.message : 'Invalid JSON')
+                  setJsonError(err instanceof Error ? getErrorMessage(err) : 'Invalid JSON')
                 }
               }}
               onBlur={syncJsonToValue}

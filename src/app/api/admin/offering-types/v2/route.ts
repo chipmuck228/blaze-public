@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -26,14 +27,14 @@ export async function GET(request: Request) {
     const { data: offeringTypes, error } = await query
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     return NextResponse.json(offeringTypes || [], { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching offering types:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch offering types" },
+      { error: getErrorMessage(error) || "Failed to fetch offering types" },
       { status: 500 }
     )
   }
@@ -115,10 +116,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(offeringType, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating offering type:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create offering type" },
+      { error: getErrorMessage(error) || "Failed to create offering type" },
       { status: 500 }
     )
   }

@@ -8,6 +8,22 @@ export type SchemaFieldConfig = {
   label?: string
   display_scope?: string
   multiline?: boolean
+  required?: boolean
+  min?: number
+  max?: number
+  step?: number
+  maxLength?: number
+  placeholder?: string
+  description?: string
+  default?: unknown
+  options?: unknown[]
+  option_labels?: string[]
+  condition?: {
+    field: string
+    equals?: unknown
+    in?: unknown[]
+    exists?: boolean
+  }
   properties?: Record<string, SchemaFieldConfig>
   /** For type=array: item shape when items.type=object */
   items?: { type?: string; properties?: Record<string, SchemaFieldConfig>; [k: string]: unknown }
@@ -185,14 +201,31 @@ export function* iterateInstanceSchemaFieldsForDisplay(
           const propScope = propConfig?.display_scope ?? "admin"
           if (scope !== "both" && propScope !== scope && propScope !== "both") continue
           const value = obj[propKey]
-          const c = propConfig as any
-          yield { key: propKey, label: propConfig?.label || propKey, value, groupLabel, type: c?.type, options: c?.options, option_labels: c?.option_labels, multiline: c?.multiline, items: c?.items }
+          yield {
+            key: propKey,
+            label: propConfig?.label || propKey,
+            value,
+            groupLabel,
+            type: propConfig?.type,
+            options: propConfig?.options,
+            option_labels: propConfig?.option_labels,
+            multiline: propConfig?.multiline,
+            items: propConfig?.items,
+          }
         }
       }
     } else {
       const value = flatExt[fieldName]
-      const c = fieldConfig as any
-      yield { key: fieldName, label: fieldConfig.label || fieldName, value, type: c?.type, options: c?.options, option_labels: c?.option_labels, multiline: c?.multiline, items: c?.items }
+      yield {
+        key: fieldName,
+        label: fieldConfig.label || fieldName,
+        value,
+        type: fieldConfig.type,
+        options: fieldConfig.options,
+        option_labels: fieldConfig.option_labels,
+        multiline: fieldConfig.multiline,
+        items: fieldConfig.items,
+      }
     }
   }
 }

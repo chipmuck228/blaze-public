@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -69,7 +70,7 @@ export async function GET() {
   } catch (error: unknown) {
     console.error("Error in public resources API:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to fetch" },
       { status: 500 }
     )
   }

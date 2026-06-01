@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import {
   FEATURED_INSTANCE_SELECT,
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
     const { data: rows, error } = await query
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     const instances = sortFeaturedInstanceRows(rows || [])
@@ -59,10 +60,10 @@ export async function GET(request: Request) {
       .slice(0, limit)
 
     return NextResponse.json({ instances }, { status: 200 })
-  } catch (error: any) {
-    console.error("[featured-instances] Error:", error)
+  } catch (error: unknown) {
+    console.error("[v2_instance] Error:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch featured instances" },
+      { error: getErrorMessage(error) || "Failed to fetch featured instances" },
       { status: 500 }
     )
   }

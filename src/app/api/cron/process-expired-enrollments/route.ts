@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { processExpiredEnrollments, checkWaitlistAndNotify } from "@/lib/db"
 
 // 后台任务：处理过期的注册
@@ -30,11 +31,11 @@ export async function GET(request: Request) {
       waitlist_notified: notifiedCount,
       timestamp: new Date().toISOString(),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing expired enrollments:", error)
     return NextResponse.json(
       { 
-        error: error.message || "Failed to process expired enrollments",
+        error: getErrorMessage(error) || "Failed to process expired enrollments",
         timestamp: new Date().toISOString(),
       },
       { status: 500 }

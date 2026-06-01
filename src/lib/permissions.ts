@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 
 /**
  * 检查用户是否是学生账户（通过students.student_user_id）
@@ -232,10 +233,10 @@ export async function getUserStudents(userId: string): Promise<Array<{
     .eq('user_id', userId);
   
   if (error) {
-    throw new Error(`Failed to fetch user students: ${error.message}`);
+    throw new Error(`Failed to fetch user students: ${getErrorMessage(error)}`);
   }
   
-  return (data || []).map((item: any) => {
+  return (data || []).map((item) => {
     const student = Array.isArray(item.student) ? item.student[0] : item.student;
     return {
       student_id: item.student_id,
@@ -247,9 +248,9 @@ export async function getUserStudents(userId: string): Promise<Array<{
       can_view_progress: item.can_view_progress,
       sync_cart_to_parent: item.sync_cart_to_parent,
     };
-  }).filter((item: any) => {
+  }).filter((item) => {
     // 只返回活跃的学生
-    const student = (data || []).find((d: any) => d.student_id === item.student_id);
+    const student = (data || []).find((d) => d.student_id === item.student_id);
     const studentData = Array.isArray(student?.student) ? student.student[0] : student?.student;
     return studentData?.is_active !== false;
   });

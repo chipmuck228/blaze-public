@@ -13,12 +13,23 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { adminToast } from "@/lib/admin-toast"
 import { useRouter } from "next/navigation"
 
+interface NotificationData {
+  task_id?: string
+  campaign_id?: string
+  success_count?: number
+  failed_count?: number
+  skipped_count?: number
+  total_count?: number
+  sent_count?: number
+  total_recipients?: number
+}
+
 interface Notification {
   id: string
   type: string
   title: string
   message: string
-  data?: any
+  data?: NotificationData
   is_read: boolean
   created_at: string
 }
@@ -45,7 +56,7 @@ export function NotificationCenter() {
         .slice(0, 5)
       setNotifications(visibleNotifications)
       setUnreadCount(data.unread_count || 0)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching notifications:", error)
     } finally {
       setIsLoading(false)
@@ -127,7 +138,7 @@ export function NotificationCenter() {
       })
       if (!response.ok) throw new Error("Failed to mark as read")
       fetchNotifications()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error marking notification as read:", error)
       adminToast.error("Failed to mark notification as read")
     }
@@ -141,7 +152,7 @@ export function NotificationCenter() {
       if (!response.ok) throw new Error("Failed to mark all as read")
       fetchNotifications()
       adminToast.success("All notifications marked as read")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error marking all as read:", error)
       adminToast.error("Failed to mark all notifications as read")
     }
@@ -245,7 +256,9 @@ export function NotificationCenter() {
                   // 根据通知类型和 data 获取发送结果信息
                   const getResultBadge = () => {
                     if (notification.type === "retry_task_completed" && notification.data) {
-                      const { success_count, failed_count, skipped_count, total_count } = notification.data
+                      const success_count = notification.data.success_count ?? 0
+                      const failed_count = notification.data.failed_count ?? 0
+                      const skipped_count = notification.data.skipped_count ?? 0
                       if (success_count > 0 && failed_count === 0) {
                         return <Badge variant="default" className="bg-green-500">Success: {success_count}</Badge>
                       } else if (success_count > 0 && failed_count > 0) {
@@ -262,7 +275,8 @@ export function NotificationCenter() {
                     } else if (notification.type === "retry_task_failed") {
                       return <Badge variant="destructive">Task Failed</Badge>
                     } else if (notification.type === "newsletter_sent" && notification.data) {
-                      const { sent_count, failed_count, total_recipients } = notification.data
+                      const sent_count = notification.data.sent_count ?? 0
+                      const failed_count = notification.data.failed_count ?? 0
                       if (failed_count === 0) {
                         return <Badge variant="default" className="bg-green-500">Sent: {sent_count}</Badge>
                       } else {
@@ -274,7 +288,8 @@ export function NotificationCenter() {
                         )
                       }
                     } else if (notification.type === "newsletter_failed" && notification.data) {
-                      const { failed_count, total_recipients } = notification.data
+                      const failed_count = notification.data.failed_count ?? 0
+                      const total_recipients = notification.data.total_recipients ?? 0
                       return <Badge variant="destructive">Failed: {failed_count}/{total_recipients}</Badge>
                     }
                     return null

@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -78,8 +79,8 @@ export default function RegisterPage() {
           router.push("/login")
         }, 8000)
       }
-    } catch (error: any) {
-      setError(error.message || "Registration failed, please try again later")
+    } catch (error: unknown) {
+      setError(getErrorMessage(error) || "Registration failed, please try again later")
       setIsLoading(false)
     }
   }

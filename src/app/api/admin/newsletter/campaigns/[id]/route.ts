@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getCampaignDeliveryInfo } from "@/lib/newsletter-admin-delivery"
 import { supabaseAdmin } from "@/lib/supabase"
@@ -65,10 +66,10 @@ export async function GET(
       stats,
       delivery: getCampaignDeliveryInfo(campaign),
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching campaign details:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch campaign details" },
+      { error: getErrorMessage(error) || "Failed to fetch campaign details" },
       { status: 500 }
     )
   }
@@ -126,10 +127,10 @@ export async function POST(
       success: true,
       message: "Campaign cancelled successfully",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error cancelling campaign:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to cancel campaign" },
+      { error: getErrorMessage(error) || "Failed to cancel campaign" },
       { status: 500 }
     )
   }

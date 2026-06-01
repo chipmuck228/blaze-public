@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
     if (error) {
       console.error('Error fetching orders:', error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch orders" },
+        { error: getErrorMessage(error) || "Failed to fetch orders" },
         { status: 500 }
       )
     }
@@ -82,10 +83,10 @@ export async function GET(request: Request) {
       enrollments: data || [],
       total: data?.length || 0
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching orders:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch orders" },
+      { error: getErrorMessage(error) || "Failed to fetch orders" },
       { status: 500 }
     )
   }

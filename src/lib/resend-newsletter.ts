@@ -1,4 +1,5 @@
 import { Resend } from "resend"
+import { getErrorMessage } from "@/lib/typed-error"
 import { prepareNewsletterHtmlForSend } from "@/lib/newsletter-template-runtime"
 
 /** Resend placeholder for marketing broadcasts (per-contact unsubscribe URL). */
@@ -80,7 +81,7 @@ export async function sendNewsletterViaResend({
   })
 
   if (error) {
-    throw new Error(error.message || "Resend failed to send email")
+    throw new Error(getErrorMessage(error) || "Resend failed to send email")
   }
 
   if (!data?.id) {
@@ -127,7 +128,7 @@ export async function createAndSendNewsletterBroadcast({
   })
 
   if (error) {
-    throw new Error(error.message || "Resend failed to create broadcast")
+    throw new Error(getErrorMessage(error) || "Resend failed to create broadcast")
   }
 
   if (!data?.id) {

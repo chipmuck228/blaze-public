@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card"
 import { Navbar } from "@/components/Navbar"
 import { Mail, Lock, Chrome, Loader2 } from "lucide-react"
+import { getErrorMessage } from "@/lib/typed-error"
 
 function LoginPageContent() {
   const router = useRouter()
@@ -133,13 +134,13 @@ function LoginPageContent() {
         router.push(callbackUrl)
         router.refresh()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Google login exception:", error)
       setIsLoading(false)
       
       // 提供更友好的错误信息
       let errorMessage = "Google login failed. "
-      const errorMsg = error?.message || error?.toString() || ""
+      const errorMsg = getErrorMessage(error)
       
       if (errorMsg.includes('fetch failed') || errorMsg.includes('timeout') || errorMsg.includes('ECONNREFUSED')) {
         errorMessage += "Unable to connect to Google servers. This may be due to network restrictions. "

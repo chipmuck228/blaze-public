@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import type { NextAuthConfig } from "next-auth"
 import { getUserByEmail, getUserById, verifyPassword, createOrUpdateGoogleUser } from "@/lib/db"
+import { getErrorMessage } from "@/lib/typed-error"
 
 // 开发环境调试
 if (process.env.NODE_ENV === 'development') {
@@ -46,15 +47,15 @@ export const authConfig = {
 
           // 更新 user 对象以包含数据库中的用户信息
           user.id = dbUser.id
-          ;(user as any).role = dbUser.role || 'user'
+          user.role = dbUser.role || 'user'
           
           console.log("Google sign in successful", { userId: dbUser.id, email: user.email })
           return true
-        } catch (error: any) {
+        } catch (error: unknown) {
           // 记录详细错误信息
           console.error("Error in Google signIn callback:", {
-            error: error?.message || error,
-            stack: error?.stack,
+            error: getErrorMessage(error),
+            stack: error instanceof Error ? error.stack : undefined,
             email: user?.email,
             name: user?.name,
             provider: account?.provider
@@ -69,7 +70,7 @@ export const authConfig = {
     },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
-      const userRole = (auth?.user as any)?.role || 'user'
+      const userRole = auth?.user?.role || 'user'
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard")
       const isOnAdmin = nextUrl.pathname.startsWith("/admin")
       const isOnAdminLogin = nextUrl.pathname.startsWith("/admin/login")
@@ -116,7 +117,7 @@ export const authConfig = {
         token.name = user.name
         token.email = user.email
         token.image = user.image
-        token.role = (user as any).role || 'user'
+        token.role = user.role || 'user'
       }
       if (account?.provider === "google") {
         // Google 登录时的处理

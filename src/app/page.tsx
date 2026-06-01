@@ -1,4 +1,5 @@
 'use client'
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { useState, useEffect } from "react";
 import { usePlatform } from "@/hooks/usePlatform";
 import { Navbar } from "@/components/Navbar";
@@ -91,7 +92,7 @@ export default function Home() {
         }
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];
-        setFranchises(list.map((f: any) => ({
+        setFranchises(list.map((f) => ({
           id: f.id,
           code: f.code,
           name: f.name ?? "",
@@ -99,9 +100,9 @@ export default function Home() {
           program_count: f.program_count ?? 0,
           campus_count: f.campus_count ?? 0,
         })));
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching public franchises:", err);
-        setFranchisesError(err.message || "Failed to load franchises");
+        setFranchisesError(getErrorMessage(err) || "Failed to load franchises");
       } finally {
         setIsLoadingFranchises(false);
       }
@@ -121,7 +122,7 @@ export default function Home() {
         }
         const data = await res.json();
         setLocations(data || []);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching public locations:", err);
       } finally {
         setIsLoadingLocations(false);
@@ -447,10 +448,6 @@ export default function Home() {
           <Testimonials />
 
         </section>
-        {/* <section id="about">
-          <Team />
-        </section> 
-        <Faq />*/}
         <Newsletter />
         <Footer />
       </main>

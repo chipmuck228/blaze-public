@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -64,10 +65,10 @@ export async function GET(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching notifications:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch notifications" },
+      { error: getErrorMessage(error) || "Failed to fetch notifications" },
       { status: 500 }
     )
   }

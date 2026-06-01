@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { put, del } from "@vercel/blob"
 
@@ -54,10 +55,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error uploading category poster:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to upload poster" },
+      { error: getErrorMessage(error) || "Failed to upload poster" },
       { status: 500 }
     )
   }
@@ -88,17 +89,17 @@ export async function DELETE(request: NextRequest) {
       { message: "Poster deleted successfully" },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting category poster:", error)
     // 如果文件不存在，也返回成功（幂等性）
-    if (error.message?.includes("not found") || error.message?.includes("404")) {
+    if (getErrorMessage(error)?.includes("not found") || getErrorMessage(error)?.includes("404")) {
       return NextResponse.json(
         { message: "Poster already deleted or not found" },
         { status: 200 }
       )
     }
     return NextResponse.json(
-      { error: error.message || "Failed to delete poster" },
+      { error: getErrorMessage(error) || "Failed to delete poster" },
       { status: 500 }
     )
   }

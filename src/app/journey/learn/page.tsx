@@ -60,7 +60,7 @@ export default function JourneyLearnPage() {
                   className="bg-[#2563eb] hover:bg-blue-600 text-white px-8 py-6 text-lg font-bold rounded-full"
                   asChild
                 >
-                  <Link href="/course">
+                  <Link href="/programs">
                     <span className="sm:hidden">Start...</span>
                     <span className="hidden sm:inline">Start your LEARN</span>
                     <ArrowRight className="ml-2 w-5 h-5" />
@@ -117,7 +117,7 @@ export default function JourneyLearnPage() {
                 className="bg-[#2563eb] hover:bg-blue-600 text-white px-8 py-6 text-lg font-bold rounded-full"
                 asChild
               >
-                <Link href="/course">
+                <Link href="/programs">
                   <span className="sm:hidden">Start...</span>
                   <span className="hidden sm:inline">Start your LEARN</span>
                   <ArrowRight className="ml-2 w-5 h-5" />
@@ -173,7 +173,7 @@ export default function JourneyLearnPage() {
                 className="bg-[#2563eb] hover:bg-blue-600 text-white px-8 py-6 text-lg font-bold rounded-full"
                 asChild
               >
-                <Link href="/course">
+                <Link href="/programs">
                   <span className="sm:hidden">Start...</span>
                   <span className="hidden sm:inline">Start your LEARN</span>
                   <ArrowRight className="ml-2 w-5 h-5" />

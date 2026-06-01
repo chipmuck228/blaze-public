@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from '@/lib/supabase'
 
 /**
@@ -68,10 +69,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in traffic track-exit:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to track exit' },
+      { error: getErrorMessage(error) || 'Failed to track exit' },
       { status: 500 }
     )
   }

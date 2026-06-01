@@ -155,7 +155,7 @@ export default function BlazeResourcesManagementPage() {
         setSelectedCategoryId(data[0].id)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load categories")
+      setError(e instanceof Error ? getErrorMessage(e) : "Failed to load categories")
     } finally {
       setIsLoadingCategories(false)
     }

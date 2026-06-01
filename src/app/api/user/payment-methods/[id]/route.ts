@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { stripe } from "@/lib/stripe"
 import { getUserStripeCustomerId } from "@/lib/stripe-customer"
@@ -57,10 +58,10 @@ export async function DELETE(
     await stripe.paymentMethods.detach(paymentMethodId)
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting payment method:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete payment method" },
+      { error: getErrorMessage(error) || "Failed to delete payment method" },
       { status: 500 }
     )
   }
@@ -111,10 +112,10 @@ export async function PATCH(
     })
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error setting default payment method:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to set default payment method" },
+      { error: getErrorMessage(error) || "Failed to set default payment method" },
       { status: 500 }
     )
   }

@@ -14,7 +14,6 @@ import {
 import {
   WORLDS_ACHIEVEMENTS_2026,
   WORLDS_ACHIEVEMENTS_BACKGROUND,
-  WORLDS_ACHIEVEMENTS_BACKGROUND_JPG,
 } from "@/lib/worlds-achievements-2026"
 import type {
   WorldsAchievementEntry,
@@ -86,33 +85,16 @@ function AchievementImage({
 }
 
 function SectionBackground() {
-  const [src, setSrc] = useState(WORLDS_ACHIEVEMENTS_BACKGROUND)
-  const [bgFailed, setBgFailed] = useState(false)
-
-  const handleBgError = () => {
-    if (src !== WORLDS_ACHIEVEMENTS_BACKGROUND_JPG) {
-      setSrc(WORLDS_ACHIEVEMENTS_BACKGROUND_JPG)
-      return
-    }
-    setBgFailed(true)
-  }
-
   return (
     <>
-      {bgFailed ? (
-        <div className={cn("absolute inset-0", HOME_HERO_SECTION_BG)} aria-hidden />
-      ) : (
-        <LazyRemoteImage
-          key={src}
-          src={src}
-          alt=""
-          containerClassName="absolute inset-0"
-          className="object-center"
-          eager
-          onError={handleBgError}
-          fallback={<div className={cn("absolute inset-0", HOME_HERO_SECTION_BG)} aria-hidden />}
-        />
-      )}
+      <LazyRemoteImage
+        src={WORLDS_ACHIEVEMENTS_BACKGROUND}
+        alt=""
+        containerClassName="absolute inset-0"
+        className="object-center"
+        eager
+        fallback={<div className={cn("absolute inset-0", HOME_HERO_SECTION_BG)} aria-hidden />}
+      />
       <div
         className="absolute inset-0 bg-gradient-to-b from-[#0f172a]/92 via-[#0f172a]/85 to-[#0f172a]/95"
         aria-hidden

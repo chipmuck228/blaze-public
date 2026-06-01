@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getAllTeamMembers, getAllTeamMembersForAdmin, createTeamMember } from "@/lib/db"
 
@@ -23,10 +24,10 @@ export async function GET(request: Request) {
     const teams = await getAllTeamMembersForAdmin()
 
     return NextResponse.json(teams, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching teams:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch teams" },
+      { error: getErrorMessage(error) || "Failed to fetch teams" },
       { status: 500 }
     )
   }
@@ -97,10 +98,10 @@ export async function POST(request: Request) {
       { message: "Team member created successfully", team },
       { status: 201 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating team member:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create team member" },
+      { error: getErrorMessage(error) || "Failed to create team member" },
       { status: 500 }
     )
   }

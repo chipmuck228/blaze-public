@@ -1,4 +1,5 @@
 'use client'
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState } from "react"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
@@ -45,9 +46,9 @@ export const Newsletter = () => {
       toast.success("Successfully subscribed to newsletter!")
       setEmail("")
       setConsent(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Subscription error:", error)
-      toast.error(error.message || "Failed to subscribe. Please try again.")
+      toast.error(getErrorMessage(error) || "Failed to subscribe. Please try again.")
     } finally {
       setIsSubmitting(false)
     }

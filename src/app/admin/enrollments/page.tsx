@@ -156,7 +156,7 @@ export default function EnrollmentsManagementPage() {
       setEnrollments(data.enrollments || [])
     } catch (error) {
       console.error("Error fetching enrollments:", error)
-      setListError(error instanceof Error ? error.message : "Failed to load enrollments")
+      setListError(error instanceof Error ? getErrorMessage(error) : "Failed to load enrollments")
     } finally {
       setListLoading(false)
     }
@@ -177,7 +177,7 @@ export default function EnrollmentsManagementPage() {
       setStats(data)
     } catch (error) {
       console.error("Error fetching stats:", error)
-      setStatsError(error instanceof Error ? error.message : "Failed to load stats")
+      setStatsError(error instanceof Error ? getErrorMessage(error) : "Failed to load stats")
     } finally {
       setStatsLoading(false)
     }

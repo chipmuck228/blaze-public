@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { stripe } from "@/lib/stripe"
 import { getOrCreateStripeCustomer, getUserStripeCustomerId } from "@/lib/stripe-customer"
@@ -54,10 +55,10 @@ export async function GET() {
     })
 
     return NextResponse.json(formattedMethods)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching payment methods:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch payment methods" },
+      { error: getErrorMessage(error) || "Failed to fetch payment methods" },
       { status: 500 }
     )
   }
@@ -92,10 +93,10 @@ export async function POST() {
       client_secret: setupIntent.client_secret,
       customer_id: customerId,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating setup intent:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create setup intent" },
+      { error: getErrorMessage(error) || "Failed to create setup intent" },
       { status: 500 }
     )
   }

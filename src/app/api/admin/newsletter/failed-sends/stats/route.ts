@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -42,14 +43,14 @@ export async function GET(request: Request) {
 
     // 按失败原因分组统计
     const failedByReason: Record<string, number> = {}
-    ;(failedSends || []).forEach((send: any) => {
+    ;(failedSends || []).forEach((send) => {
       const reason = send.error_message || "Unknown error"
       failedByReason[reason] = (failedByReason[reason] || 0) + 1
     })
 
     // 按 campaign 分组统计
     const failedByCampaignMap: Record<string, { campaign_id: string; failed_count: number }> = {}
-    ;(failedSends || []).forEach((send: any) => {
+    ;(failedSends || []).forEach((send) => {
       const campaignId = send.campaign_id
       if (!failedByCampaignMap[campaignId]) {
         failedByCampaignMap[campaignId] = {
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
 
     // 获取 campaign 信息
     const campaignIds = Object.keys(failedByCampaignMap)
-    let campaignInfo: Record<string, { subject: string }> = {}
+    const campaignInfo: Record<string, { subject: string }> = {}
 
     if (campaignIds.length > 0) {
       const { data: campaigns } = await supabaseAdmin
@@ -71,7 +72,7 @@ export async function GET(request: Request) {
         .in("id", campaignIds)
 
       if (campaigns) {
-        campaigns.forEach((campaign: any) => {
+        campaigns.forEach((campaign) => {
           campaignInfo[campaign.id] = { subject: campaign.subject }
         })
       }
@@ -85,7 +86,7 @@ export async function GET(request: Request) {
 
     // 按日期分组统计最近失败趋势
     const recentFailuresMap: Record<string, number> = {}
-    ;(failedSends || []).forEach((send: any) => {
+    ;(failedSends || []).forEach((send) => {
       const date = new Date(send.created_at).toISOString().split("T")[0]
       recentFailuresMap[date] = (recentFailuresMap[date] || 0) + 1
     })
@@ -104,10 +105,10 @@ export async function GET(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching failed sends stats:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch failed sends statistics" },
+      { error: getErrorMessage(error) || "Failed to fetch failed sends statistics" },
       { status: 500 }
     )
   }

@@ -10,12 +10,10 @@ type OpenProgramsAIChatButtonProps = {
   children?: React.ReactNode
 }
 
-export function OpenProgramsAIChatButton({
+function OpenProgramsAIChatButtonInner({
   className,
-  children = "Chat with AI Assistant",
+  children,
 }: OpenProgramsAIChatButtonProps) {
-  if (!PROGRAMS_AI_ASSISTANT_ENABLED) return null
-
   const { openChat } = useProgramsAIAssistant()
 
   return (
@@ -29,5 +27,18 @@ export function OpenProgramsAIChatButton({
     >
       {children}
     </Button>
+  )
+}
+
+export function OpenProgramsAIChatButton({
+  className,
+  children = "Chat with AI Assistant",
+}: OpenProgramsAIChatButtonProps) {
+  if (!PROGRAMS_AI_ASSISTANT_ENABLED) return null
+
+  return (
+    <OpenProgramsAIChatButtonInner className={className}>
+      {children}
+    </OpenProgramsAIChatButtonInner>
   )
 }

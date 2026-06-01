@@ -130,7 +130,7 @@ export default function BlazeOfferingTypesManagementPage() {
       setOfferingTypes(data)
       setFilteredTypes(data)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load offering types")
+      setError(err instanceof Error ? getErrorMessage(err) : "Failed to load offering types")
     } finally {
       setIsLoading(false)
     }
@@ -221,7 +221,7 @@ export default function BlazeOfferingTypesManagementPage() {
       cancelEdit()
       fetchOfferingTypes()
     } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : "Failed to save")
+      setSubmitError(err instanceof Error ? getErrorMessage(err) : "Failed to save")
     } finally {
       setIsSubmitting(false)
     }

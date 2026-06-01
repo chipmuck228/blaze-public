@@ -1,0 +1,176 @@
+---
+description: End-user (parent/student) feature guide — plain English, no admin/tech terms. Derived from implemented-features.mdc.
+alwaysApply: false
+---
+
+# Blaze Robotics Academy — Features for Families
+
+**Audience:** Parents, students, and visitors using the public website or mobile app.  
+**Not for:** Staff admin tools, coach portals, or internal operations (see `implemented-features.mdc`).
+
+**Last updated:** May 2026 (beta-2)
+
+---
+
+## What Blaze Offers
+
+Blaze Robotics Academy helps students in the greater Seattle area explore robotics through hands-on programs—from first-time builders to competition teams. On our website you can learn about our campuses, browse upcoming camps and classes, and sign up when registration is open.
+
+---
+
+## How Our Programs Are Organized
+
+When you browse Blaze, you’ll see programs organized in a simple order:
+
+| Level | What it means | Can you register here? |
+|-------|----------------|-------------------------|
+| **Campus** | A Blaze location (e.g. Bellevue) | No — start here to explore that campus |
+| **Location** | The physical address and contact info for a campus | No |
+| **Program** | Our learning track: **Explore**, **Learn**, or **Compete** | No |
+| **Activity** | A season or group of offerings (e.g. “2026 Summer Camps”) | No |
+| **Session** | A specific class or camp with dates, times, price, and seats | **Yes — this is what you enroll in** |
+
+**Tip:** Open any **Session** to see schedule, price, capacity, and how to enroll.
+
+---
+
+## Features You Can Use Today
+
+### Discover Blaze
+
+- **Home page** — Overview of Blaze, campus cards, map, why families choose us, parent testimonials, and email newsletter signup.
+- **About Blaze** — Who we are, frequently asked questions, careers, and our team.
+- **Program journeys** — Intro pages for **Explore**, **Learn**, and **Compete** that lead into our catalog.
+- **Competition teams** — Information for students interested in VEX and competitive robotics.
+- **Robotics for beginners** — A friendly starting point for new families.
+
+### Find a Campus
+
+- **Campus pages** (e.g. Bellevue) — Photos, branding, map, featured sessions, and programs grouped by Explore / Learn / Compete.
+- **Our locations** — See where we teach and how to reach each site.
+
+### Browse & Compare Sessions
+
+- **Programs catalog** — Search and filter camps and classes across campuses.
+- **Browse by track** — View Explore, Learn, or Compete offerings in one place.
+- **Camps** and **Courses** — Focused lists for summer camps vs ongoing courses.
+- **Calendar** — See sessions on a calendar, including U.S. holidays for planning.
+- **Session detail pages** — Dates, times, price, location, recommended similar sessions, and an **Enroll** button.
+
+### Enroll in a Session
+
+- **Register through Amilia** — For most sessions today, **Enroll** opens our secure registration partner (Amilia) in a new tab to complete signup and payment there.
+- Session pages show the schedule and key details in the **Session details** sidebar so you can decide before you enroll.
+
+### Stay Informed
+
+- **Email newsletter** — Subscribe on the home page (and other forms) for updates, camps, and news.
+- **Unsubscribe** — One-click unsubscribe from any email using the link in the message (no login required).
+
+### Extra Learning Resources
+
+- **Resources** — Download helpful materials published by Blaze.
+- **Learning paths** — Curated sequences of courses to guide long-term progress.
+
+---
+
+## Features That May Appear When We Turn Them On
+
+Your campus or our web team may enable these for a limited time or a special launch:
+
+| Feature | What it does |
+|---------|----------------|
+| **VEX Worlds achievements** (home page) | Highlights recent Worlds results and photos when enabled on the homepage. |
+| **Programs assistant (AI chat)** | A chat helper on the programs catalog to answer questions about camps and classes (when enabled). |
+| **Campus AI chat** | A conversational helper on select campus pages to answer location-specific questions (when enabled). |
+
+If you don’t see these, they are not active on your site yet—not a problem with your browser.
+
+---
+
+## Mobile App (iOS)
+
+- Blaze offers an **iOS app** that wraps our website for a phone-friendly experience: simplified home, easy navigation to courses and campuses, and the same catalog and session pages as the web.
+- Enrollment still follows the same path (typically Amilia) unless we enable in-app accounts site-wide.
+
+---
+
+## Family Accounts & In-App Enrollment (Built, Not Public Yet)
+
+Blaze has also built (but **not turned on** for everyone on the public site today):
+
+- Create an account, sign in, and reset your password  
+- Parent portal with enrollments, cart, orders, and billing history  
+- Save payment methods and pay with Stripe on the website  
+- Manage student profiles and family invitations  
+- Join a waitlist and use account credits  
+
+When we enable these on the public site, you’ll see **Sign in**, **Profile**, and **Cart** in the navigation and enroll without leaving blaze.academy. Until then, please use **Enroll** on each session to register via Amilia.
+
+---
+
+## Quick Feature List (Checklist)
+
+Use this list for FAQs, parent handouts, or support scripts.
+
+**Explore & learn**
+
+- [ ] Home page with campuses and newsletter  
+- [ ] About, FAQ, careers, team pages  
+- [ ] Explore / Learn / Compete journey pages  
+- [ ] Competition and beginners landing pages  
+- [ ] Campus pages with map and featured sessions  
+
+**Browse & register**
+
+- [ ] Full programs catalog with filters  
+- [ ] Browse by Explore, Learn, or Compete  
+- [ ] Camps-only and courses-only views  
+- [ ] Calendar view  
+- [ ] Session details (dates, time, price, location)  
+- [ ] Enroll via Amilia (per session)  
+- [ ] Similar session recommendations  
+
+**Stay connected**
+
+- [ ] Newsletter subscribe  
+- [ ] Email unsubscribe page  
+
+**Go deeper**
+
+- [ ] Downloadable resources  
+- [ ] Learning paths  
+
+**Optional (when enabled by Blaze)**
+
+- [ ] VEX Worlds highlights on home  
+- [ ] AI programs assistant on catalog  
+- [ ] AI chat on campus page  
+
+**Mobile**
+
+- [ ] iOS app with mobile-friendly home and navigation  
+
+**Coming when Blaze enables accounts on the public site**
+
+- [ ] Sign in / register on the website  
+- [ ] Shopping cart and checkout on blaze.academy  
+- [ ] Parent portal, students, billing, waitlist, credits  
+
+---
+
+## What This Guide Does Not Cover
+
+- **Coach portal** — For instructors (schedules, rosters, exports).  
+- **Admin website** — For Blaze staff only.  
+- **Teacher portal** — Internal tools with a separate password.  
+
+For staff or technical documentation, use `implemented-features.mdc`.
+
+---
+
+## Need Help?
+
+- **Registration or payment on Amilia** — Use the help options inside Amilia or contact your campus office.  
+- **Newsletter** — Use the unsubscribe link in any email, or contact us through the website.  
+- **Which session to pick** — Compare sessions on the catalog or calendar, or ask your campus team.

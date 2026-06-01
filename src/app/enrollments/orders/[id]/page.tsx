@@ -109,7 +109,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
+    const variants: Record<
+      string,
+      { variant: "default" | "secondary" | "destructive" | "outline"; label: string }
+    > = {
       enrolled: { variant: 'default' as const, label: 'Enrolled' },
       waitlisted: { variant: 'secondary' as const, label: 'Waitlisted' },
       cancelled: { variant: 'destructive' as const, label: 'Cancelled' },

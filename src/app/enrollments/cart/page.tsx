@@ -1,5 +1,6 @@
 'use client'
 
+import { getErrorMessage } from "@/lib/typed-error"
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -150,10 +151,10 @@ export default function CartPage() {
           alert(`Failed to create checkout session (${response.status}). Please try again.`)
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error during checkout:', error)
-      if (error.message) {
-        alert(error.message)
+      if (getErrorMessage(error)) {
+        alert(getErrorMessage(error))
       } else {
         alert('Failed to checkout. Please try again.')
       }
@@ -209,8 +210,8 @@ export default function CartPage() {
                   Start adding courses to your cart to get started!
                 </p>
                 <Button asChild>
-                  <a href="/#courses">
-                    Browse Courses
+                  <a href="/programs">
+                    Browse Programs
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </a>
                 </Button>

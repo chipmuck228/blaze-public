@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+scripts/output/*.json
+scripts/output/*.log
+.temp-style-*.css
 
 # debug
 npm-debug.log*

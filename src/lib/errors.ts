@@ -3,6 +3,13 @@
  * 用于将技术错误转换为用户友好的消息
  */
 
+import {
+  getErrorCode,
+  getErrorMessage,
+  hasMissingFields,
+  type ErrorResponseDetails,
+} from "@/lib/typed-error"
+
 // 字段名称映射（中文）
 const FIELD_NAMES_ZH: Record<string, string> = {
   franchise_id: 'Franchise',
@@ -67,12 +74,12 @@ export function formatValidationError(
 /**
  * 格式化数据库错误消息
  */
-export function formatDatabaseError(error: any, locale: 'zh' | 'en' = 'zh'): string {
+export function formatDatabaseError(error: unknown, locale: 'zh' | 'en' = 'zh'): string {
   if (!error) {
     return locale === 'zh' ? '数据库操作失败' : 'Database operation failed'
   }
 
-  const errorMessage = error.message || String(error)
+  const errorMessage = getErrorMessage(error)
   
   // 处理常见的数据库错误
   if (errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
@@ -121,7 +128,7 @@ export function formatDatabaseError(error: any, locale: 'zh' | 'en' = 'zh'): str
  */
 export function formatOperationError(
   operation: string,
-  error: any,
+  error: unknown,
   locale: 'zh' | 'en' = 'zh'
 ): string {
   const operationNames: Record<string, { zh: string; en: string }> = {
@@ -143,12 +150,12 @@ export function formatOperationError(
  * 创建标准化的错误响应
  */
 export function createErrorResponse(
-  error: any,
-  statusCode: number = 400,
+  error: unknown,
+  _statusCode: number = 400,
   locale: 'zh' | 'en' = 'zh'
-): { error: string; details?: any } {
+): { error: string; details?: ErrorResponseDetails } {
   // 如果是验证错误（包含 missingFields）
-  if (error.missingFields && Array.isArray(error.missingFields)) {
+  if (hasMissingFields(error)) {
     return {
       error: formatValidationError(error.missingFields, locale),
       details: {
@@ -161,13 +168,16 @@ export function createErrorResponse(
     }
   }
 
+  const message = getErrorMessage(error)
+  const code = getErrorCode(error)
+
   // 如果是数据库错误
-  if (error.message || error.code) {
+  if (message || code) {
     return {
       error: formatDatabaseError(error, locale),
       details: {
-        code: error.code,
-        message: error.message,
+        code,
+        message,
       },
     }
   }
@@ -175,6 +185,6 @@ export function createErrorResponse(
   // 默认错误消息
   return {
     error: locale === 'zh' ? '操作失败' : 'Operation failed',
-    details: error,
+    details: error as ErrorResponseDetails,
   }
 }

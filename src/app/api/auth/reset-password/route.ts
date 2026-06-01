@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { resetPassword, verifyPasswordResetToken } from "@/lib/db"
 
 export async function POST(request: Request) {
@@ -27,9 +28,9 @@ export async function POST(request: Request) {
       { message: "Password reset successful!", user: { id: user.id, name: user.name, email: user.email } },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Failed to reset password" },
+      { error: getErrorMessage(error) || "Failed to reset password" },
       { status: 400 }
     )
   }
@@ -54,9 +55,9 @@ export async function GET(request: Request) {
       { valid: true, email: tokenData.user.email },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { valid: false, error: error.message || "Invalid token" },
+      { valid: false, error: getErrorMessage(error) || "Invalid token" },
       { status: 400 }
     )
   }

@@ -1,0 +1,328 @@
+---
+description: Blaze 已实现功能总览（C 端、Admin、Coach、API、运维）— 审阅项目时参考
+alwaysApply: false
+---
+
+# Blaze 已实现功能说明
+
+> 文档版本：基于 `beta-2` 代码库审阅（2026-05）。  
+> 相关规则：`product-hierarchy.mdc`（Web/Admin 层级）、`database-schema.mdc`（V2 表与字段约定）、`blaze-core.mdc`（技术栈）。
+
+## 1. 项目定位与技术栈
+
+**Blaze Robotics Academy** — 西雅图地区机器人教育平台：多校区（franchise）、课程/营期目录、报名与支付、管理后台、教练端、可选 iOS 壳（Capacitor）。
+
+| 层级 | 技术 |
+|------|------|
+| 前端 | Next.js 16 App Router、React 19、TypeScript、Tailwind + shadcn/ui |
+| 数据 | Supabase（`v2_*` 目录 + 用户/报名/通讯等非目录表） |
+| 认证 | NextAuth v5（credentials + 可选 Google OAuth） |
+| 支付 | Stripe Checkout + Webhook |
+| 邮件/通讯 | Nodemailer（事务邮件）+ Resend（Newsletter） |
+| AI | Vercel AI SDK — Gemini（校区聊天）、DeepSeek（Programs 目录助手） |
+| 部署 | Vercel（API 需 Node 运行时，未启用静态 `output: 'export'`） |
+
+---
+
+## 2. 产品模型（已实现的数据语义）
+
+### 2.1 Web 用户层级（C 端文案与导航）
+
+```
+Campus → Location → Program → Activity → Session
+```
+
+| Web 术语 | 含义 | 可预订 |
+|----------|------|--------|
+| Campus | 加盟分校（一个 franchise） | 否 |
+| Location | 校区下的物理场地 | 否 |
+| Program | Explore / Learn / Compete 等轨道 | 否 |
+| Activity | 季节/目录分组（如 2026 Summer Camps） | 否 |
+| Session | 具体排期：日期、价格、容量 | **是** |
+
+### 2.2 Admin / 数据库层级
+
+```
+franchise → campus → category → program → instance
+           (+ offering_type, offering — 模板层，非 Web 导航级)
+```
+
+| Admin | 表 | Web 对应 |
+|-------|-----|----------|
+| franchise | `v2_franchise` | Campus |
+| campus | `v2_campus` | Location |
+| category | `v2_category` | Program |
+| program | `v2_program` | Activity |
+| instance | `v2_instance` | Session |
+| offering | `v2_offering` | 卡片标题等（非导航级） |
+| offering_type | `v2_offering_type` | schema 驱动（camp/course/…） |
+
+### 2.3 Schema 驱动字段（已实现）
+
+- `v2_offering.type_config_data` ← `offering_schema`
+- `v2_instance.instance_data_ext` ← `instance_schema`（日程、容量等可映射到列）
+- C 端展示：`@/lib/instance-schema.ts`；**日期**用 `@/lib/format-calendar-date.ts`（按存储的 `YYYY-MM-DD` 显示，避免时区偏移）
+- Session 详情页：主栏 schema **「Details」** 卡片默认隐藏；侧栏 **「Session details」** 保留
+- `v2_instance.featured` — 推荐/精选展示；`v2_instance.amilia_link` — 外链报名（Amilia）
+
+### 2.4 遗留双轨
+
+- **主路径（V2）**：`/programs`、`/category/*`、`/locations/[code]`
+- **遗留路径**：`/course-catalog` 及旧 `courses` API，Capacitor 原生端仍部分使用
+
+---
+
+## 3. C 端（公众网站）已实现功能
+
+### 3.1 营销与首页
+
+| 路由 | 功能 |
+|------|------|
+| `/` | 首页：Navbar、Hero、校区卡片、Google 地图、优势/分类/Testimonials、Newsletter 订阅；原生 App 时切换 `MobileHomePage` |
+| `/about`、`/about/faq`、`/about/careers`、`/about/teams` | 关于我们；团队数据来自 `teams` |
+| `/faq` | FAQ |
+| `/journey/explore`、`/learn`、`/compete` | 三轨营销入口，链入目录 |
+| `/programs?category=beginner_robotics` | 初学者 Program（原 `/robotics-for-beginners` 已归档重定向） |
+
+**可选首页模块**（环境变量，默认关闭）：
+
+- `NEXT_PUBLIC_WORLDS_ACHIEVEMENTS_SECTION_ENABLED=true` → `WorldsAchievementsSection`（VEX Worlds 2026 成就区，`public/marketing/worlds-2026/`）
+
+### 3.2 校区与目录（V2）
+
+| 路由 | 功能 |
+|------|------|
+| `/locations/[code]` | Campus 落地页：品牌、地图、精选 Session、按 Program 分组；可选 **Gemini 校区 AI**（`/api/ai/chat`） |
+| `/programs` | 主 Session 目录（列表/筛选）；可选 **Programs AI 助手** |
+| `/category/[categorySlug]` | 按 Program（category）浏览 Activity / Session |
+| `/category/.../instance/[instanceId]` | Session 详情、推荐、报名 CTA |
+| `/camps`、`/course` | 按 offering 类型过滤的营期/课程列表 |
+| `/calendar` | 按 offering 类型 + 美国节假日的日历视图 |
+
+**Programs AI**（`programs-ai-assistant.mdc`）：
+
+- 范围：`/programs`、`/category/*`（layout 挂载）
+- `NEXT_PUBLIC_PROGRAMS_AI_ASSISTANT_ENABLED=true` + `DEEPSEEK_API_KEY`
+- API：`POST /api/ai/programs-chat`（流式 Markdown 回复）
+
+### 3.3 资源与学习路径
+
+| 路由 | 功能 |
+|------|------|
+| `/resources` | `v2_resource` 下载资源库 |
+| `/learning-paths`、`/learning-paths/[slug]` | 学习路径与课程组合（`learning_paths`） |
+
+### 3.4 遗留课程目录
+
+| 路由 | 功能 |
+|------|------|
+| `/course-catalog`、`/course-catalog/[slug]` | 旧课程浏览；`/api/courses/*` |
+
+### 3.5 Newsletter（公众）
+
+| 路由 | 功能 |
+|------|------|
+| `/newsletter/unsubscribe` | Token 退订（英文 UI）；`newsletter_subscribers` |
+| 首页等嵌入 | 订阅表单 → `/api/public/newsletter/subscribe` |
+
+详见 `newsletter-resend.mdc`（Resend Broadcast、模板、Webhook 同步）。
+
+### 3.6 用户账户与报名（已实现，**默认对公众关闭**）
+
+代码完整，但 `PUBLIC_USER_AUTH_ENABLED = false`（`src/lib/public-user-auth.ts`）时：
+
+- 隐藏购物车、结账、Profile 等导航
+- Session 报名走 **Amilia** 外链（`AMILIA_ENROLL_URL` / `v2_instance.amilia_link`）
+
+| 路由 | 功能（开启后可用） |
+|------|-------------------|
+| `/login`、`/register`、`/forgot-password`、`/reset-password`、`/verify-email` | 注册/登录/邮箱验证 |
+| `/profile`、`/portal` | 家长门户：报名、购物车、候补、积分、账单 |
+| `/billing`、`/settings/*` | 支付方式、通知设置 |
+| `/students/*`、`/invite/accept` | 子女档案与家庭邀请 |
+| `/enrollments/*` | 购物车、Stripe 结账、订单、成功/取消、候补、学分 |
+
+### 3.7 流量统计（公众侧埋点）
+
+- `/api/public/traffic/track`、`track-exit` → Admin 流量看板数据源
+
+---
+
+## 4. Admin 后台已实现功能
+
+入口：`/admin/login`（NextAuth，`role=admin`）。侧栏：`AdminSidebar.tsx`。
+
+### 4.1 仪表盘与运营
+
+| 路由 | 功能 |
+|------|------|
+| `/admin` | 统计概览、近期动态、流量快照 |
+| `/admin/users` | 用户 CRUD、角色、重发邀请 |
+| `/admin/teams` | About 页团队成员 CMS |
+| `/admin/traffic` | 访问分析、实时 SSE、导出 |
+| `/admin/guide` | 运维手册（环境、Supabase、Stripe、导入、AI） |
+| `/admin/notifications` | 站内通知 |
+| `/admin/learning-paths` | 学习路径 CMS |
+| `/admin/settings` | 占位（coming soon） |
+
+**报名管理**（已实现，**默认关闭**）：`ADMIN_ENROLLMENTS_ENABLED = false` → 侧栏隐藏 `/admin/enrollments`，访问重定向仪表盘。
+
+### 4.2 Blaze Content Admin（V2 目录）
+
+| 路由 | 管理对象 |
+|------|----------|
+| `/admin/blaze/franchises` | Campus（franchise）品牌、域名 |
+| `/admin/blaze/campuses` | Location（`v2_campus`） |
+| `/admin/blaze/categories` | Program 轨道（`v2_category`） |
+| `/admin/blaze/programs` | Activity（`v2_program`） |
+| `/admin/blaze/offerings` | Session 模板（`v2_offering`） |
+| `/admin/blaze/instance` | Session 排期（`v2_instance`） |
+| `/admin/blaze/offering-types` | 类型与 JSON schema |
+| `/admin/blaze/resources` | 资源库与分类 |
+| `/admin/testimonials` | 校区评价 |
+
+对应 API：`/api/admin/*/v2/`、`/api/blaze/*`（部分镜像）。
+
+### 4.3 Newsletter Admin
+
+| 路由 | 功能 |
+|------|------|
+| `/admin/newsletter/subscribers` | 订阅者列表 |
+| `/admin/newsletter/templates` | TipTap HTML 模板编辑 |
+| `/admin/newsletter/send` | 撰写与发送活动 |
+| `/admin/newsletter/campaigns` | 活动历史 |
+| `/admin/newsletter/failed-sends` | 失败重试 |
+| `/admin/newsletter/statistics` | 发送统计 |
+| `/admin/newsletter/unsubscribe-stats` | 退订分析 |
+
+Cron：`/api/cron/newsletter-send`、`newsletter-retry-tasks`（`CRON_SECRET`）。
+
+### 4.4 遗留 Admin 路由
+
+多条旧路径（`/admin/courses`、`/admin/instances` 等）**重定向**到 Blaze V2 或 guide，避免断链。
+
+---
+
+## 5. Coach 与 Teacher 端
+
+### 5.1 Coach 门户（`role=coach`，已启用）
+
+| 路由 | 功能 |
+|------|------|
+| `/coach/login` | 教练登录 |
+| `/coach` | 仪表盘 |
+| `/coach/classes`、`/coach/classes/[id]` | 班级列表、详情、导出 |
+| `/coach/schedule` | 日程 |
+
+API：`/api/coach/stats`、`/api/coach/instances/*`
+
+### 5.2 Teacher Portal（轻量）
+
+| 路由 | 功能 |
+|------|------|
+| `/teacher-portal/login` | 密码门（`TEACHER_PORTAL_PASSWORD`） |
+| `/teacher-portal` | 静态工具卡片入口（无深度 DB 集成） |
+
+---
+
+## 6. API 能力分组（已实现）
+
+| 分组 | 路径前缀 | 说明 |
+|------|----------|------|
+| Auth | `/api/auth/*` | NextAuth、注册、验证、重置密码 |
+| Public 目录 | `/api/public/*` | franchises、instances-v2、programs-v2、categories、testimonials、resources |
+| Enrollments | `/api/enrollments/*` | 购物车、结账、订单、候补、退款 |
+| User | `/api/user/*` | 资料、头像、账单、发票、推荐 |
+| Payments | `/api/payments/*` | Stripe Checkout、Webhook、success |
+| Students | `/api/students/*`、`/api/students/me` | 子女档案 |
+| Admin CRUD | `/api/admin/*` | 全站后台数据操作 |
+| Newsletter | `/api/admin/newsletter/*`、`/api/public/newsletter/*` | 订阅、发送、统计 |
+| Webhooks | `/api/webhooks/resend` | Resend 联系人/退订同步 |
+| Traffic | `/api/public/traffic/*`、`/api/admin/traffic/*` | 采集与分析 |
+| AI | `/api/ai/chat`、`/api/ai/programs-chat` | Gemini 校区 / DeepSeek 目录 |
+| Cron | `/api/cron/*` | 过期购物车、候补、Newsletter |
+| Legacy | `/api/courses/*` | 旧课程 API |
+
+---
+
+## 7. 移动端（Capacitor iOS）
+
+- 依赖：`@capacitor/ios` 等；`ios/` Xcode 工程
+- `usePlatform()`：原生时 `MobileHomePage`、`MobileLayout`、`AppBottomNavigation`
+- `cap:sync`、`cap:open:ios` 等 npm scripts
+- WebView 加载 Web URL；`PUBLIC_USER_AUTH_ENABLED` 控制底部 Profile/Cart 标签
+
+---
+
+## 8. 运维脚本（`scripts/`）
+
+| 脚本 | 用途 |
+|------|------|
+| `import-instances.js` / `import-instances-camp.js` / `import-instances-course.js` | CSV/Excel → `v2_instance` |
+| `import-offerings-camp.js` / `import-offerings-course.js` | Offering 模板导入 |
+| `extract-instances-from-raw.js` | 原始数据 → 可导入 JSON |
+| `lib/import-instances-common.js` | 导入共享逻辑 |
+| `audit-instances-integrity.js` | 实例 FK/一致性审计 |
+| `audit-db-table-inventory.js` | 表清单审计 |
+| `seed-newsletter-templates.ts` | `npm run seed:newsletter-templates` |
+| `create-coach-user.ts`、`create-test-students.js`、`update-user-role.js` | 用户/bootstrap |
+| `check/check-env.js` 等 | 环境检查 |
+| `design/unified-instance-import.md` | 导入列映射说明（gitignored `.md`，本地设计稿） |
+
+运行日志默认写入 `scripts/output/`（一般不提交 git）。
+
+---
+
+## 9. 功能开关与环境变量
+
+### 9.1 代码常量（改源码生效）
+
+| 常量 | 文件 | 默认 | 效果 |
+|------|------|------|------|
+| `PUBLIC_USER_AUTH_ENABLED` | `src/lib/public-user-auth.ts` | `false` | C 端账户/购物车/Stripe 报名 UI |
+| `ADMIN_ENROLLMENTS_ENABLED` | `src/lib/admin-features.ts` | `false` | Admin 报名管理菜单 |
+| `SHOW_INSTANCE_SCHEMA_DETAILS_CARD` | `InstanceDetail.tsx` | `false` | Session 详情主栏 schema Details 卡 |
+
+### 9.2 环境变量（部署配置）
+
+| 变量 | 默认 | 效果 |
+|------|------|------|
+| `NEXT_PUBLIC_WORLDS_ACHIEVEMENTS_SECTION_ENABLED` | 关 | 首页 Worlds 成就区 |
+| `NEXT_PUBLIC_PROGRAMS_AI_ASSISTANT_ENABLED` | 关 | Programs AI UI + API |
+| `NEXT_PUBLIC_SUPABASE_*` | — | Supabase 客户端 |
+| `NEXT_PUBLIC_APP_URL` | — | 邮件/退订/结账回跳绝对 URL |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | — | Stripe（auth 开启时） |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | — | 地图嵌入 |
+| `AUTH_SECRET`、`NEXTAUTH_URL` | — | NextAuth |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | 服务端 DB |
+| `GOOGLE_CLIENT_ID/SECRET` | 可选 | Google 登录 |
+| `SMTP_*` | — | 事务邮件 |
+| `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET` | — | 支付 |
+| `RESEND_*` | — | Newsletter |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | — | 校区 AI |
+| `DEEPSEEK_*` | — | Programs AI |
+| `CRON_SECRET` | — | 定时任务鉴权 |
+| `TEACHER_PORTAL_PASSWORD` | — | Teacher 门户 |
+
+---
+
+## 10. 当前线上行为摘要（beta-2 典型配置）
+
+| 能力 | 状态 |
+|------|------|
+| 营销首页、校区页、V2 目录、Session 详情、资源、Newsletter 订阅/退订 | **对外可用** |
+| Amilia 外链报名 | **默认路径**（`PUBLIC_USER_AUTH_ENABLED=false`） |
+| 站内购物车 / Stripe 家长账户 | **已实现，默认关闭** |
+| Admin V2 目录 + Newsletter + 流量 | **可用** |
+| Admin 报名管理 UI | **已实现，默认关闭** |
+| Coach 门户 | **可用** |
+| Programs AI / Worlds 首页 | **需显式开启 env** |
+| 遗留 `/course-catalog` | **仍保留**，与 V2 并行 |
+
+---
+
+## 11. 维护说明
+
+- 新增功能说明：更新本文件对应章节，勿在 repo 根目录新增 `*.md`（gitignored）。
+- Schema 变更：仅通过 `v2/` 编号 SQL；行为约定见 `database-schema.mdc`。
+- Web/Admin 命名：严格遵循 `product-hierarchy.mdc`，避免 C 端出现 franchise/instance 等 Admin 术语。

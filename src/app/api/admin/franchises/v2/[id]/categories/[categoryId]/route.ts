@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -17,7 +18,7 @@ export async function PUT(
     const body = await request.json()
     const { is_visible, display_order } = body
 
-    const updateData: any = {}
+    const updateData: StringKeyRecord = {}
     if (is_visible !== undefined) updateData.is_visible = is_visible
     if (display_order !== undefined) updateData.display_order = display_order
 
@@ -42,16 +43,16 @@ export async function PUT(
       
       console.error("Error updating subscription:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to update subscription" },
+        { error: getErrorMessage(error) || "Failed to update subscription" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating subscription:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update subscription" },
+      { error: getErrorMessage(error) || "Failed to update subscription" },
       { status: 500 }
     )
   }
@@ -118,16 +119,16 @@ export async function DELETE(
     if (error) {
       console.error("Error deleting subscription:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to delete subscription" },
+        { error: getErrorMessage(error) || "Failed to delete subscription" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ message: "Subscription deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting subscription:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete subscription" },
+      { error: getErrorMessage(error) || "Failed to delete subscription" },
       { status: 500 }
     )
   }

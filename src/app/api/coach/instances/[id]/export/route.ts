@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getCoachInstanceById } from "@/lib/db"
-import ical from "ical-generator"
+import ical, { type ICalRepeatingOptions } from "ical-generator"
 import { rrulestr } from "rrule"
 import { formatInTimeZone, toZonedTime } from "date-fns-tz"
 
@@ -32,14 +33,11 @@ function parseICalDateTime(dateTimeStr: string, timezone: string): Date | null {
   }
 }
 
-function formatLocation(location: any): string {
+function formatLocation(
+  location?: { name?: string; address?: string; city?: string; state?: string } | null
+): string {
   if (!location) return ""
-  const parts = [
-    location.name,
-    location.address,
-    location.city,
-    location.state,
-  ].filter(Boolean)
+  const parts = [location.name, location.address, location.city, location.state].filter(Boolean)
   return parts.join(", ")
 }
 
@@ -107,17 +105,26 @@ export async function GET(
         const rule = rrulestr(instance.icalendar_rrule)
         const options = rule.options
 
-        const repeating: any = {
+        const repeating: {
+          freq?: number
+          byDay?: number[]
+          until?: Date
+        } = {
           freq: options.freq === 2 ? 2 : undefined, // 2 = WEEKLY
         }
 
         if (options.byweekday && options.byweekday.length > 0) {
-          repeating.byDay = options.byweekday
-            .map((day: any) => {
-              const dayNum = typeof day === 'number' ? day : (day.weekday !== undefined ? day.weekday : day)
+          repeating.byDay = (options.byweekday as Array<number | { weekday?: number }>)
+            .map((day) => {
+              const dayNum =
+                typeof day === "number"
+                  ? day
+                  : typeof day === "object" && day.weekday !== undefined
+                    ? day.weekday
+                    : NaN
               return dayNum >= 0 && dayNum <= 6 ? dayNum : undefined
             })
-            .filter((day: any): day is number => day !== undefined && day >= 0 && day <= 6)
+            .filter((day): day is number => day !== undefined && day >= 0 && day <= 6)
         }
 
         if (options.until) {
@@ -125,7 +132,7 @@ export async function GET(
         }
 
         if (repeating.freq !== undefined) {
-          event.repeating(repeating)
+          event.repeating(repeating as unknown as ICalRepeatingOptions)
         }
       } catch (error) {
         console.error("Error parsing RRULE:", error)
@@ -176,10 +183,10 @@ export async function GET(
         "Content-Disposition": `attachment; filename="course-instance-${instance.id}.ics"`,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error exporting calendar:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to export calendar" },
+      { error: getErrorMessage(error) || "Failed to export calendar" },
       { status: 500 }
     )
   }

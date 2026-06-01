@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getNewsletterDeliveryConfig } from "@/lib/newsletter-admin-delivery"
 
@@ -11,7 +12,7 @@ export async function GET() {
 
     return NextResponse.json(getNewsletterDeliveryConfig(), { status: 200 })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to load config"
+    const message = error instanceof Error ? getErrorMessage(error) : "Failed to load config"
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

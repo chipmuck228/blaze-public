@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -52,11 +53,11 @@ export async function GET(request: Request) {
     const { data: rows, error } = await query
 
     if (error) {
-      console.error("[Public offerings recommend] Error:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error("[v2_offering] Error:", error)
+      return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
 
-    const list = (rows || []).map((row: any) => {
+    const list = (rows || []).map((row) => {
       const cat = Array.isArray(row.category) ? row.category[0] : row.category
       const categorySlug = cat?.name ? String(cat.name).replace(/_/g, "-") : undefined
       return {
@@ -71,9 +72,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(list, { status: 200 })
   } catch (err: unknown) {
-    console.error("[Public offerings recommend] Error:", err)
+    console.error("[v2_offering] Error:", err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch recommendations" },
+      { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch recommendations" },
       { status: 500 }
     )
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getCoachStats } from "@/lib/db"
 
@@ -16,10 +17,10 @@ export async function GET() {
     const stats = await getCoachStats(session.user.id)
 
     return NextResponse.json(stats)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching coach stats:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch coach stats" },
+      { error: getErrorMessage(error) || "Failed to fetch coach stats" },
       { status: 500 }
     )
   }

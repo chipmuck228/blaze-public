@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import type { SchemaFieldConfig } from "@/lib/instance-schema"
+import type { JsonRecord } from "@/types/json"
 
 // 获取单个 Instance V2
 export async function GET(
@@ -59,16 +62,16 @@ export async function GET(
       }
       console.error("Error fetching instance:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch instance" },
+        { error: getErrorMessage(error) || "Failed to fetch instance" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(instance, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching instance v2:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch instance" },
+      { error: getErrorMessage(error) || "Failed to fetch instance" },
       { status: 500 }
     )
   }
@@ -132,15 +135,17 @@ export async function PUT(
     const nextDataExt = {
       ...(currentInstance.instance_data_ext || {}),
       ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
-    } as Record<string, any>
+    } as Record<string, unknown>
+    const scheduleExt = nextDataExt.schedule as Record<string, unknown> | undefined
+    const capacityExt = nextDataExt.capacity_price as Record<string, unknown> | undefined
     // 从 instance_data_ext 的 schedule / capacity_price 推导行级字段
-    let finalStartDate = start_date ?? nextDataExt.schedule?.start_date ?? currentInstance.start_date
-    let finalEndDate = end_date ?? nextDataExt.schedule?.end_date ?? currentInstance.end_date
-    let finalStartTime = start_time ?? nextDataExt.schedule?.start_time ?? currentInstance.start_time
-    let finalEndTime = end_time ?? nextDataExt.schedule?.end_time ?? currentInstance.end_time
-    let finalDaysOfWeek = days_of_week ?? nextDataExt.schedule?.days_of_week ?? currentInstance.days_of_week
-    let finalMaxStudents = max_students ?? nextDataExt.capacity_price?.max_students ?? currentInstance.max_students
-    let finalPriceOverride = price_override ?? nextDataExt.capacity_price?.price_override ?? currentInstance.price_override
+    const finalStartDate = start_date ?? scheduleExt?.start_date ?? currentInstance.start_date
+    const finalEndDate = end_date ?? scheduleExt?.end_date ?? currentInstance.end_date
+    const finalStartTime = start_time ?? scheduleExt?.start_time ?? currentInstance.start_time
+    const finalEndTime = end_time ?? scheduleExt?.end_time ?? currentInstance.end_time
+    const finalDaysOfWeek = days_of_week ?? scheduleExt?.days_of_week ?? currentInstance.days_of_week
+    const finalMaxStudents = max_students ?? capacityExt?.max_students ?? currentInstance.max_students
+    const finalPriceOverride = price_override ?? capacityExt?.price_override ?? currentInstance.price_override
 
     if (finalStartDate && finalEndDate && new Date(finalStartDate) > new Date(finalEndDate)) {
       return NextResponse.json(
@@ -153,10 +158,10 @@ export async function PUT(
       ? currentInstance.offering.offering_type[0]
       : currentInstance.offering?.offering_type
     if (offeringType?.instance_schema && typeof offeringType.instance_schema === "object") {
-      const schema = offeringType.instance_schema as { fields?: Record<string, any> }
+      const schema = offeringType.instance_schema as { fields?: Record<string, SchemaFieldConfig> }
       if (schema.fields) {
         const errors: string[] = []
-        const validateField = (val: any, fieldConfig: any, fieldLabel: string) => {
+        const validateField = (val: unknown, fieldConfig: SchemaFieldConfig, fieldLabel: string) => {
           if (fieldConfig.required && (val === undefined || val === null || val === "")) {
             errors.push(`${fieldLabel} is required`)
             return
@@ -175,8 +180,8 @@ export async function PUT(
           }
           if (fieldConfig.type === "multiselect" && fieldConfig.options) {
             const values = Array.isArray(val) ? val : [val]
-            const optSet = new Set(fieldConfig.options.map((o: any) => String(o)))
-            const invalid = values.filter((v: any) => !optSet.has(String(v)))
+            const optSet = new Set(fieldConfig.options.map((o) => String(o)))
+            const invalid = values.filter((v) => !optSet.has(String(v)))
             if (invalid.length > 0) errors.push(`${fieldLabel} contains invalid values: ${invalid.join(", ")}`)
           }
         }
@@ -189,8 +194,9 @@ export async function PUT(
               continue
             }
             if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-              for (const [propKey, propConfig] of Object.entries(fieldConfig.properties as Record<string, any>)) {
-                validateField(obj[propKey], propConfig, propConfig?.label || propKey)
+              const objRecord = obj as Record<string, unknown>
+              for (const [propKey, propConfig] of Object.entries(fieldConfig.properties ?? {})) {
+                validateField(objRecord[propKey], propConfig, propConfig.label || propKey)
               }
             }
           } else {
@@ -214,11 +220,11 @@ export async function PUT(
       )
     }
 
-    const updateData: any = {}
+    const updateData: StringKeyRecord = {}
     if (campus_id !== undefined) updateData.campus_id = campus_id
     if (current_students !== undefined) updateData.current_students = current_students
     if (session_count !== undefined) updateData.session_count = session_count
-    updateData.instance_data_ext = nextDataExt
+    updateData.instance_data_ext = nextDataExt as JsonRecord
     updateData.start_date = finalStartDate
     updateData.end_date = finalEndDate
     updateData.start_time = finalStartTime
@@ -227,12 +233,25 @@ export async function PUT(
     updateData.max_students = finalMaxStudents
     updateData.price_override = finalPriceOverride
     // is_course_type：从 offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
-    const offeringData = Array.isArray(currentInstance.offering) ? currentInstance.offering[0] : currentInstance.offering
-    updateData.is_course_type = !!(offeringData as any)?.type_config_data?.portal_config?.is_course_type
+    type OfferingJoin = {
+      type_config_data?: {
+        portal_config?: { is_course_type?: boolean }
+        portal_service_role?: string
+      }
+      offering_type?: { portal_service_role?: string } | Array<{ portal_service_role?: string }>
+    }
+    const offeringData = (
+      Array.isArray(currentInstance.offering)
+        ? currentInstance.offering[0]
+        : currentInstance.offering
+    ) as OfferingJoin | undefined
+    updateData.is_course_type = !!offeringData?.type_config_data?.portal_config?.is_course_type
     // portal_service_role：从 type_config_data 平铺，缺省时用 offering_type.portal_service_role（设计文档 INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3）
-    const rawRole = (offeringData as any)?.type_config_data?.portal_service_role
-    const ot = Array.isArray((offeringData as any)?.offering_type) ? (offeringData as any).offering_type[0] : (offeringData as any)?.offering_type
-    const typeRole = (ot as any)?.portal_service_role
+    const rawRole = offeringData?.type_config_data?.portal_service_role
+    const ot = Array.isArray(offeringData?.offering_type)
+      ? offeringData.offering_type[0]
+      : offeringData?.offering_type
+    const typeRole = ot?.portal_service_role
     updateData.portal_service_role =
       rawRole === "meal_service" || rawRole === "care_service"
         ? rawRole
@@ -286,10 +305,10 @@ export async function PUT(
     }
 
     return NextResponse.json(updatedInstance, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating instance v2:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update instance" },
+      { error: getErrorMessage(error) || "Failed to update instance" },
       { status: 500 }
     )
   }
@@ -341,10 +360,10 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Instance deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting instance v2:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete instance" },
+      { error: getErrorMessage(error) || "Failed to delete instance" },
       { status: 500 }
     )
   }

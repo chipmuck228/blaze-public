@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { sendInvitationEmail } from "@/lib/email"
@@ -109,9 +110,9 @@ export async function POST(request: Request) {
         'user' // Student role
       )
       emailSent = true
-    } catch (emailErrorObj: any) {
+    } catch (emailErrorObj: unknown) {
       console.error("Failed to send invitation email:", emailErrorObj)
-      emailError = emailErrorObj.message || "Failed to send invitation email"
+      emailError = getErrorMessage(emailErrorObj, "Failed to send invitation email")
     }
 
     return NextResponse.json({
@@ -127,10 +128,10 @@ export async function POST(request: Request) {
         ? "Invitation sent successfully" 
         : "Invitation created, but email sending failed",
     }, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating student invitation:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create invitation" },
+      { error: getErrorMessage(error) || "Failed to create invitation" },
       { status: 500 }
     )
   }
@@ -169,17 +170,17 @@ export async function GET(request: Request) {
     const { data: invitations, error } = await query
 
     if (error) {
-      throw new Error(`Failed to fetch invitations: ${error.message}`)
+      throw new Error(`Failed to fetch invitations: ${getErrorMessage(error)}`)
     }
 
     return NextResponse.json({
       invitations: invitations || [],
       total: invitations?.length || 0
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching invitations:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch invitations" },
+      { error: getErrorMessage(error) || "Failed to fetch invitations" },
       { status: 500 }
     )
   }

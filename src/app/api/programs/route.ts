@@ -1,6 +1,29 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { getFranchiseByCode } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
+import { unwrapRelation } from "@/lib/supabase-relation"
+
+interface ProgramCourseEntry {
+  id: string
+  title: string
+  slug?: string
+  poster_url?: string
+  description?: string
+  gradeLevel: string
+  instances: Array<Record<string, unknown>>
+}
+
+interface ProgramSeriesEntry {
+  id: string
+  name: string
+  display_name: string
+  description: string | null
+  start_date: string
+  end_date: string
+  category: { id: string; name: string; display_name: string } | null
+  courses: Map<string, ProgramCourseEntry>
+}
 
 // GET /api/programs?franchise=code
 // 返回某个 franchise 下的所有 series/programs 以及每个 program 下的 offerings（通过 instances）
@@ -37,7 +60,7 @@ export async function GET(request: Request) {
         console.log(`[Programs API] Found legacy_franchise_id: ${legacyFranchiseId} for franchise ${franchiseCode}`)
       }
     } catch (error) {
-      console.warn(`[Programs API] Error fetching franchise_v2 for legacy mapping:`, error)
+      console.warn(`[v2_franchise] Error fetching for legacy mapping:`, error)
     }
 
     // 1. 获取该 franchise 下的所有 series/programs
@@ -88,7 +111,7 @@ export async function GET(request: Request) {
       return NextResponse.json([], { status: 200 })
     }
 
-    const seriesIds = seriesList.map((s: any) => s.id)
+    const seriesIds = seriesList.map((s) => s.id)
     console.log(`[Programs API] Series IDs to query instances:`, seriesIds)
 
     // 2. 直接查询 instance_v2 表，获取该 franchise 下的所有 instances
@@ -147,13 +170,13 @@ export async function GET(request: Request) {
     const { data: instancesV2Data, error: instancesV2Error } = await instancesQuery
 
     if (instancesV2Error) {
-      console.error(`[Programs API] Error fetching instances_v2:`, instancesV2Error)
+      console.error(`[v2_instance] Error fetching:`, instancesV2Error)
       throw new Error(instancesV2Error.message)
     }
 
     // 过滤 instances：只保留 franchise_id 匹配或为 null 的 instances
     // 如果 franchise_id 为 null，我们通过 series_id 的关系已经验证了它属于该 franchise
-    const filteredInstances = (instancesV2Data || []).filter((inst: any) => {
+    const filteredInstances = (instancesV2Data || []).filter((inst) => {
       // 如果 franchise_id 匹配（新表或旧表），或者为 null（通过 series 关系验证），则保留
       const matches = !inst.franchise_id || 
                      inst.franchise_id === franchise.id || 
@@ -167,7 +190,7 @@ export async function GET(request: Request) {
     console.log(`[Programs API] Found ${filteredInstances.length} instances for franchise ${franchise.code}`)
 
     // 3. 按 series_id 分组 instances
-    const instancesBySeries = new Map<string, any[]>()
+    const instancesBySeries = new Map<string, Array<Record<string, unknown>>>()
     for (const instance of filteredInstances) {
       const seriesId = instance.series_id
       if (!instancesBySeries.has(seriesId)) {
@@ -211,8 +234,8 @@ export async function GET(request: Request) {
 
     // 4. 按 offering_id 分组 instances，然后按 series 组织
     // 每个 series 包含多个 offerings，每个 offering 有多个 instances
-    const seriesMap = new Map<string, any>()
-    for (const s of seriesList as any[]) {
+    const seriesMap = new Map<string, ProgramSeriesEntry>()
+    for (const s of seriesList) {
       seriesMap.set(s.id, {
         id: s.id,
         name: s.name,
@@ -220,14 +243,17 @@ export async function GET(request: Request) {
         description: s.description,
         start_date: s.start_date,
         end_date: s.end_date,
-        category: s.category
-          ? {
-              id: s.category.id,
-              name: s.category.name,
-              display_name: s.category.display_name,
-            }
-          : null,
-        courses: new Map<string, any>(), // 使用 Map 去重 offerings（key: offering_id）
+        category: (() => {
+          const category = unwrapRelation(s.category)
+          return category
+            ? {
+                id: category.id,
+                name: category.name,
+                display_name: category.display_name,
+              }
+            : null
+        })(),
+        courses: new Map<string, ProgramCourseEntry>(), // 使用 Map 去重 offerings（key: offering_id）
       })
     }
 
@@ -265,6 +291,7 @@ export async function GET(request: Request) {
       }
 
       const courseEntry = seriesEntry.courses.get(offeringId)
+      if (!courseEntry) continue
       courseEntry.instances.push({
         id: instance.id,
         location_id: instance.location_id,
@@ -295,7 +322,7 @@ export async function GET(request: Request) {
     const result = Array.from(seriesMap.values())
       .map((entry) => {
         const coursesWithInstances = Array.from(entry.courses.values())
-          .filter((course: any) => course.instances && course.instances.length > 0)
+          .filter((course) => course.instances && course.instances.length > 0)
         
         return {
           id: entry.id,
@@ -310,11 +337,11 @@ export async function GET(request: Request) {
       })
       .filter((program) => program.courses.length > 0) // 过滤掉没有 courses 的 programs
 
-    console.log(`[Programs API] Final result: ${result.length} programs with offerings:`, result.map((p: any) => ({
+    console.log(`[Programs API] Final result: ${result.length} programs with offerings:`, result.map((p) => ({
       program: p.display_name,
       program_id: p.id,
       course_count: p.courses.length,
-      courses: p.courses.map((c: any) => ({
+      courses: p.courses.map((c) => ({
         title: c.title,
         id: c.id,
         instance_count: c.instances?.length || 0
@@ -322,10 +349,10 @@ export async function GET(request: Request) {
     })))
 
     return NextResponse.json(result, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching programs:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch programs" },
+      { error: getErrorMessage(error) || "Failed to fetch programs" },
       { status: 500 }
     )
   }

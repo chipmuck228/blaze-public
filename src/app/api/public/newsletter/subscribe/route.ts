@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { randomBytes } from "crypto"
 import { NEWSLETTER_TEMPLATE_NAMES } from "@/lib/newsletter-email-templates"
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
     )
   } catch (error: unknown) {
     console.error("Error in newsletter subscribe:", error)
-    const message = error instanceof Error ? error.message : "Failed to subscribe"
+    const message = error instanceof Error ? getErrorMessage(error) : "Failed to subscribe"
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

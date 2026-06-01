@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { getAllTeamMembers, getAllActiveTeamMembers } from "@/lib/db"
 
 export async function GET(request: Request) {
@@ -10,10 +11,10 @@ export async function GET(request: Request) {
     const teams = all ? await getAllActiveTeamMembers() : await getAllTeamMembers()
 
     return NextResponse.json(teams, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching teams:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch teams" },
+      { error: getErrorMessage(error) || "Failed to fetch teams" },
       { status: 500 }
     )
   }

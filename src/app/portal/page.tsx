@@ -33,6 +33,56 @@ import { Trash2, Star } from "lucide-react"
 import { Footer } from "@/components/Footer"
 import Link from "next/link"
 
+interface PortalStudentSummary {
+  id: string
+  name: string
+  can_view_progress?: boolean
+}
+
+interface PortalEnrollmentLineItem {
+  id: string
+  student_name?: string
+  waitlist_position?: number | null
+  instance?: {
+    name?: string
+    offering?: { name?: string }
+  }
+}
+
+interface PortalCredit {
+  id: string
+  description?: string
+  available_amount?: number
+  amount?: number
+}
+
+interface InvoiceLineItem {
+  description: string
+  quantity: number
+  unit_price: number
+  total: number
+}
+
+interface InvoiceData {
+  invoice_number: string
+  date: string
+  payment_date?: string | null
+  currency: string
+  subtotal: number
+  tax: number
+  total: number
+  payment_status: string
+  stripe_receipt_url?: string | null
+  payment_transaction_id?: string
+  customer: { name: string; email: string }
+  location?: { name: string; address?: string } | null
+  course?: { name: string; description?: string } | null
+  category?: { name: string } | null
+  series?: { name: string } | null
+  instance?: { start_date: string } | null
+  items: InvoiceLineItem[]
+}
+
 interface UserProfile {
   id: string
   name: string
@@ -151,11 +201,11 @@ export default function ProfilePage() {
   const [isRemovingPaymentMethod, setIsRemovingPaymentMethod] = useState<string | null>(null)
   const [isSettingDefault, setIsSettingDefault] = useState<string | null>(null)
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null)
-  const [invoiceData, setInvoiceData] = useState<any>(null)
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null)
   const [sendingInvoiceIds, setSendingInvoiceIds] = useState<Set<string>>(new Set())
-  const [cartItems, setCartItems] = useState<any[]>([])
-  const [waitlistItems, setWaitlistItems] = useState<any[]>([])
-  const [credits, setCredits] = useState<any[]>([])
+  const [cartItems, setCartItems] = useState<PortalEnrollmentLineItem[]>([])
+  const [waitlistItems, setWaitlistItems] = useState<PortalEnrollmentLineItem[]>([])
+  const [credits, setCredits] = useState<PortalCredit[]>([])
   const [students, setStudents] = useState<{ id: string; name: string; can_view_progress: boolean }[]>([])
 
   useEffect(() => {
@@ -311,7 +361,7 @@ export default function ProfilePage() {
       const res = await fetch("/api/students")
       if (res.ok) {
         const data = await res.json()
-        setStudents((data.students || []).map((s: any) => ({
+        setStudents((data.students || []).map((s: PortalStudentSummary) => ({
           id: s.id,
           name: s.name,
           can_view_progress: !!s.can_view_progress,
@@ -374,7 +424,7 @@ export default function ProfilePage() {
         const error = await response.json()
         toast.error(error.error || 'Failed to remove payment method')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error removing payment method:', error)
       toast.error('Failed to remove payment method')
     } finally {
@@ -396,7 +446,7 @@ export default function ProfilePage() {
         const error = await response.json()
         toast.error(error.error || 'Failed to set default payment method')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error setting default payment method:', error)
       toast.error('Failed to set default payment method')
     } finally {
@@ -579,7 +629,7 @@ export default function ProfilePage() {
                         <CardDescription>Items in your cart</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        {cartItems.map((item: any) => (
+                        {cartItems.map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                             <div>
                               <p className="font-medium">{item.instance?.offering?.name || item.instance?.name || "Course"}</p>
@@ -610,7 +660,7 @@ export default function ProfilePage() {
                         <CardDescription>Your waitlist positions</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        {waitlistItems.map((item: any) => (
+                        {waitlistItems.map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                             <div>
                               <p className="font-medium">{item.instance?.offering?.name || item.instance?.name || "Course"}</p>
@@ -642,7 +692,7 @@ export default function ProfilePage() {
                           <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                           <p className="text-muted-foreground mb-4">No enrollments yet</p>
                           <Button asChild>
-                            <Link href="/course-catalog">Browse Courses</Link>
+                            <Link href="/programs">Browse Programs</Link>
                           </Button>
                         </div>
                       ) : courseEnrollments.length === 0 ? (
@@ -738,7 +788,7 @@ export default function ProfilePage() {
                           <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                           <p className="text-muted-foreground mb-4">No enrolled courses</p>
                           <Button asChild>
-                            <Link href="/course-catalog">Browse Courses</Link>
+                            <Link href="/programs">Browse Programs</Link>
                           </Button>
                         </div>
                       ) : (
@@ -795,7 +845,7 @@ export default function ProfilePage() {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
-                          {credits.map((c: any) => (
+                          {credits.map((c) => (
                             <div key={c.id} className="flex justify-between items-center p-3 rounded-lg border">
                               <span className="text-sm">{c.description || "Credit"}</span>
                               <span className="font-medium">${(c.available_amount ?? c.amount ?? 0).toFixed(2)}</span>
@@ -1310,7 +1360,7 @@ export default function ProfilePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {invoiceData.items.map((item: any, index: number) => (
+                    {invoiceData.items.map((item, index) => (
                       <tr key={index} className="border-t">
                         <td className="p-3">{item.description}</td>
                         <td className="p-3 text-right">{item.quantity}</td>

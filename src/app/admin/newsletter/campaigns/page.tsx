@@ -106,7 +106,7 @@ export default function NewsletterCampaignsPage() {
       setCampaigns(data.campaigns || [])
       setTotal(data.total || 0)
       setTotalPages(data.totalPages || 0)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching campaigns:", error)
       adminToast.error("Failed to load campaigns")
     } finally {
@@ -134,7 +134,7 @@ export default function NewsletterCampaignsPage() {
           resend_broadcast_id: data.campaign.resend_broadcast_id,
         })
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching campaign details:", error)
       adminToast.error("Failed to load campaign details")
     } finally {
@@ -162,9 +162,9 @@ export default function NewsletterCampaignsPage() {
 
       adminToast.success("Campaign cancelled successfully")
       fetchCampaigns()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error cancelling campaign:", error)
-      adminToast.error(error.message || "Failed to cancel campaign")
+      adminToast.error(getErrorMessage(error) || "Failed to cancel campaign")
     }
   }
 

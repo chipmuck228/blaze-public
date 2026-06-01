@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from '@/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getDateRangeFromParams } from '@/lib/traffic-api-utils'
@@ -57,10 +58,10 @@ export async function GET(request: NextRequest) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching traffic devices:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch traffic devices' },
+      { error: getErrorMessage(error) || 'Failed to fetch traffic devices' },
       { status: 500 }
     )
   }

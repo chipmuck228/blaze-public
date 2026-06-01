@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -31,14 +32,14 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: "Campus not found" }, { status: 404 })
       }
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching campus:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch campus" },
+      { error: getErrorMessage(error) || "Failed to fetch campus" },
       { status: 500 }
     )
   }
@@ -96,7 +97,7 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {
+    const updateData: StringKeyRecord = {
       name,
       display_name: display_name || name,
       address: address || null,
@@ -139,16 +140,16 @@ export async function PUT(
       }
       console.error("Error updating campus:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to update campus" },
+        { error: getErrorMessage(error) || "Failed to update campus" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating campus:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update campus" },
+      { error: getErrorMessage(error) || "Failed to update campus" },
       { status: 500 }
     )
   }
@@ -195,16 +196,16 @@ export async function DELETE(
       }
       console.error("Error deleting campus:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to delete campus" },
+        { error: getErrorMessage(error) || "Failed to delete campus" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ message: "Campus deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting campus:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete campus" },
+      { error: getErrorMessage(error) || "Failed to delete campus" },
       { status: 500 }
     )
   }

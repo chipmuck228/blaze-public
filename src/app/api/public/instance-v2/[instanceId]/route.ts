@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { extractIsoDatePart } from "@/lib/format-calendar-date"
 import { filterInstanceDataExtByDisplayScope } from "@/lib/instance-schema"
+import { unwrapRelation } from "@/lib/supabase-relation"
+import type { JsonRecord } from "@/types/json"
+import type { V2InstanceDetailRow } from "@/types/v2-instance-detail"
 
 /** v2_instance DATE columns: expose YYYY-MM-DD only (no timezone shift on clients). */
 function normalizeInstanceDateColumn(value: unknown): string | null {
@@ -113,43 +117,54 @@ export async function GET(
       .maybeSingle()
 
     if (error) {
-      console.error("[Public instance-v2] Error:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error("[v2_instance] Error:", error)
+      return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
     if (!row) {
       return NextResponse.json({ error: "Instance not found" }, { status: 404 })
     }
 
-    const program = Array.isArray((row as any).program) ? (row as any).program[0] : (row as any).program
-    const offering = Array.isArray((row as any).offering) ? (row as any).offering[0] : (row as any).offering
-    const campus = Array.isArray((row as any).campus) ? (row as any).campus[0] : (row as any).campus
+    const instanceRow = row as V2InstanceDetailRow
+    const program = unwrapRelation(instanceRow.program)
+    const offering = unwrapRelation(instanceRow.offering)
+    const campus = unwrapRelation(instanceRow.campus)
 
     if (!program?.id || !offering?.id || offering.status !== "published") {
       return NextResponse.json({ error: "Instance not found" }, { status: 404 })
     }
 
-    const offeringType = Array.isArray(offering.offering_type)
-      ? offering.offering_type[0]
-      : offering.offering_type
+    const offeringType = unwrapRelation(offering.offering_type)
     const instanceSchema = offeringType?.instance_schema ?? null
     const offeringSchema = offeringType?.offering_schema ?? null
 
-    const extData = (row as any).instance_data_ext ?? {}
-    const schedule = extData.schedule && typeof extData.schedule === "object" ? (extData.schedule as Record<string, unknown>) : null
-    const capacityPrice = extData.capacity_price && typeof extData.capacity_price === "object" ? (extData.capacity_price as Record<string, unknown>) : null
-    const typeConfigData = offering.type_config_data ?? {}
+    const extData: JsonRecord = instanceRow.instance_data_ext ?? {}
+    const schedule = extData.schedule && typeof extData.schedule === "object" && !Array.isArray(extData.schedule)
+      ? (extData.schedule as Record<string, unknown>)
+      : null
+    const capacityPrice =
+      extData.capacity_price &&
+      typeof extData.capacity_price === "object" &&
+      !Array.isArray(extData.capacity_price)
+        ? (extData.capacity_price as Record<string, unknown>)
+        : null
+    const typeConfigData = (offering.type_config_data ?? {}) as JsonRecord
     const portalConfigForPayload =
-      typeConfigData && typeof typeConfigData === "object" && typeConfigData !== null && "portal_config" in typeConfigData
-        ? (typeConfigData as Record<string, unknown>).portal_config
+      typeof typeConfigData === "object" && typeConfigData !== null && "portal_config" in typeConfigData
+        ? typeConfigData.portal_config
         : undefined
-    const maxStudents = (row as any).max_students ?? extData.max_students ?? capacityPrice?.max_students ?? 0
-    const currentStudents = (row as any).current_students ?? 0
+    const maxStudentsRaw = capacityPrice?.max_students
+    const maxStudents =
+      instanceRow.max_students ??
+      (typeof extData.max_students === "number" ? extData.max_students : undefined) ??
+      (typeof maxStudentsRaw === "number" ? maxStudentsRaw : 0) ??
+      0
+    const currentStudents = instanceRow.current_students ?? 0
 
-    const rowStart = normalizeInstanceDateColumn((row as any).start_date)
-    const rowEnd = normalizeInstanceDateColumn((row as any).end_date)
+    const rowStart = normalizeInstanceDateColumn(instanceRow.start_date)
+    const rowEnd = normalizeInstanceDateColumn(instanceRow.end_date)
 
     const payload = {
-      id: (row as any).id,
+      id: instanceRow.id,
       start_date:
         rowStart ??
         normalizeInstanceDateColumn(extData.start_date) ??
@@ -160,13 +175,25 @@ export async function GET(
         normalizeInstanceDateColumn(extData.end_date) ??
         normalizeInstanceDateColumn(schedule?.end_date) ??
         null,
-      start_time: (row as any).start_time ?? extData.start_time ?? schedule?.start_time ?? null,
-      end_time: (row as any).end_time ?? extData.end_time ?? schedule?.end_time ?? null,
+      start_time:
+        instanceRow.start_time ??
+        (typeof extData.start_time === "string" ? extData.start_time : null) ??
+        (typeof schedule?.start_time === "string" ? schedule.start_time : null) ??
+        null,
+      end_time:
+        instanceRow.end_time ??
+        (typeof extData.end_time === "string" ? extData.end_time : null) ??
+        (typeof schedule?.end_time === "string" ? schedule.end_time : null) ??
+        null,
       max_students: maxStudents || null,
       current_students: currentStudents,
-      status: (row as any).status,
-      price_override: (row as any).price_override ?? extData.price_override ?? capacityPrice?.price_override ?? null,
-      amilia_link: (row as any).amilia_link?.trim() || null,
+      status: instanceRow.status,
+      price_override:
+        instanceRow.price_override ??
+        (typeof extData.price_override === "number" ? extData.price_override : null) ??
+        (typeof capacityPrice?.price_override === "number" ? capacityPrice.price_override : null) ??
+        null,
+      amilia_link: instanceRow.amilia_link?.trim() || null,
       instance_data_ext: filterInstanceDataExtByDisplayScope(instanceSchema, extData),
       location: campus
         ? {
@@ -182,8 +209,8 @@ export async function GET(
         name: program.name,
         display_name: program.display_name ?? program.name,
         description: program.description ?? undefined,
-        category: Array.isArray(program.category) ? program.category[0] : program.category,
-        franchise: Array.isArray(program.franchise) ? program.franchise[0] : program.franchise,
+        category: unwrapRelation(program.category) ?? undefined,
+        franchise: unwrapRelation(program.franchise) ?? undefined,
       },
       offering: {
         id: offering.id,
@@ -205,9 +232,9 @@ export async function GET(
 
     return NextResponse.json(payload, { status: 200 })
   } catch (err: unknown) {
-    console.error("[Public instance-v2] Error:", err)
+    console.error("[v2_instance] Error:", err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch instance" },
+      { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch instance" },
       { status: 500 }
     )
   }

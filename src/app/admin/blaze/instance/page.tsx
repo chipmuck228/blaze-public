@@ -54,7 +54,7 @@ interface Instance {
   days_of_week?: number[]
   max_students?: number
   current_students: number
-  instance_data_ext?: Record<string, any>
+  instance_data_ext?: Record<string, unknown>
   status: string
   is_active: boolean
   program?: {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getUserCredits } from "@/lib/db"
 
@@ -26,10 +27,10 @@ export async function GET() {
       total_available: totalAvailable,
       total_count: credits.length,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching credits:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch credits" },
+      { error: getErrorMessage(error) || "Failed to fetch credits" },
       { status: 500 }
     )
   }

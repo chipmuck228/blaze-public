@@ -16,6 +16,9 @@ import { X, Plus, Upload, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { adminToast } from "@/lib/admin-toast"
+import { isUsableTeamImageUrl } from "@/lib/team-avatar"
+import type { StringKeyRecord } from "@/lib/typed-error"
 
 interface TeamMember {
   id: string
@@ -49,6 +52,7 @@ interface Coach {
   email: string
   image?: string
   role: string
+  has_team_profile?: boolean
 }
 
 interface TeamEditDialogProps {
@@ -234,8 +238,31 @@ export function TeamEditDialog({
 
       // 设置上传后的 URL
       setImageUrl(data.url)
+      setPreviewUrl(data.url)
       setIsUploading(false)
-    } catch (error: any) {
+
+      // 编辑模式：上传成功后立即写入 teams.image_url（无需等 Save）
+      if (team?.id && data.url) {
+        const patchRes = await fetch(`/api/admin/teams/${team.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_url: data.url }),
+        })
+        if (!patchRes.ok) {
+          const patchData = await patchRes.json().catch(() => ({}))
+          setError(patchData.error || "Avatar uploaded but failed to save to database")
+          return
+        }
+        adminToast.success("Avatar saved", {
+          description: "Image URL stored on this team member.",
+        })
+        onTeamUpdated()
+      } else if (data.url) {
+        adminToast.success("Avatar uploaded", {
+          description: "Click Create Member to save this team profile.",
+        })
+      }
+    } catch (error: unknown) {
       setPreviewUrl(null)
       setError("Failed to upload image. Please try again.")
       setIsUploading(false)
@@ -262,7 +289,7 @@ export function TeamEditDialog({
       const url = team ? `/api/admin/teams/${team.id}` : "/api/admin/teams"
       const method = team ? "PATCH" : "POST"
 
-      const payload: any = {
+      const payload: StringKeyRecord = {
         position,
         description,
         display_order: displayOrder,
@@ -271,14 +298,15 @@ export function TeamEditDialog({
         social_networks: socialNetworks.filter(sn => sn.name && sn.url),
       }
 
-      // 如果提供了 user_id，这些字段是可选的（会使用 Users 表的）
       if (userId) {
         payload.user_id = userId
         if (name) payload.name = name
-        if (imageUrl) payload.image_url = imageUrl
       } else {
-        // 向后兼容：如果没有 user_id，name 和 image_url 是必需的
         payload.name = name
+      }
+
+      // 始终持久化 teams.image_url（Admin 上传的 Blob URL 存在 teams 表）
+      if (imageUrl && isUsableTeamImageUrl(imageUrl)) {
         payload.image_url = imageUrl
       }
 
@@ -304,7 +332,7 @@ export function TeamEditDialog({
 
       onTeamUpdated()
       onOpenChange(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError(`Failed to ${team ? "update" : "create"} team member. Please try again.`)
       setIsLoading(false)
     }
@@ -337,7 +365,7 @@ export function TeamEditDialog({
               <SelectContent>
                 <SelectItem value="__none__">None (Manual Entry)</SelectItem>
                 {coaches
-                  .filter((coach: any) => {
+                  .filter((coach) => {
                     // 编辑模式：显示所有 coach（包括当前选中的）
                     if (team) {
                       return coach.id === team.user_id || !coach.has_team_profile

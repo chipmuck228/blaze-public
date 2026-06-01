@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
+import { unwrapRelation } from "@/lib/supabase-relation"
 
 /**
  * 获取指定 franchise 订阅的 categories（公开 API）
@@ -35,7 +37,7 @@ export async function GET(
       .select("id, franchise_id, category_id, is_visible, display_order")
       .eq("franchise_id", franchise.id)
 
-    console.log('[Franchise Categories API] Step 1 - All maps:', {
+    console.log('[v2_franchise_category_map] Step 1 - All maps:', {
       franchiseCode: normalizedCode,
       franchiseId: franchise.id,
       allMapsCount: allMaps?.length || 0,
@@ -45,7 +47,7 @@ export async function GET(
 
     // 如果没有订阅记录，返回空数组（不显示任何 category）
     if (!allMaps || allMaps.length === 0) {
-      console.log('[Franchise Categories API] No subscriptions found, returning empty array')
+      console.log('[v2_franchise_category_map] No subscriptions found, returning empty array')
       return NextResponse.json({ categories: [] }, { status: 200 })
     }
 
@@ -73,7 +75,7 @@ export async function GET(
       .eq("is_visible", true)
       .order("display_order", { ascending: true })
 
-    console.log('[Franchise Categories API] Step 2 - Query result:', {
+    console.log('[v2_franchise_category_map] Step 2 - Query result:', {
       franchiseCode: normalizedCode,
       franchiseId: franchise.id,
       dataCount: data?.length || 0,
@@ -84,22 +86,16 @@ export async function GET(
     if (error) {
       console.error("Error fetching franchise categories:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch franchise categories" },
+        { error: getErrorMessage(error) || "Failed to fetch franchise categories" },
         { status: 500 }
       )
     }
 
     // 过滤出激活的 categories，并提取 category 信息
     const categories = (data || [])
-      .map((item: any) => {
-        // 确保 category 存在且不为 null
-        if (!item || !item.category) {
-          return null
-        }
-        return item.category
-      })
-      .filter((cat: any) => cat !== null && cat.is_active === true)
-      .map((cat: any) => ({
+      .map((item) => unwrapRelation(item?.category))
+      .filter((cat): cat is NonNullable<typeof cat> => !!cat && cat.is_active === true)
+      .map((cat) => ({
         id: cat.id,
         name: cat.name,
         display_name: cat.display_name,
@@ -110,20 +106,20 @@ export async function GET(
       }))
 
     // 添加调试日志（始终输出）
-    console.log('[Franchise Categories API] Final result:', {
+    console.log('[v2_franchise_category_map] Final result:', {
       franchiseCode: normalizedCode,
       franchiseId: franchise.id,
       rawDataCount: data?.length || 0,
       rawDataSample: data?.slice(0, 2),
       categoriesCount: categories.length,
-      categories: categories.map((c: any) => ({ id: c.id, name: c.name, display_name: c.display_name })),
+      categories: categories.map((c) => ({ id: c.id, name: c.name, display_name: c.display_name })),
     })
 
     return NextResponse.json({ categories }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching franchise categories:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch franchise categories" },
+      { error: getErrorMessage(error) || "Failed to fetch franchise categories" },
       { status: 500 }
     )
   }

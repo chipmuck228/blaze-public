@@ -179,7 +179,7 @@ export function RefundDialog({ enrollment, open, onOpenChange }: RefundDialogPro
               <>
                 <div className="space-y-2">
                   <Label>Refund Type</Label>
-                  <RadioGroup value={refundType} onValueChange={(v) => setRefundType(v as any)}>
+                  <RadioGroup value={refundType} onValueChange={(v) => setRefundType(v as 'refund' | 'credit')}>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="refund" id="refund" disabled={!policy.canRefund} />
                       <Label

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { createUser } from "@/lib/db"
 import { sendVerificationEmail } from "@/lib/email"
 
@@ -35,9 +36,9 @@ export async function POST(request: Request) {
         user.name
       )
       emailSent = true
-    } catch (emailErrorObj: any) {
+    } catch (emailErrorObj: unknown) {
       console.error("Failed to send verification email:", emailErrorObj)
-      emailError = emailErrorObj.message || "Failed to send verification email"
+      emailError = getErrorMessage(emailErrorObj, "Failed to send verification email")
       // 即使邮件发送失败，也返回成功（用户已创建），但告知用户邮件发送失败
     }
 
@@ -52,9 +53,9 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Registration failed" },
+      { error: getErrorMessage(error) || "Registration failed" },
       { status: 400 }
     )
   }

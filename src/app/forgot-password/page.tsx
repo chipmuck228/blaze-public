@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
 
       setSuccess(true)
       setIsLoading(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError("Failed to send, please try again later")
       setIsLoading(false)
     }

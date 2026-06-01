@@ -81,7 +81,7 @@ export function UserEditDialog({
       }
 
       onUserUpdated()
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError("Failed to update user. Please try again.")
       setIsLoading(false)
     }

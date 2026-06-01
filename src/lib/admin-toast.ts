@@ -1,4 +1,5 @@
 import { toast } from "sonner"
+export { getErrorMessage } from "@/lib/typed-error"
 
 const SUCCESS_DURATION = 4000
 const ERROR_DURATION = 7000
@@ -82,14 +83,4 @@ export function adminConfirm(options: AdminConfirmOptions): Promise<boolean> {
       onDismiss: () => settle(false),
     })
   })
-}
-
-export function getErrorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error.trim()) return error
-  if (error && typeof error === "object" && "error" in error) {
-    const message = (error as { error?: unknown }).error
-    if (typeof message === "string" && message.trim()) return message
-  }
-  return fallback
 }

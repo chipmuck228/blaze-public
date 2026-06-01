@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         { status: 401 }
       )
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Teacher portal auth error:', error)
     return NextResponse.json(
       { error: 'An error occurred during authentication' },

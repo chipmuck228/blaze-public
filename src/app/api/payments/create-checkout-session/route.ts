@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from '@/auth'
 import { stripe } from '@/lib/stripe'
 import { 
@@ -142,12 +143,15 @@ export async function POST(request: Request) {
           enrollment_ids: JSON.stringify(enrollment_ids),
         },
       })
-    } catch (stripeError: any) {
+    } catch (stripeError: unknown) {
       console.error('Stripe API error:', stripeError)
       return NextResponse.json(
         { 
-          error: stripeError.message || 'Failed to create payment session',
-          details: process.env.NODE_ENV === 'development' ? stripeError.stack : undefined
+          error: getErrorMessage(stripeError) || 'Failed to create payment session',
+          details:
+            process.env.NODE_ENV === "development" && stripeError instanceof Error
+              ? stripeError.stack
+              : undefined
         },
         { status: 500 }
       )
@@ -168,10 +172,10 @@ export async function POST(request: Request) {
       total_amount: total,
       currency,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating checkout session:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to create checkout session' },
+      { error: getErrorMessage(error) || 'Failed to create checkout session' },
       { status: 500 }
     )
   }

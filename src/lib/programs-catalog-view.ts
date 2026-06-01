@@ -1,5 +1,5 @@
 /**
- * C-end programs catalog: merges category directory with instances-v2 data.
+ * C-end programs catalog: merges v2_category directory with v2_instance data (GET /api/public/instances-v2).
  * User terms: Location (franchise) → Program (category) → Activity (program) → Session (instance).
  */
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -28,16 +29,16 @@ export async function GET(request: Request) {
     if (error) {
       console.error("Error fetching categories:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch categories" },
+        { error: getErrorMessage(error) || "Failed to fetch categories" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data || [], { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching categories:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch categories" },
+      { error: getErrorMessage(error) || "Failed to fetch categories" },
       { status: 500 }
     )
   }
@@ -103,16 +104,16 @@ export async function POST(request: Request) {
       }
       
       return NextResponse.json(
-        { error: error.message || "Failed to create category" },
+        { error: getErrorMessage(error) || "Failed to create category" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating category:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create category" },
+      { error: getErrorMessage(error) || "Failed to create category" },
       { status: 500 }
     )
   }

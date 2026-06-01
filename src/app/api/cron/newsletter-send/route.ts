@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { sendNewsletterCampaign } from "@/lib/newsletter-campaign-send"
 import { getNewsletterBaseUrl } from "@/lib/newsletter-template-runtime"
@@ -114,7 +115,7 @@ export async function GET(request: Request) {
 
         processedCount++
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Unknown error"
+        const message = error instanceof Error ? getErrorMessage(error) : "Unknown error"
         console.error(`Error processing campaign ${campaign.id}:`, error)
 
         await supabaseAdmin
@@ -141,7 +142,7 @@ export async function GET(request: Request) {
     })
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Failed to process scheduled newsletters"
+      error instanceof Error ? getErrorMessage(error) : "Failed to process scheduled newsletters"
     console.error("Error processing scheduled newsletters:", error)
     return NextResponse.json({ error: message, timestamp: new Date().toISOString() }, { status: 500 })
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { acceptInvitationAndSetPassword } from "@/lib/db"
 import { signIn } from "@/auth"
 
@@ -58,10 +59,10 @@ export async function POST(request: Request) {
       },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error accepting invitation:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to accept invitation" },
+      { error: getErrorMessage(error) || "Failed to accept invitation" },
       { status: 400 }
     )
   }

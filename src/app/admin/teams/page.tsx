@@ -39,6 +39,7 @@ import {
 import { TeamEditDialog } from "@/components/admin/TeamEditDialog"
 import Image from "next/image"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import { isUsableTeamImageUrl } from "@/lib/team-avatar"
 
 interface TeamMember {
   id: string
@@ -240,14 +241,18 @@ function TeamsManagementPageContent() {
               {filteredTeams.map((team) => (
                 <Card key={team.id} className="overflow-hidden flex flex-col">
                   <div className="flex items-start gap-3 p-4">
-                    <div className="relative w-14 h-14 shrink-0 rounded-full overflow-hidden bg-muted">
-                      <Image
-                        src={team.image_url}
-                        alt={team.name}
-                        fill
-                        className="object-cover"
-                        sizes="56px"
-                      />
+                    <div className="relative w-14 h-14 shrink-0 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+                      {isUsableTeamImageUrl(team.image_url) ? (
+                        <Image
+                          src={team.image_url}
+                          alt={team.name}
+                          fill
+                          className="object-cover"
+                          sizes="56px"
+                        />
+                      ) : (
+                        <User className="h-6 w-6 text-muted-foreground" aria-hidden />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">

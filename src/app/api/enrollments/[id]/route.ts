@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import {
   getInstanceEnrollmentById,
@@ -40,10 +41,10 @@ export async function GET(
     }
 
     return NextResponse.json({ enrollment })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching enrollment:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch enrollment" },
+      { error: getErrorMessage(error) || "Failed to fetch enrollment" },
       { status: 500 }
     )
   }
@@ -102,10 +103,10 @@ export async function PATCH(
         { status: 400 }
       )
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating enrollment:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update enrollment" },
+      { error: getErrorMessage(error) || "Failed to update enrollment" },
       { status: 500 }
     )
   }

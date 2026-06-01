@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import {
   getPublishedCourses,
@@ -124,10 +125,10 @@ export async function GET() {
       recommended,
       totalCourses: allCourses.length,
     }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching recommended courses:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch recommended courses" },
+      { error: getErrorMessage(error) || "Failed to fetch recommended courses" },
       { status: 500 }
     )
   }

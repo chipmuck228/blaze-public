@@ -18,6 +18,7 @@ Isolated code and design files scheduled for deletion. **Do not add new features
 | `scripts/` | One-off migration and phase test scripts |
 | `admin-pages/` | Legacy admin UI (sidebar hidden; replaced by `/admin/blaze/*`) |
 | `design/` | Non-DDL design docs |
+| `pdfs/` | PRD PDF exports (from repo root `pdfs/`; gitignored) |
 
 ## Deletion checklist
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -24,7 +25,7 @@ export async function GET(
         return NextResponse.json({ error: "Resource not found" }, { status: 404 })
       }
       return NextResponse.json(
-        { error: error.message || "Failed to fetch resource" },
+        { error: getErrorMessage(error) || "Failed to fetch resource" },
         { status: 500 }
       )
     }
@@ -33,7 +34,7 @@ export async function GET(
   } catch (error: unknown) {
     console.error("Error fetching resource:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to fetch" },
       { status: 500 }
     )
   }
@@ -94,7 +95,7 @@ export async function PUT(
         return NextResponse.json({ error: "Resource not found" }, { status: 404 })
       }
       return NextResponse.json(
-        { error: error.message || "Failed to update resource" },
+        { error: getErrorMessage(error) || "Failed to update resource" },
         { status: 500 }
       )
     }
@@ -103,7 +104,7 @@ export async function PUT(
   } catch (error: unknown) {
     console.error("Error updating resource:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to update" },
       { status: 500 }
     )
   }
@@ -127,7 +128,7 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json(
-        { error: error.message || "Failed to delete resource" },
+        { error: getErrorMessage(error) || "Failed to delete resource" },
         { status: 500 }
       )
     }
@@ -136,7 +137,7 @@ export async function DELETE(
   } catch (error: unknown) {
     console.error("Error deleting resource:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to delete" },
       { status: 500 }
     )
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { addToInstanceWaitlist, getUserInstanceWaitlist } from "@/lib/db"
 import { isStudentAccount } from "@/lib/permissions"
@@ -21,10 +22,10 @@ export async function GET() {
       waitlist,
       total: waitlist.length,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching waitlist:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch waitlist" },
+      { error: getErrorMessage(error) || "Failed to fetch waitlist" },
       { status: 500 }
     )
   }
@@ -78,12 +79,12 @@ export async function POST(request: Request) {
         enrollment,
         message: "Added to waitlist successfully",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 如果已存在注册，返回特殊错误码
-      if (error.message.includes('already has an active enrollment')) {
+      if (getErrorMessage(error).includes('already has an active enrollment')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "ALREADY_ENROLLED",
           },
           { status: 409 }
@@ -91,10 +92,10 @@ export async function POST(request: Request) {
       }
 
       // 如果已在等待列表，返回特殊错误码
-      if (error.message.includes('already on the waitlist')) {
+      if (getErrorMessage(error).includes('already on the waitlist')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "ALREADY_WAITLISTED",
           },
           { status: 409 }
@@ -102,10 +103,10 @@ export async function POST(request: Request) {
       }
 
       // 如果容量未满，返回特殊错误码
-      if (error.message.includes('has available capacity')) {
+      if (getErrorMessage(error).includes('has available capacity')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "CAPACITY_AVAILABLE",
           },
           { status: 400 }
@@ -113,10 +114,10 @@ export async function POST(request: Request) {
       }
 
       // 如果先修条件不满足，返回特殊错误码
-      if (error.message.includes('Prerequisites not met')) {
+      if (getErrorMessage(error).includes('Prerequisites not met')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "PREREQUISITES_NOT_MET",
           },
           { status: 403 }
@@ -125,10 +126,10 @@ export async function POST(request: Request) {
 
       throw error
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error adding to waitlist:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to add to waitlist" },
+      { error: getErrorMessage(error) || "Failed to add to waitlist" },
       { status: 500 }
     )
   }

@@ -178,8 +178,8 @@ export default function WaitlistPage() {
                   Courses you join the waitlist for will appear here
                 </p>
                 <Button asChild>
-                  <a href="/#courses">
-                    Browse Courses
+                  <a href="/programs">
+                    Browse Programs
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </a>
                 </Button>

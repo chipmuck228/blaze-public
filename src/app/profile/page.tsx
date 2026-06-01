@@ -11,6 +11,7 @@ import { Footer } from "@/components/Footer"
 import { Loader2, User, Mail, Phone, Save, Plus, Settings, Trash2, GraduationCap, Bell, Shield, Lock, AlertCircle, Camera, ChevronRight, Heart, X, CreditCard, FileText, ShoppingCart, List } from "lucide-react"
 import Link from "next/link"
 import { isValidUSPhone } from "@/lib/phone"
+import type { StringKeyRecord } from "@/lib/typed-error"
 
 interface UserProfile {
   id: string
@@ -255,7 +256,7 @@ export default function ProfilePage() {
     setNotifications(updatedNotifications)
     
     // Map to API format
-    const apiSettings: any = {}
+    const apiSettings: StringKeyRecord = {}
     if (key === 'emailReminders') apiSettings.email_reminders = value
     if (key === 'smsAlerts') apiSettings.email_waitlist = value
     if (key === 'newsletter') apiSettings.email_announcements = value

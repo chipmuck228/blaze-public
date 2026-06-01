@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { streamText, convertToModelMessages, type UIMessage } from "ai"
 import { createDeepSeek } from "@ai-sdk/deepseek"
 import {
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     console.error("[programs-chat]", error)
     const message =
-      error instanceof Error ? error.message : "Programs assistant failed"
+      error instanceof Error ? getErrorMessage(error) : "Programs assistant failed"
     let userMessage =
       "I'm having trouble responding right now. Please try again in a moment."
     let statusCode = 500

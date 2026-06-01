@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { createPasswordResetToken } from "@/lib/db"
 import { sendPasswordResetEmail } from "@/lib/email"
 
@@ -35,9 +36,9 @@ export async function POST(request: Request) {
       { message: "If this email is registered, we've sent a password reset link to your inbox." },
       { status: 200 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Operation failed" },
+      { error: getErrorMessage(error) || "Operation failed" },
       { status: 400 }
     )
   }

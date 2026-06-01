@@ -6,12 +6,12 @@
  * 使用方法:
  *   npm run md-to-pdf <input.md> [output.pdf]
  *   npm run md-to-pdf -- --dir <directory> [--output <output-dir>]
- *   npm run md-to-pdf -- --pattern "PRD-*.md" [--output pdfs/]
+ *   npm run md-to-pdf -- --pattern "PRD-*.md" [--output _archive/pdfs/]
  * 
  * 示例:
  *   npm run md-to-pdf PRD-01-项目概述与产品定位.md
  *   npm run md-to-pdf PRD-01-项目概述与产品定位.md output.pdf
- *   npm run md-to-pdf -- --dir . --pattern "PRD-*.md" --output pdfs/
+ *   npm run md-to-pdf -- --dir docs/prd --pattern "PRD-*.md" --output _archive/pdfs/
  */
 
 import { mdToPdf } from 'md-to-pdf'
@@ -62,7 +62,7 @@ Markdown to PDF 转换工具
 使用方法:
   npm run md-to-pdf <input.md> [output.pdf]
   npm run md-to-pdf -- --dir <directory> [--output <output-dir>]
-  npm run md-to-pdf -- --pattern "PRD-*.md" [--output pdfs/]
+  npm run md-to-pdf -- --pattern "PRD-*.md" [--output _archive/pdfs/]
 
 选项:
   <input.md>              输入 Markdown 文件路径
@@ -80,10 +80,10 @@ Markdown to PDF 转换工具
   npm run md-to-pdf PRD-01-项目概述与产品定位.md output.pdf
   
   # 转换目录中所有 PRD 文件（PRD 已归置到 docs/prd/）
-  npm run md-to-pdf -- --dir docs/prd --pattern "PRD-*.md" --output pdfs/
+  npm run md-to-pdf -- --dir docs/prd --pattern "PRD-*.md" --output _archive/pdfs/
   
   # 转换目录中所有 .md 文件
-  npm run md-to-pdf -- --dir docs/prd --output pdfs/
+  npm run md-to-pdf -- --dir docs/prd --output _archive/pdfs/
 `)
 }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -25,16 +26,16 @@ export async function GET(
         return NextResponse.json({ error: "Category not found" }, { status: 404 })
       }
       return NextResponse.json(
-        { error: error.message || "Failed to fetch category" },
+        { error: getErrorMessage(error) || "Failed to fetch category" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching category:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch category" },
+      { error: getErrorMessage(error) || "Failed to fetch category" },
       { status: 500 }
     )
   }
@@ -71,7 +72,7 @@ export async function PUT(
       )
     }
 
-    const updateData: any = {}
+    const updateData: StringKeyRecord = {}
     if (name !== undefined) updateData.name = name.toLowerCase().trim()
     if (display_name !== undefined) updateData.display_name = display_name
     if (description !== undefined) updateData.description = description || null
@@ -102,16 +103,16 @@ export async function PUT(
       }
       
       return NextResponse.json(
-        { error: error.message || "Failed to update category" },
+        { error: getErrorMessage(error) || "Failed to update category" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating category:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update category" },
+      { error: getErrorMessage(error) || "Failed to update category" },
       { status: 500 }
     )
   }
@@ -182,16 +183,16 @@ export async function DELETE(
     if (error) {
       console.error("Error deleting category:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to delete category" },
+        { error: getErrorMessage(error) || "Failed to delete category" },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ message: "Category deleted successfully" }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting category:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete category" },
+      { error: getErrorMessage(error) || "Failed to delete category" },
       { status: 500 }
     )
   }

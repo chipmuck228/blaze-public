@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { NEWSLETTER_TEMPLATE_NAMES } from "@/lib/newsletter-email-templates"
 import { syncSubscriberToResend } from "@/lib/newsletter-resend-sync"
@@ -90,7 +91,7 @@ export async function GET(request: Request) {
     )
   } catch (error: unknown) {
     console.error("Error in newsletter unsubscribe:", error)
-    const message = error instanceof Error ? error.message : "Failed to unsubscribe"
+    const message = error instanceof Error ? getErrorMessage(error) : "Failed to unsubscribe"
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

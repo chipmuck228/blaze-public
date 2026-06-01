@@ -13,7 +13,7 @@ interface NavigationHistory {
 }
 
 // 底部导航入口页面列表 - 这些页面应该返回到首页
-const BOTTOM_NAV_PAGES = ['/', '/course-catalog', '/profile']
+const BOTTOM_NAV_PAGES = ['/', '/programs', '/profile']
 
 export function useNavigationHistory(): NavigationHistory {
   const router = useRouter()

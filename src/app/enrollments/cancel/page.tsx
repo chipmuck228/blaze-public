@@ -27,7 +27,7 @@ export default function PaymentCancelPage() {
               <Link href="/enrollments/cart">Return to Cart</Link>
             </Button>
             <Button asChild variant="outline" className="flex-1">
-              <Link href="/course-catalog">Browse Courses</Link>
+              <Link href="/programs">Browse Programs</Link>
             </Button>
           </div>
         </CardContent>

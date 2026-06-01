@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { processExpiredEnrollments, checkWaitlistAndNotify } from "@/lib/db"
 
@@ -33,10 +34,10 @@ export async function POST(request: Request) {
       waitlist_notified: notifiedCount,
       message: "Processed expired enrollments and checked waitlist",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing expired enrollments:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to process expired enrollments" },
+      { error: getErrorMessage(error) || "Failed to process expired enrollments" },
       { status: 500 }
     )
   }

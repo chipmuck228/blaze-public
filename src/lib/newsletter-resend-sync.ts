@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase"
+import { getErrorMessage } from "@/lib/typed-error"
 import {
   getResendClient,
   getResendNewsletterSegmentId,
@@ -46,7 +47,7 @@ export async function syncSubscriberToResend(options: {
       })
 
       if (error) {
-        const message = error.message || ""
+        const message = getErrorMessage(error) || ""
         if (message.toLowerCase().includes("already")) {
           await resend.contacts.update({
             email: normalizedEmail,

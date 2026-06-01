@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -44,16 +45,16 @@ export async function GET(
     if (error) {
       console.error("Error fetching franchise categories:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch franchise categories" },
+        { error: getErrorMessage(error) || "Failed to fetch franchise categories" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data || [], { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching franchise categories:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch franchise categories" },
+      { error: getErrorMessage(error) || "Failed to fetch franchise categories" },
       { status: 500 }
     )
   }
@@ -150,16 +151,16 @@ export async function POST(
       }
       
       return NextResponse.json(
-        { error: error.message || "Failed to create subscription" },
+        { error: getErrorMessage(error) || "Failed to create subscription" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating subscription:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create subscription" },
+      { error: getErrorMessage(error) || "Failed to create subscription" },
       { status: 500 }
     )
   }
@@ -188,7 +189,7 @@ export async function PUT(
     }
 
     // 使用事务更新所有订阅
-    const updates = subscriptions.map(async (sub: any) => {
+    const updates = subscriptions.map(async (sub: Record<string, unknown>) => {
       const { category_id, is_visible, display_order } = sub
       
       if (!category_id) {
@@ -219,10 +220,10 @@ export async function PUT(
     const results = await Promise.all(updates)
 
     return NextResponse.json({ subscriptions: results }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating subscriptions:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update subscriptions" },
+      { error: getErrorMessage(error) || "Failed to update subscriptions" },
       { status: 500 }
     )
   }

@@ -27,6 +27,7 @@ import { Menu, LogOut, User, ShoppingCart, Search, MapPin, Rocket, ChevronDown, 
 import Link from "next/link";
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url";
 import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth";
+import type { StringKeyRecord } from "@/lib/typed-error"
 
   // Navbar 统一深蓝色（与白底搭配）
   const NAV_TEXT = "text-[#1e3a5f]";
@@ -43,7 +44,7 @@ interface RouteProps {
   
   const routeList: RouteProps[] = [];
 
-  /** v2 franchise 列表项（仅 active，来自 /api/public/franchises-v2） */
+  /** Web Campus 列表项（`v2_franchise`，经 GET /api/public/franchises-v2） */
   interface FranchiseGroup {
     id: string;
     code: string;
@@ -221,8 +222,8 @@ interface RouteProps {
         setFranchiseFromUrl(decodeURIComponent(locationMatch[1]).toLowerCase());
         return;
       }
-      // 2. /course-catalog、/programs、/category/... 从 query 读取 franchise 或 location
-      if (pathname === '/course-catalog' || pathname === '/programs' || pathname?.startsWith('/category/')) {
+      // 2. /programs、/category/... 从 query 读取 franchise 或 location
+      if (pathname === '/programs' || pathname?.startsWith('/category/')) {
         const params = new URLSearchParams(window.location.search);
         const franchise = params.get('franchise') || params.get('location');
         setFranchiseFromUrl(franchise ? franchise.toLowerCase() : null);
@@ -303,8 +304,10 @@ interface RouteProps {
             const creditsResponse = await fetch('/api/enrollments/credits');
             if (creditsResponse.ok) {
               const creditsData = await creditsResponse.json();
-              const total = creditsData.credits?.reduce((sum: number, c: any) => 
-                sum + (c.available_amount || 0), 0) || 0;
+              const total = creditsData.credits?.reduce(
+                (sum: number, c: { available_amount?: number }) => sum + (c.available_amount ?? 0),
+                0
+              ) || 0;
               setAvailableCredits(total);
             }
 

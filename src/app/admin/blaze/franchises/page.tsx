@@ -42,6 +42,133 @@ import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { adminUiLabels } from "@/lib/admin-ui-labels"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
+import type { JsonRecord } from "@/types/json"
+
+interface FranchiseBrandingColors {
+  primaryColor?: string
+  secondaryColor?: string
+  accentColor?: string
+  backgroundColor?: string
+  textColor?: string
+  logoUrl?: string
+  faviconUrl?: string
+  theme?: string
+}
+
+interface FranchiseBrandingHero {
+  title?: string
+  subtitle?: string
+  description?: string
+  backgroundImage?: string
+  ctaText?: string
+  ctaLink?: string
+}
+
+interface FranchiseBusinessHours {
+  monday?: string
+  tuesday?: string
+  wednesday?: string
+  thursday?: string
+  friday?: string
+  saturday?: string
+  sunday?: string
+}
+
+interface FranchiseBrandingContact {
+  email?: string
+  phone?: string
+  address?: {
+    street?: string
+    city?: string
+    state?: string
+    zip?: string
+    country?: string
+  }
+  businessHours?: FranchiseBusinessHours
+}
+
+interface FranchiseSocialLinks {
+  facebook?: string
+  instagram?: string
+  twitter?: string
+  youtube?: string
+  linkedin?: string
+}
+
+interface FranchiseHighlights {
+  programs?: string
+  schedule?: string
+  focus?: string
+  achievements?: string
+}
+
+interface FranchiseBrandingConfig {
+  branding?: FranchiseBrandingColors
+  hero?: FranchiseBrandingHero
+  contact?: FranchiseBrandingContact
+  social?: FranchiseSocialLinks
+  highlights?: FranchiseHighlights
+  [key: string]: unknown
+}
+
+interface MarketingSeoConfig {
+  title?: string
+  description?: string
+  keywords?: string
+  ogImage?: string
+  ogTitle?: string
+  ogDescription?: string
+  twitterCard?: string
+  canonicalUrl?: string
+}
+
+interface MarketingHomepageDesc {
+  intro?: string
+  mission?: string
+  values?: string[]
+}
+
+interface MarketingAboutDesc {
+  overview?: string
+  history?: string
+  team?: string
+}
+
+interface MarketingProgramsDesc {
+  intro?: string
+  benefits?: string[]
+}
+
+interface MarketingDescriptions {
+  homepage?: MarketingHomepageDesc
+  about?: MarketingAboutDesc
+  programs?: MarketingProgramsDesc
+}
+
+interface MarketingPromotion {
+  id: string
+  title: string
+  description: string
+  isActive: boolean
+  startDate?: string
+  endDate?: string
+  discount?: {
+    type: string
+    value: number
+    code: string
+  }
+  ctaText?: string
+  ctaLink?: string
+}
+
+interface MarketingConfig {
+  seo?: MarketingSeoConfig
+  slogan?: { main?: string; subtitle?: string; tagline?: string }
+  descriptions?: MarketingDescriptions
+  promotions?: { current?: MarketingPromotion[]; upcoming?: MarketingPromotion[] }
+  cta?: Record<string, { text?: string; link?: string; style?: string }>
+  [key: string]: unknown
+}
 
 interface V2Franchise {
   id: string
@@ -50,8 +177,8 @@ interface V2Franchise {
   domain?: string
   logo_url?: string
   poster_url?: string | null
-  branding_config: Record<string, any>
-  marketing_config: Record<string, any>
+  branding_config: FranchiseBrandingConfig
+  marketing_config: MarketingConfig
   contact_email?: string
   contact_phone?: string
   address?: string
@@ -253,9 +380,9 @@ export default function BlazeFranchisesManagementPage() {
       const data = await response.json()
       setFranchises(data)
       setFilteredFranchises(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching franchises:", err)
-      setError(err.message || "Failed to load franchises")
+      setError(getErrorMessage(err) || "Failed to load franchises")
     } finally {
       setIsLoading(false)
     }
@@ -352,7 +479,7 @@ export default function BlazeFranchisesManagementPage() {
     })
     
     // Parse branding_config to form data
-    const branding = franchise.branding_config || {}
+    const branding: FranchiseBrandingConfig = franchise.branding_config || {}
     setBrandingConfig({
       branding: {
         primaryColor: branding.branding?.primaryColor || "",
@@ -408,7 +535,7 @@ export default function BlazeFranchisesManagementPage() {
     })
 
     // Parse marketing_config to form data
-    const marketing = franchise.marketing_config || {}
+    const marketing: MarketingConfig = franchise.marketing_config || {}
     setMarketingConfig({
       seo: {
         title: marketing.seo?.title || "",
@@ -606,7 +733,7 @@ export default function BlazeFranchisesManagementPage() {
 
       // Convert form data to JSON config
       // Clean up empty values from branding config
-      const cleanBrandingConfig: any = {}
+      const cleanBrandingConfig: JsonRecord = {}
       if (brandingConfig.branding.primaryColor || brandingConfig.branding.secondaryColor || brandingConfig.branding.accentColor) {
         cleanBrandingConfig.branding = {}
         if (brandingConfig.branding.primaryColor) cleanBrandingConfig.branding.primaryColor = brandingConfig.branding.primaryColor
@@ -652,7 +779,7 @@ export default function BlazeFranchisesManagementPage() {
       }
 
       // Clean up empty values from marketing config
-      const cleanMarketingConfig: any = {}
+      const cleanMarketingConfig: JsonRecord = {}
       if (marketingConfig.seo.title || marketingConfig.seo.description || marketingConfig.seo.keywords) {
         cleanMarketingConfig.seo = {}
         if (marketingConfig.seo.title) cleanMarketingConfig.seo.title = marketingConfig.seo.title

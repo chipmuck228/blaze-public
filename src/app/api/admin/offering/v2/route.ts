@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import type { SchemaFieldConfig } from "@/lib/instance-schema"
 
 /** Flatten nested type_config_data (e.g. pricing.base_price, content.description) for v2_offering table columns. */
 function flattenTypeConfigDataForTable(config: Record<string, unknown> | null | undefined): {
@@ -74,7 +76,7 @@ export async function GET(request: Request) {
     if (error) {
       console.error("Error fetching offerings:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch offerings" },
+        { error: getErrorMessage(error) || "Failed to fetch offerings" },
         { status: 500 }
       )
     }
@@ -83,28 +85,35 @@ export async function GET(request: Request) {
 
     // 如果不需要包含非激活的 offering types，进行过滤
     if (!includeInactive) {
-      offerings = offerings.filter(
-        (offering: any) => offering.offering_type?.is_active === true
-      )
+      offerings = offerings.filter((offering) => {
+        const offeringType = Array.isArray(offering.offering_type)
+          ? offering.offering_type[0]
+          : offering.offering_type
+        return offeringType?.is_active === true
+      })
     }
 
     // 如果提供了搜索参数，进行过滤
     if (search) {
       const searchLower = search.toLowerCase()
-      offerings = offerings.filter(
-        (offering: any) =>
+      offerings = offerings.filter((offering) => {
+        const offeringType = Array.isArray(offering.offering_type)
+          ? offering.offering_type[0]
+          : offering.offering_type
+        return (
           offering.name?.toLowerCase().includes(searchLower) ||
           offering.description?.toLowerCase().includes(searchLower) ||
           offering.slug?.toLowerCase().includes(searchLower) ||
-          offering.offering_type?.name?.toLowerCase().includes(searchLower)
-      )
+          offeringType?.name?.toLowerCase().includes(searchLower)
+        )
+      })
     }
 
     return NextResponse.json(offerings, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching offerings:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch offerings" },
+      { error: getErrorMessage(error) || "Failed to fetch offerings" },
       { status: 500 }
     )
   }
@@ -216,12 +225,11 @@ export async function POST(request: Request) {
 
     // 基础验证：如果 offering_schema 存在且有 fields，验证必需字段
     if (offeringType.offering_schema && typeof offeringType.offering_schema === 'object') {
-      const schema = offeringType.offering_schema as any
-      if (schema.fields && typeof schema.fields === 'object') {
-        const fields = schema.fields as Record<string, any>
+      const schema = offeringType.offering_schema as { fields?: Record<string, SchemaFieldConfig> }
+      if (schema.fields && typeof schema.fields === "object") {
         const missingRequiredFields: string[] = []
         
-        for (const [fieldName, fieldConfig] of Object.entries(fields)) {
+        for (const [fieldName, fieldConfig] of Object.entries(schema.fields)) {
           if (fieldConfig.required && (configData[fieldName] === undefined || configData[fieldName] === null || configData[fieldName] === '')) {
             missingRequiredFields.push(fieldConfig.label || fieldName)
           }
@@ -313,16 +321,16 @@ export async function POST(request: Request) {
       }
       
       return NextResponse.json(
-        { error: error.message || "Failed to create offering" },
+        { error: getErrorMessage(error) || "Failed to create offering" },
         { status: 500 }
       )
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating offering:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create offering" },
+      { error: getErrorMessage(error) || "Failed to create offering" },
       { status: 500 }
     )
   }

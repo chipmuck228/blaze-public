@@ -49,7 +49,8 @@ franchise → campus → category → program → instance
 2. **New Admin code** uses franchise / campus / category / program / instance / offering.
 3. **Types and variables**: prefer `webCampus`, `webLocation`, `webProgram`, `webActivity`, `webSession` (or `Display*` types in `@/lib/programs-catalog-view.ts`) when both layers appear in one module; avoid overloading `location` to mean franchise.
 4. **Imports / wide tables**: Admin columns may say `Location Code` (franchise `code`), `Programs (category)`, `Activity (program)`, `Session Title` (`v2_offering.name`) — see `scripts/design/unified-instance-import.md`.
-5. **Integrity** (do not break):
+5. **Logs and comments** on catalog code: use `v2_<table>` prefixes (see **Logging convention** below); never `franchise_v2`, `[instances-v2]`, etc.
+6. **Integrity** (do not break):
    - `v2_campus.franchise_id` → franchise of the Web Campus
    - `v2_program.franchise_id` + `category_id`; franchise must subscribe category (`v2_franchise_category_map`)
    - `v2_instance.program_id`, `v2_instance.offering_id`, optional `v2_instance.campus_id`
@@ -74,3 +75,51 @@ When refactoring, introduce **Location** = `v2_campus` where a physical site is 
 Web:     Campus(bellevue) → Location(Bellevue, WA) → Program(Explore) → Activity(2026 Summer Camps) → Session(week of 7/6…)
 Admin:   franchise(bellevue) → campus(…) → category(explore) → program(2026 Summer Camps) → instance(row) + offering(template)
 ```
+
+## Canonical table names (logs, comments, errors)
+
+Always use the **Supabase table name** (`v2_<entity>`). Do not invent alternate spellings in logs or comments.
+
+| Avoid (ambiguous / legacy) | Use instead |
+|----------------------------|-------------|
+| `franchise_v2`, `franchises_v2`, `franchises-v2` | `v2_franchise` |
+| `instance_v2`, `instances_v2`, `instances-v2`, `instance-v2` | `v2_instance` |
+| `campus_v2` | `v2_campus` |
+| `category_v2` | `v2_category` |
+| `program_v2`, `programs-v2` | `v2_program` |
+| `offering_v2` | `v2_offering` |
+
+HTTP paths may still contain `-v2` suffixes (historical); **that is not the table name**. When debugging Network tab or server logs, map route → table (below).
+
+## Public API routes → tables
+
+| HTTP route (legacy path) | Primary table(s) | Web level |
+|--------------------------|------------------|-----------|
+| `GET /api/public/franchises-v2` | `v2_franchise` (+ `v2_campus` for address) | Campus |
+| `GET /api/public/franchises-v2/[code]` | `v2_franchise` | Campus |
+| `GET /api/public/locations` | `v2_campus` → `v2_franchise` | Location |
+| `GET /api/public/categories` | `v2_category` | Program |
+| `GET /api/public/instances-v2` | `v2_instance` (+ `v2_program`, `v2_offering`, `v2_franchise`, …) | Session catalog |
+| `GET /api/public/instance-v2/[id]` | `v2_instance` | Session detail |
+| `GET /api/public/featured-instances` | `v2_instance` | Session (featured) |
+| `GET /api/public/offering-types` | `v2_offering_type` | — |
+| `GET /api/public/offerings/recommend` | `v2_offering` | — |
+| `GET /api/public/franchises/[code]/categories` | `v2_franchise_category_map`, `v2_category` | Program list per Campus |
+
+Example: `GET /api/public/franchises-v2` in the browser is **normal** catalog traffic for Campuses; it is **not** related to `teams` or coach avatars.
+
+## Logging convention
+
+1. **Prefix** with the table being queried: `[v2_franchise]`, `[v2_instance]`, `[v2_category]`, etc.
+2. Optionally add context after a space: `[v2_instance] GET /api/public/instances-v2 params=…` — route only for disambiguation, table name stays canonical.
+3. **C-end UI** `console.*` for catalog fetches: same table prefix, e.g. `[v2_instance] category page fetch`.
+4. **Do not** use route slug alone as the log tag (`[instances-v2]`, `[Public franchises-v2]`).
+5. Non-catalog tables (`teams`, `users`, `newsletter_*`, traffic): use the actual table or feature name (`[teams]`, `[traffic]`).
+
+## Unrelated requests in devtools
+
+Multiple parallel requests on home/programs/nav are expected:
+
+- `[v2_franchise]` — campus picker / navbar
+- `[v2_instance]` — session catalog
+- `[teams]` / `users.image` — coach pages only; 404s on `/Dave-W-1.png` are legacy static paths, not missing franchise APIs

@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
         "X-Accel-Buffering": "no",
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error setting up SSE stream:", error)
     return new Response("Internal Server Error", { status: 500 })
   }

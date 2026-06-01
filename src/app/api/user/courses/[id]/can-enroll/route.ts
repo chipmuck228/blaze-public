@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { checkUserPrerequisites } from "@/lib/db"
 
@@ -18,10 +19,10 @@ export async function GET(
     const result = await checkUserPrerequisites(userId, id)
 
     return NextResponse.json(result, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error checking prerequisites:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to check prerequisites" },
+      { error: getErrorMessage(error) || "Failed to check prerequisites" },
       { status: 500 }
     )
   }

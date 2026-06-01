@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { checkoutInstanceEnrollments, calculateInstanceEnrollmentTotal } from "@/lib/db"
 import { isStudentAccount } from "@/lib/permissions"
@@ -57,12 +58,12 @@ export async function POST(request: Request) {
         items: priceInfo.items,
         message: "Checkout successful. Please complete payment.",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 如果是容量不足，返回特殊错误码
-      if (error.message.includes('full') || error.message.includes('capacity')) {
+      if (getErrorMessage(error).includes('full') || getErrorMessage(error).includes('capacity')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "CAPACITY_FULL",
           },
           { status: 409 }
@@ -70,10 +71,10 @@ export async function POST(request: Request) {
       }
 
       // 如果是先修条件不满足，返回特殊错误码
-      if (error.message.includes('Prerequisites not met')) {
+      if (getErrorMessage(error).includes('Prerequisites not met')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "PREREQUISITES_NOT_MET",
           },
           { status: 403 }
@@ -81,10 +82,10 @@ export async function POST(request: Request) {
       }
 
       // 如果是购物车过期，返回特殊错误码
-      if (error.message.includes('expired')) {
+      if (getErrorMessage(error).includes('expired')) {
         return NextResponse.json(
           {
-            error: error.message,
+            error: getErrorMessage(error),
             code: "CART_EXPIRED",
           },
           { status: 400 }
@@ -93,10 +94,10 @@ export async function POST(request: Request) {
 
       throw error
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error during checkout:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to checkout" },
+      { error: getErrorMessage(error) || "Failed to checkout" },
       { status: 500 }
     )
   }

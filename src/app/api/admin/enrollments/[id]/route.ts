@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getEnrollmentById } from "@/lib/db"
 import { supabaseAdmin } from "@/lib/supabase"
@@ -36,10 +37,10 @@ export async function GET(
       ...enrollment,
       history: history || [],
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching enrollment:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch enrollment" },
+      { error: getErrorMessage(error) || "Failed to fetch enrollment" },
       { status: 500 }
     )
   }
@@ -71,7 +72,7 @@ export async function PATCH(
     }
 
     // 构建更新对象
-    const updates: any = {
+    const updates: StringKeyRecord = {
       updated_at: new Date().toISOString(),
     }
 
@@ -105,7 +106,7 @@ export async function PATCH(
       .single()
 
     if (error) {
-      throw new Error(error.message)
+      throw new Error(getErrorMessage(error))
     }
 
     // 状态历史会由触发器自动记录，但我们可以手动添加一条记录说明是管理员操作
@@ -128,10 +129,10 @@ export async function PATCH(
       enrollment: data,
       message: "Enrollment updated successfully",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating enrollment:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update enrollment" },
+      { error: getErrorMessage(error) || "Failed to update enrollment" },
       { status: 500 }
     )
   }

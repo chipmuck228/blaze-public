@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { 
@@ -385,10 +386,10 @@ export async function POST(request: Request) {
       synced: shouldSyncToParent,
       message: "Added to cart successfully"
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error adding to cart:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to add to cart" },
+      { error: getErrorMessage(error) || "Failed to add to cart" },
       { status: 500 }
     )
   }
@@ -486,9 +487,9 @@ export async function GET(request: Request) {
       total: cartWithTimeRemaining.length,
       grouped_by_student: groupedByStudent
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Failed to fetch cart" },
+      { error: getErrorMessage(error) || "Failed to fetch cart" },
       { status: 500 }
     )
   }

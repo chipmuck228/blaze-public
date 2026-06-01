@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { getFranchiseByCode } from "@/lib/db"
@@ -122,10 +123,10 @@ export async function GET(request: Request) {
         this_month: thisMonthRevenue,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching enrollment stats:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch enrollment stats" },
+      { error: getErrorMessage(error) || "Failed to fetch enrollment stats" },
       { status: 500 }
     )
   }

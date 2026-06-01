@@ -17,6 +17,7 @@ import { ErrorState } from '@/components/admin/traffic/ErrorState'
 import { exportToCSV } from '@/lib/traffic-export'
 import { useTrafficSSE } from '@/hooks/useTrafficSSE'
 import { adminToast } from '@/lib/admin-toast'
+import { getErrorMessage } from "@/lib/typed-error"
 
 interface TrafficSSEData {
   visits: number
@@ -195,7 +196,7 @@ export default function TrafficPage() {
           return res.json()
         })
         .then(setSummary)
-        .catch((e: any) => setSummaryError(e?.message || 'Failed'))
+        .catch((e: unknown) => setSummaryError(getErrorMessage(e, 'Failed')))
         .finally(() => setSummaryLoading(false)),
       fetch(`${base}/visits-chart?${queryString}`)
         .then(async (res) => {
@@ -206,7 +207,7 @@ export default function TrafficPage() {
           return res.json()
         })
         .then(setVisitsChart)
-        .catch((e: any) => setVisitsChartError(e?.message || 'Failed'))
+        .catch((e: unknown) => setVisitsChartError(getErrorMessage(e, 'Failed')))
         .finally(() => setVisitsChartLoading(false)),
       fetch(`${base}/sources?${queryString}`)
         .then(async (res) => {
@@ -217,7 +218,7 @@ export default function TrafficPage() {
           return res.json()
         })
         .then(setSources)
-        .catch((e: any) => setSourcesError(e?.message || 'Failed'))
+        .catch((e: unknown) => setSourcesError(getErrorMessage(e, 'Failed')))
         .finally(() => setSourcesLoading(false)),
       fetch(`${base}/devices?${queryString}`)
         .then(async (res) => {
@@ -228,7 +229,7 @@ export default function TrafficPage() {
           return res.json()
         })
         .then(setDevices)
-        .catch((e: any) => setDevicesError(e?.message || 'Failed'))
+        .catch((e: unknown) => setDevicesError(getErrorMessage(e, 'Failed')))
         .finally(() => setDevicesLoading(false)),
       fetch(`${base}/browsers?${queryString}`)
         .then(async (res) => {
@@ -239,7 +240,7 @@ export default function TrafficPage() {
           return res.json()
         })
         .then(setBrowsers)
-        .catch((e: any) => setBrowsersError(e?.message || 'Failed'))
+        .catch((e: unknown) => setBrowsersError(getErrorMessage(e, 'Failed')))
         .finally(() => setBrowsersLoading(false)),
       fetch(`${base}/operating-systems?${queryString}`)
         .then(async (res) => {
@@ -250,7 +251,7 @@ export default function TrafficPage() {
           return res.json()
         })
         .then(setOperatingSystems)
-        .catch((e: any) => setOsError(e?.message || 'Failed'))
+        .catch((e: unknown) => setOsError(getErrorMessage(e, 'Failed')))
         .finally(() => setOsLoading(false)),
     ])
   }, [queryString])
@@ -283,7 +284,7 @@ export default function TrafficPage() {
         operatingSystems: operatingSystems?.operating_systems,
       })
       adminToast.success('Data exported successfully')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error exporting data:', error)
       adminToast.error('Failed to export data')
     } finally {

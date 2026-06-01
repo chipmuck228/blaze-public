@@ -88,7 +88,10 @@ export default function OrdersPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
+    const variants: Record<
+      string,
+      { variant: "default" | "secondary" | "destructive" | "outline"; label: string }
+    > = {
       enrolled: { variant: 'default' as const, label: 'Enrolled' },
       waitlisted: { variant: 'secondary' as const, label: 'Waitlisted' },
       cancelled: { variant: 'destructive' as const, label: 'Cancelled' },
@@ -170,7 +173,10 @@ export default function OrdersPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => setSortBy(v as "date" | "amount" | "name")}
+            >
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
@@ -188,7 +194,12 @@ export default function OrdersPage() {
             >
               {sortOrder === 'asc' ? '↑' : '↓'}
             </Button>
-            <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
+            <Select
+              value={filter}
+              onValueChange={(v) =>
+                setFilter(v as "all" | "enrolled" | "waitlisted" | "cancelled")
+              }
+            >
               <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
@@ -208,7 +219,7 @@ export default function OrdersPage() {
               <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground mb-4">No enrollments found</p>
               <Button asChild>
-                <Link href="/course-catalog">Browse Courses</Link>
+                <Link href="/programs">Browse Programs</Link>
               </Button>
             </CardContent>
           </Card>

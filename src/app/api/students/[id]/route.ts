@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { canManageStudent } from "@/lib/permissions"
@@ -80,10 +81,10 @@ export async function GET(
         sync_cart_to_parent: userStudent.sync_cart_to_parent,
       }
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching student:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch student" },
+      { error: getErrorMessage(error) || "Failed to fetch student" },
       { status: 500 }
     )
   }
@@ -144,10 +145,10 @@ export async function PATCH(
       student,
       message: "Student updated successfully"
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating student:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update student" },
+      { error: getErrorMessage(error) || "Failed to update student" },
       { status: 500 }
     )
   }
@@ -247,10 +248,10 @@ export async function DELETE(
     return NextResponse.json({
       message: "Student deleted successfully"
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting student:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to delete student" },
+      { error: getErrorMessage(error) || "Failed to delete student" },
       { status: 500 }
     )
   }

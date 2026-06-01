@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
     if (error) {
       console.error("Error fetching resource categories:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch categories" },
+        { error: getErrorMessage(error) || "Failed to fetch categories" },
         { status: 500 }
       )
     }
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
   } catch (error: unknown) {
     console.error("Error fetching resource categories:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to fetch" },
       { status: 500 }
     )
   }
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Category with this name already exists" }, { status: 400 })
       }
       return NextResponse.json(
-        { error: error.message || "Failed to create category" },
+        { error: getErrorMessage(error) || "Failed to create category" },
         { status: 500 }
       )
     }
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error("Error creating resource category:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to create" },
       { status: 500 }
     )
   }

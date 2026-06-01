@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
-import { getFranchiseV2ByLegacyId } from "@/lib/db-v2"
+interface PublicFranchiseRow {
+  id: string
+  code: string
+  name: string
+  is_active?: boolean
+  legacy_franchise_id?: string | null
+}
 
 // Public endpoint: 获取所有 active franchises（带 location 数量）
 // 使用新表：franchises_v2
@@ -13,10 +20,10 @@ export async function GET() {
       .eq("is_active", true)
       .order("name", { ascending: true })
 
-    let franchises: any[] = []
+    let franchises: PublicFranchiseRow[] = []
     
     if (franchisesV2Error) {
-      console.warn("Error fetching franchises_v2, falling back to old table:", franchisesV2Error)
+      console.warn("[v2_franchise] Error fetching, falling back to legacy franchises table:", franchisesV2Error)
       // 向后兼容：查询旧表
       const { data: oldFranchises, error: oldError } = await supabaseAdmin
         .from("franchises")
@@ -27,9 +34,9 @@ export async function GET() {
       if (oldError) {
         throw new Error(oldError.message)
       }
-      franchises = oldFranchises || []
+      franchises = (oldFranchises || []) as PublicFranchiseRow[]
     } else {
-      franchises = franchisesV2 || []
+      franchises = (franchisesV2 || []) as PublicFranchiseRow[]
     }
 
     // 创建映射：legacy_franchise_id -> franchises_v2.id
@@ -75,10 +82,10 @@ export async function GET() {
     }))
 
     return NextResponse.json(franchisesWithCounts, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching franchises:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch franchises" },
+      { error: getErrorMessage(error) || "Failed to fetch franchises" },
       { status: 500 }
     )
   }

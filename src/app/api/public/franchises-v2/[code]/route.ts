@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 
 /**
@@ -22,9 +23,9 @@ export async function GET(
       .maybeSingle()
 
     if (error) {
-      console.error("Error fetching franchise v2:", error)
+      console.error("[v2_franchise] Error:", error)
       return NextResponse.json(
-        { error: error.message || "Failed to fetch franchise" },
+        { error: getErrorMessage(error) || "Failed to fetch franchise" },
         { status: 500 }
       )
     }
@@ -41,9 +42,9 @@ export async function GET(
       { status: 200 }
     )
   } catch (error: unknown) {
-    console.error("Error fetching franchise v2:", error)
+    console.error("[v2_franchise] Error:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch franchise v2" },
+      { error: error instanceof Error ? getErrorMessage(error) : "Failed to fetch franchise" },
       { status: 500 }
     )
   }

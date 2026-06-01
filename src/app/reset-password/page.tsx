@@ -100,7 +100,7 @@ function ResetPasswordContent() {
       setTimeout(() => {
         router.push("/login")
       }, 3000)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError("Failed to reset password, please try again later")
       setIsLoading(false)
     }

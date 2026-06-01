@@ -126,7 +126,7 @@ function InviteAcceptContent() {
       setTimeout(() => {
         router.push("/login")
       }, 3000)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError("Failed to set password. Please try again.")
       setIsLoading(false)
     }

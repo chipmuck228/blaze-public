@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -141,7 +142,15 @@ export default function NewsletterSubscribersPage() {
     preset: 'last_30_days',
   })
 
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("subscribers")
+
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab === "statistics" || tab === "unsubscribe-stats" || tab === "subscribers") {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (activeTab === "subscribers") {
@@ -187,7 +196,7 @@ export default function NewsletterSubscribersPage() {
       setSubscribers(data.subscribers || [])
       setTotal(data.total || 0)
       setTotalPages(data.totalPages || 0)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching subscribers:", error)
       adminToast.error("Failed to load subscribers")
     } finally {
@@ -233,7 +242,7 @@ export default function NewsletterSubscribersPage() {
 
       const data = await response.json()
       setStatisticsData(data)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching statistics:", error)
       adminToast.error("Failed to load statistics")
     } finally {
@@ -279,7 +288,7 @@ export default function NewsletterSubscribersPage() {
 
       const data = await response.json()
       setUnsubscribeData(data)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching unsubscribe statistics:", error)
       adminToast.error("Failed to load unsubscribe statistics")
     } finally {
@@ -307,9 +316,9 @@ export default function NewsletterSubscribersPage() {
 
       adminToast.success("Subscriber removed successfully")
       fetchSubscribers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error deleting subscriber:", error)
-      adminToast.error(error.message || "Failed to remove subscriber")
+      adminToast.error(getErrorMessage(error) || "Failed to remove subscriber")
     }
   }
 

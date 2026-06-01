@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getUserById, updateUser } from "@/lib/db"
 import { isValidUSPhone, formatUSPhoneForStorage } from "@/lib/phone"
@@ -32,10 +33,10 @@ export async function GET() {
       image: user.image ?? null,
       created_at: user.created_at,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching user profile:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch user profile" },
+      { error: getErrorMessage(error) || "Failed to fetch user profile" },
       { status: 500 }
     )
   }
@@ -86,10 +87,10 @@ export async function PATCH(request: Request) {
       image: updatedUser.image ?? null,
       created_at: updatedUser.created_at,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating user profile:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to update user profile" },
+      { error: getErrorMessage(error) || "Failed to update user profile" },
       { status: 500 }
     )
   }

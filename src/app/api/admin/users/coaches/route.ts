@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       .order('name', { ascending: true })
 
     if (error) {
-      throw new Error(`Failed to fetch coaches: ${error.message}`)
+      throw new Error(`Failed to fetch coaches: ${getErrorMessage(error)}`)
     }
 
     // 获取已有 Teams 记录的用户 ID
@@ -37,20 +38,20 @@ export async function GET(request: Request) {
       .select('user_id')
       .not('user_id', 'is', null)
 
-    const usedUserIds = new Set((teams || []).map((t: any) => t.user_id))
+    const usedUserIds = new Set((teams || []).map((t) => t.user_id))
 
     // 返回所有 coach，但标记哪些已有 Teams 记录（前端可以根据需要过滤）
     // 注意：编辑模式下，应该显示所有 coach（包括已有 Teams 记录的）
-    const coachesWithStatus = (coaches || []).map((c: any) => ({
+    const coachesWithStatus = (coaches || []).map((c) => ({
       ...c,
       has_team_profile: usedUserIds.has(c.id),
     }))
 
     return NextResponse.json(coachesWithStatus, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching coaches:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch coaches" },
+      { error: getErrorMessage(error) || "Failed to fetch coaches" },
       { status: 500 }
     )
   }

@@ -49,13 +49,21 @@ import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Eye, Eye
 import { adminUiLabels } from "@/lib/admin-ui-labels"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
+interface CategoryConfigBase {
+  target_age_min?: number | string
+  target_age_max?: number | string
+  primary_product?: string
+  skill_level?: string
+  [key: string]: unknown
+}
+
 interface V2Category {
   id: string
   name: string
   display_name: string
   description?: string
   poster_url?: string
-  config_base: Record<string, any>
+  config_base: CategoryConfigBase
   display_order: number
   is_active: boolean
   created_at: string
@@ -157,9 +165,9 @@ export default function BlazeCategoriesManagementPage() {
       const data = await response.json()
       setCategories(data)
       setFilteredCategories(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching categories:", err)
-      setError(err.message || "Failed to load categories")
+      setError(getErrorMessage(err) || "Failed to load categories")
     } finally {
       setIsLoading(false)
     }
@@ -667,14 +675,18 @@ export default function BlazeCategoriesManagementPage() {
                                   {Object.keys(category.config_base).length} fields
                                 </Badge>
                                 <div className="text-xs text-muted-foreground space-y-0.5">
-                                  {category.config_base.target_age_min && category.config_base.target_age_max && (
-                                    <div>Age: {category.config_base.target_age_min}-{category.config_base.target_age_max}</div>
+                                  {category.config_base.target_age_min != null &&
+                                    category.config_base.target_age_max != null && (
+                                    <div>
+                                      Age: {category.config_base.target_age_min}-
+                                      {category.config_base.target_age_max}
+                                    </div>
                                   )}
                                   {category.config_base.primary_product && (
-                                    <div>Product: {category.config_base.primary_product}</div>
+                                    <div>Product: {String(category.config_base.primary_product)}</div>
                                   )}
                                   {category.config_base.skill_level && (
-                                    <div>Level: {category.config_base.skill_level}</div>
+                                    <div>Level: {String(category.config_base.skill_level)}</div>
                                   )}
                                 </div>
                               </div>

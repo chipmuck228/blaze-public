@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { getUserCourseCompletions, createUserCourseCompletion } from "@/lib/db"
 
@@ -13,10 +14,10 @@ export async function GET() {
     const completions = await getUserCourseCompletions(session.user.id)
 
     return NextResponse.json({ completions }, { status: 200 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching course completions:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch course completions" },
+      { error: getErrorMessage(error) || "Failed to fetch course completions" },
       { status: 500 }
     )
   }
@@ -67,10 +68,10 @@ export async function POST(request: Request) {
     )
 
     return NextResponse.json({ completion }, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating course completion:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to create course completion" },
+      { error: getErrorMessage(error) || "Failed to create course completion" },
       { status: 500 }
     )
   }
