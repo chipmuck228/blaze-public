@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -67,7 +68,7 @@ async function lookupCampusesByIds(
   if (unique.length === 0) return new Map()
 
   const { data, error } = await supabaseAdmin
-    .from("v2_campus")
+    .from(catalogTables.location)
     .select("id, name, display_name")
     .in("id", unique)
 
@@ -89,7 +90,7 @@ async function resolveCampusIdForWrite(
   if (!normalized) return null
 
   const { data, error } = await supabaseAdmin
-    .from("v2_campus")
+    .from(catalogTables.location)
     .select("id")
     .eq("id", normalized)
     .maybeSingle()

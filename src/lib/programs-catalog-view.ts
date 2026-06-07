@@ -136,6 +136,16 @@ export type OfferingTypeSessionGroup = {
   sessions: SessionListItem[]
 }
 
+/** Sessions sharing the same offering template within one offering type bucket. */
+export type OfferingNameGroup = {
+  offeringId: string | null
+  offeringName: string
+  description: string
+  posterUrl: string | null
+  offeringTypeCode: string
+  sessions: SessionListItem[]
+}
+
 export function sortCatalogCategories(categories: CatalogCategory[]): CatalogCategory[] {
   return [...categories].sort((a, b) => {
     const orderA = a.display_order ?? 999
@@ -172,10 +182,19 @@ function sessionMatchesSearch(
   if (!searchQuery.trim()) return true
   const query = searchQuery.toLowerCase()
   const matchesName = session.course?.name?.toLowerCase().includes(query) ?? false
+  const matchesOfferingName = session.offering?.name?.toLowerCase().includes(query) ?? false
   const matchesDescription = session.course?.description?.toLowerCase().includes(query) ?? false
+  const matchesOfferingDescription = session.offering?.description?.toLowerCase().includes(query) ?? false
   const matchesActivityName = activity.display_name?.toLowerCase().includes(query) ?? false
   const matchesActivityDesc = activity.description?.toLowerCase().includes(query) ?? false
-  return matchesName || matchesDescription || matchesActivityName || matchesActivityDesc
+  return (
+    matchesName ||
+    matchesOfferingName ||
+    matchesDescription ||
+    matchesOfferingDescription ||
+    matchesActivityName ||
+    matchesActivityDesc
+  )
 }
 
 export function filterSessionsForActivity(
@@ -390,6 +409,41 @@ export function buildOfferingTypeSessionGroups(
 
 export function countSessionsInGroups(groups: OfferingTypeSessionGroup[]): number {
   return groups.reduce((sum, g) => sum + g.sessions.length, 0)
+}
+
+function offeringGroupKey(item: SessionListItem): string {
+  const offeringId = item.session.offering?.id
+  if (offeringId) return offeringId
+  const name = item.session.offering?.name || item.session.course?.name || item.activity.display_name
+  return name.toLowerCase().trim()
+}
+
+/** Group filtered sessions by offering name (same v2_offering) within one offering type. */
+export function groupSessionsByOfferingName(sessions: SessionListItem[]): OfferingNameGroup[] {
+  const map = new Map<string, OfferingNameGroup>()
+
+  for (const item of sessions) {
+    const key = offeringGroupKey(item)
+    const offeringName =
+      item.session.offering?.name || item.session.course?.name || item.activity.display_name
+    const existing = map.get(key)
+    if (existing) {
+      existing.sessions.push(item)
+      continue
+    }
+    map.set(key, {
+      offeringId: item.session.offering?.id ?? null,
+      offeringName,
+      description: getOfferingDescription(item.session),
+      posterUrl: getSessionPosterUrl(item.session),
+      offeringTypeCode: item.session.offering?.offering_type?.code?.toLowerCase() ?? "",
+      sessions: [item],
+    })
+  }
+
+  return Array.from(map.values()).sort((a, b) =>
+    a.offeringName.localeCompare(b.offeringName, undefined, { sensitivity: "base" })
+  )
 }
 
 function normalizeDaysOfWeek(values: unknown[]): number[] {

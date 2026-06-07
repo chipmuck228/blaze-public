@@ -38,6 +38,22 @@ franchise → campus → category → program → instance
 | offering_type | `v2_offering_type` | *(no Web level)* |
 | offering | `v2_offering` | *(no Web level)* |
 
+## V3 catalog (when `CATALOG_SCHEMA=v3`)
+
+Table names align with Web terms; use `@/lib/catalog-db.ts` in code.
+
+| Web term | V3 table | V2 equivalent |
+|----------|----------|---------------|
+| Campus | `v3_campus` | `v2_franchise` |
+| Location | `v3_location` | `v2_campus` |
+| Program | `v3_stage` | `v2_category` |
+| Activity | `v3_series` | `v2_program` |
+| Session | `v3_session` | `v2_instance` |
+| Offering | `v3_offering` | `v2_offering` (no stage FK in v3) |
+| — | `v3_offering_type` | `v2_offering_type` |
+
+V3 logs: use actual table name e.g. `[v3_session]`, `[v3_campus]`.
+
 ## Backend-only: offering + offering_type
 
 - **`v2_offering`**: Session **template** (name/title, poster, type config). C-end Session **card title** usually comes from `v2_offering.name`; schedule/price from `v2_instance`.
@@ -45,16 +61,18 @@ franchise → campus → category → program → instance
 
 ## Development rules
 
-1. **New C-end code** must use Campus / Location / Program / Activity / Session — not franchise / category / program / instance in user-visible strings.
-2. **New Admin code** uses franchise / campus / category / program / instance / offering.
-3. **Types and variables**: prefer `webCampus`, `webLocation`, `webProgram`, `webActivity`, `webSession` (or `Display*` types in `@/lib/programs-catalog-view.ts`) when both layers appear in one module; avoid overloading `location` to mean franchise.
-4. **Imports / wide tables**: Admin columns may say `Location Code` (franchise `code`), `Programs (category)`, `Activity (program)`, `Session Title` (`v2_offering.name`) — see `scripts/design/unified-instance-import.md`.
-5. **Logs and comments** on catalog code: use `v2_<table>` prefixes (see **Logging convention** below); never `franchise_v2`, `[instances-v2]`, etc.
-6. **Integrity** (do not break):
+1. **New catalog API/import code** must use `@/lib/catalog-db.ts` (supports v2 default and v3 via env).
+2. **New C-end code** must use Campus / Location / Program / Activity / Session — not franchise / category / program / instance in user-visible strings.
+3. **New Admin code** uses franchise / campus / category / program / instance / offering (v2 naming in UI labels) until Admin copy migration; DB access via `catalog-db`.
+4. **Types and variables**: prefer `webCampus`, `webLocation`, `webProgram`, `webActivity`, `webSession` (or `Display*` types in `@/lib/programs-catalog-view.ts`) when both layers appear in one module; avoid overloading `location` to mean franchise.
+5. **Imports / wide tables**: Admin columns may say `Location Code` (franchise `code`), `Programs (category)`, `Activity (program)`, `Session Title` (`v2_offering.name`) — see `scripts/design/instance-csv-import.md`.
+6. **Logs and comments** on catalog code: use canonical Supabase table name (`v2_*` or `v3_*` per `CATALOG_SCHEMA`); never `franchise_v2`, `[instances-v2]`, etc.
+7. **Integrity v2** (when `CATALOG_SCHEMA=v2`):
    - `v2_campus.franchise_id` → franchise of the Web Campus
    - `v2_program.franchise_id` + `category_id`; franchise must subscribe category (`v2_franchise_category_map`)
    - `v2_instance.program_id`, `v2_instance.offering_id`, optional `v2_instance.campus_id`
    - `v2_offering.category_id` must equal `v2_program.category_id` for the linked instance
+8. **Integrity v3** (when `CATALOG_SCHEMA=v3`): no offering-stage match; see `database-schema.mdc` and `v3/README.md`.
 
 ## Legacy mapping (migrate away)
 

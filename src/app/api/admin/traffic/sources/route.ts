@@ -3,6 +3,7 @@ import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from '@/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getDateRangeFromParams } from '@/lib/traffic-api-utils'
+import { formatSourceTypeLabel } from '@/lib/traffic-utils'
 
 /**
  * GET /api/admin/traffic/sources
@@ -68,12 +69,5 @@ export async function GET(request: NextRequest) {
 }
 
 function formatSourceName(source: string): string {
-  const sourceMap: Record<string, string> = {
-    direct: 'Direct',
-    google: 'Google',
-    bing: 'Bing',
-    social: 'Social',
-    other: 'Other',
-  }
-  return sourceMap[source] || source.charAt(0).toUpperCase() + source.slice(1)
+  return formatSourceTypeLabel(source)
 }

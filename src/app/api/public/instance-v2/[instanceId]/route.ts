@@ -6,6 +6,7 @@ import { filterInstanceDataExtByDisplayScope } from "@/lib/instance-schema"
 import { unwrapRelation } from "@/lib/supabase-relation"
 import type { JsonRecord } from "@/types/json"
 import type { V2InstanceDetailRow } from "@/types/v2-instance-detail"
+import { catalogSelect, catalogTables, normalizeSessionRow } from "@/lib/catalog-db"
 
 /** v2_instance DATE columns: expose YYYY-MM-DD only (no timezone shift on clients). */
 function normalizeInstanceDateColumn(value: unknown): string | null {
@@ -48,83 +49,22 @@ export async function GET(
     }
 
     const { data: row, error } = await supabaseAdmin
-      .from("v2_instance")
-      .select(
-        `
-        id,
-        program_id,
-        offering_id,
-        campus_id,
-        status,
-        price_override,
-        current_students,
-        start_date,
-        end_date,
-        start_time,
-        end_time,
-        max_students,
-        amilia_link,
-        instance_data_ext,
-        program:v2_program(
-          id,
-          name,
-          display_name,
-          description,
-          category_id,
-          franchise_id,
-          category:v2_category(
-            id,
-            name,
-            display_name
-          ),
-          franchise:v2_franchise(
-            id,
-            code,
-            name
-          )
-        ),
-        offering:v2_offering(
-          id,
-          name,
-          slug,
-          description,
-          base_price,
-          poster_url,
-          status,
-          type_config_data,
-          offering_type_id,
-          offering_type:v2_offering_type(
-            id,
-            code,
-            name,
-            offering_schema,
-            instance_schema
-          )
-        ),
-        campus:v2_campus(
-          id,
-          name,
-          display_name,
-          address,
-          city,
-          state
-        )
-      `
-      )
+      .from(catalogTables.session)
+      .select(catalogSelect.publicInstanceDetail())
       .eq("id", instanceId.trim())
       .eq("is_active", true)
       .in("status", ["scheduled", "ongoing"])
       .maybeSingle()
 
     if (error) {
-      console.error("[v2_instance] Error:", error)
+      console.error(`[${catalogTables.session}] Error:`, error)
       return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
     if (!row) {
       return NextResponse.json({ error: "Instance not found" }, { status: 404 })
     }
 
-    const instanceRow = row as V2InstanceDetailRow
+    const instanceRow = normalizeSessionRow(row) as unknown as V2InstanceDetailRow
     const program = unwrapRelation(instanceRow.program)
     const offering = unwrapRelation(instanceRow.offering)
     const campus = unwrapRelation(instanceRow.campus)
@@ -232,7 +172,7 @@ export async function GET(
 
     return NextResponse.json(payload, { status: 200 })
   } catch (err: unknown) {
-    console.error("[v2_instance] Error:", err)
+    console.error(`[${catalogTables.session}] Error:`, err)
     return NextResponse.json(
       { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch instance" },
       { status: 500 }

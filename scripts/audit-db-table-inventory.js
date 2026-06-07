@@ -35,6 +35,16 @@ const PLAN_CATEGORIES = {
     "v2_program",
     "v2_instance",
   ],
+  v3_core: [
+    "v3_offering_type",
+    "v3_stage",
+    "v3_campus",
+    "v3_offering",
+    "v3_campus_stage_map",
+    "v3_location",
+    "v3_series",
+    "v3_session",
+  ],
   v2_resources: ["v2_resource_category", "v2_resource"],
   users: ["users", "password_reset_tokens", "students", "user_students", "student_invitations"],
   enrollments: [
@@ -257,7 +267,7 @@ function classifyOrphans(orphans) {
     else if (table.startsWith("newsletter_") || table.startsWith("traffic_")) risk = "medium_ops"
     else if (category === "bridge") risk = "blocked_bridge"
     else if (category === "legacy_course") risk = "blocked_coach_admin"
-    else if (category === "v2_core" || category === "v2_resources") risk = "high_core"
+    else if (category === "v2_core" || category === "v3_core" || category === "v2_resources") risk = "high_core"
     else if (category === "users" || category === "enrollments") risk = "high_core"
     return { table, category, risk }
   })

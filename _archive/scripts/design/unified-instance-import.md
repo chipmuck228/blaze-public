@@ -2,9 +2,11 @@
 
 | 项目 | 内容 |
 |------|------|
-| 状态 | 已实现（`import-instances.js` + `lib/import-instances-common.js`） |
-| 版本 | 1.0 |
-| 日期 | 2026-05-29 |
+| 状态 | 已实现（`import-instances.js` + `export-instances.js` + `lib/import-instances-common.js`） |
+| 版本 | 1.1 |
+| 日期 | 2026-06-04 |
+| Schema 模式手册 | `scripts/design/instance-csv-import.md` |
+| Cursor 规则 | `.cursor/rules/instance-csv-import.mdc` |
 | 相关规则 | `.cursor/rules/database-schema.mdc` |
 | 现有脚本（保留，不删除） | `scripts/import-instances-camp.js`、`scripts/import-instances-course.js` |
 | 统一入口 | `scripts/import-instances.js`、`scripts/lib/import-instances-common.js` |
@@ -100,11 +102,12 @@ Session Title:       2-Week Full Day: Competitive Robotics Fundamentals with VEX
 
 | 列名 | 说明 | 别名（HEADER_ALIASES） |
 |------|------|------------------------|
+| **id** | `v2_instance.id`；**新行留空**；导出 round-trip 更新须保留 | — |
 | Location Code | franchise `code`，如 `bellevue` | `Location ID`（指 code，非 UUID） |
 | Programs (category) | Learn / Explore / Compete | `Program (category)` |
 | Activity (program) | `v2_program.display_name`，限定 franchise+category | `Activity` |
 | Session Title | `v2_offering.name` | `Title` |
-| Campus | 校区名或地址 | — |
+| **Location Name** | Web Location 名称或地址（`v2_campus`） | 旧列名 `Campus` |
 | Start Date | 开始日期 | 支持 `YYYY-MM-DD`、`M/D/YYYY`、Excel 序列号 |
 | End Date | 结束日期 | 同上 |
 | Price Override | 实例售价覆盖；Camp / Course 均有 | 来自 raw `Price` |
@@ -159,9 +162,10 @@ C-end Session 卡片缩略图来自 **`v2_offering.poster_url`**（offering 级�
 | 项目 | 说明 |
 |------|------|
 | **数据归属** | `poster_url` 写在 **offering 模板**上；同一 `Session Title` 下所有 instance 共用该图 |
-| **导入入口** | **Offerings 导入**（与 Instance 导入分离） |
-| **源文件** | `Blaze-Offerings-Camp.xlsx`、`Blaze-Offerings-Course.xlsx` |
-| **脚本** | `scripts/import-offerings-camp.js`、`scripts/import-offerings-course.js`（保留，不删除） |
+| **导入入口** | **Offerings CSV 导入**（与 Instance 导入分离） |
+| **源文件** | 按 type 分文件：`Blaze-Offerings-{type}.csv`（或 `export-offerings.js` 导出） |
+| **脚本** | `scripts/export-offerings.js`、`scripts/import-offerings.js`、`scripts/bootstrap-offering-csv.js`；`import-offerings-camp.js` / `course.js` 为 deprecated 包装 |
+| **规格** | `scripts/design/offering-csv-import.md`、`.cursor/rules/offering-csv-import.mdc` |
 | **列名** | `Image Link`（别名 `image link`） |
 | **写入** | `v2_offering.poster_url`（经 `normalizePosterUrl` 规范化 URL） |
 
@@ -184,9 +188,18 @@ C-end Session 卡片缩略图来自 **`v2_offering.poster_url`**（offering 级�
 **运营推荐顺序**
 
 ```text
-1. Blaze-Offerings-{Camp|Course}.xlsx  →  import-offerings-*.js   →  v2_offering（含 poster_url / Image Link）
-2. Blaze-Instances*.xlsx              →  import-instances.js     →  v2_instance（无 Image Link）
+1. export-offerings.js / 编辑 CSV / import-offerings.js  →  v2_offering（含 poster_url / Image Link）
+2. export-instances.js --type unified（或 schema 模式 --type {code}）/ 编辑 CSV / import-instances.js  →  v2_instance
 ```
+
+**Export round-trip（unified）**
+
+```bash
+node scripts/export-instances.js --type unified --out Blaze-Instances-Unified.csv
+node scripts/import-instances.js --dry-run --file Blaze-Instances-Unified.csv
+```
+
+导出 CSV 首列为 **`id`**；导入时 **优先按 id UPDATE**，无 id 时按 natural key。其他 offering type（workshop 等）请用 schema 模式，见 `instance-csv-import.md`。
 
 **同一工作簿多 Sheet（可选，本期不实现）**
 
@@ -204,7 +217,7 @@ C-end Session 卡片缩略图来自 **`v2_offering.poster_url`**（offering 级�
 | Category | **Compete / Learn / Explore** | `v2_category.name` 或 `display_name` |
 | Program | **2026 Summer Camps** | `v2_program.display_name`（回退 `name`） |
 | Offering | Session Title 全文 | `v2_offering.name` |
-| Offering 图片 | **不在 Instance 表填写** | `v2_offering.poster_url`（见 `import-offerings-*.js` + `Image Link`） |
+| Offering 图片 | **不在 Instance 表填写** | `v2_offering.poster_url`（见 `offering-csv-import.md` + `Image Link`） |
 | Campus | 地址或 display_name | `v2_campus` 模糊匹配 |
 
 导入时 `preflight` 加载 lookup 表；**写入 DB 使用解析得到的 UUID**（`program_id`、`offering_id`、`campus_id`）。
@@ -447,10 +460,14 @@ scripts/
   audit-instances-integrity.js     # category 一致性审计
   import-instances-camp.js         # 保留；未来可改为薄包装
   import-instances-course.js       # 保留；未来可改为薄包装
-  import-offerings-camp.js         # 保留；Offering 含 Image Link → poster_url
-  import-offerings-course.js       # 保留；Offering 含 Image Link → poster_url
+  export-offerings.js              # DB → CSV；schema 驱动
+  import-offerings.js              # CSV → v2_offering；含 Image Link → poster_url
+  bootstrap-offering-csv.js        # 全 active type 模板 + 验证
+  import-offerings-camp.js         # deprecated 包装 → import-offerings.js --type camp
+  import-offerings-course.js       # deprecated 包装 → import-offerings.js --type course
   lib/
-    import-instances-common.js     # 公共逻辑（新建）
+    import-instances-common.js     # Instance 公共逻辑
+    import-offerings-common.js     # Offering 公共逻辑
   templates/
     instances-camp-template.csv    # 保留
     instances-unified-template.csv # 新建
@@ -522,15 +539,17 @@ flowchart LR
   Raw[Blaze-Data-Raw-0529.xlsx]
   ExtractO[extract-offerings-from-raw]
   ExtractI[extract-instances-from-raw]
-  OffFile[Blaze-Offerings-*.xlsx]
-  InstFile[Blaze-Instances-Unified.xlsx]
-  ImportO[import-offerings-*.js]
+  OffFile[Blaze-Offerings-{type}.csv]
+  InstFile[Blaze-Instances-Unified.csv]
+  ExportO[export-offerings.js]
+  ImportO[import-offerings.js]
   ImportI[import-instances.js]
   Raw --> ExtractO --> OffFile --> ImportO
+  OffFile -.->|或| ExportO
   Raw --> ExtractI --> InstFile --> ImportI
 ```
 
-1. **Offerings 提取**（按 `Title` + category + type 去重）→ `Blaze-Offerings-Camp.xlsx` / `Course.xlsx` → 现有 `import-offerings-*.js`
+1. **Offerings**：`export-offerings.js` 导出 / 编辑 CSV / `import-offerings.js` 导入（规格见 `offering-csv-import.md`）；或从 Raw 提取后导入
 2. **Instances 提取**（一行 raw = 一行 instance）→ `Blaze-Instances-Unified.xlsx` → 计划 `import-instances.js`
 3. **顺序**：先 offerings 入库，再 instances
 

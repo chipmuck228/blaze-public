@@ -1,0 +1,70 @@
+{
+  "offering_type_code": "freetrial",
+  "offering_type_id": "b85c69a4-9448-4e38-9160-70e43d3dc292",
+  "schema_updated_at": "2026-05-28T16:30:05.982519+00:00",
+  "schema_hash": "2561224c71ac6d30",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "schedule|end_date",
+      "path": "schedule.end_date",
+      "type": "date",
+      "required": false,
+      "label": "Trial End Date"
+    },
+    {
+      "header": "schedule|end_time",
+      "path": "schedule.end_time",
+      "type": "time",
+      "required": false,
+      "label": "End Time"
+    },
+    {
+      "header": "schedule|start_date",
+      "path": "schedule.start_date",
+      "type": "date",
+      "required": true,
+      "label": "Trial Start Date"
+    },
+    {
+      "header": "schedule|start_time",
+      "path": "schedule.start_time",
+      "type": "time",
+      "required": false,
+      "label": "Start Time"
+    },
+    {
+      "header": "additional|notes",
+      "path": "additional.notes",
+      "type": "text",
+      "required": false,
+      "label": "Notes"
+    },
+    {
+      "header": "recurrence|schedule_patterns",
+      "path": "recurrence.schedule_patterns",
+      "type": "array",
+      "required": false,
+      "label": "Trial Recurrence Patterns"
+    },
+    {
+      "header": "capacity_price|max_students",
+      "path": "capacity_price.max_students",
+      "type": "number",
+      "required": true,
+      "label": "Maximum Trial Spots"
+    }
+  ]
+}

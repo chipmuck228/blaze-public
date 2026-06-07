@@ -3,15 +3,26 @@ import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import type { SchemaFieldConfig } from "@/lib/instance-schema"
+import {
+  adminOfferingValidationSelect,
+  adminSeriesValidationSelect,
+  catalogCols,
+  catalogSelect,
+  catalogTables,
+  isCatalogV3,
+  normalizeSeriesRow,
+  normalizeSessionRow,
+  sessionInsertFromBody,
+} from "@/lib/catalog-db"
 
 /** Resolve v2_program ids for franchise/category filters (avoid PostgREST embed filters that null out program). */
 async function resolveProgramIdsForFilter(opts: {
   franchiseId?: string | null
   categoryId?: string | null
 }): Promise<string[]> {
-  let q = supabaseAdmin.from("v2_program").select("id")
-  if (opts.franchiseId) q = q.eq("franchise_id", opts.franchiseId)
-  if (opts.categoryId) q = q.eq("category_id", opts.categoryId)
+  let q = supabaseAdmin.from(catalogTables.series).select("id")
+  if (opts.franchiseId) q = q.eq(catalogCols.series.campusId, opts.franchiseId)
+  if (opts.categoryId) q = q.eq(catalogCols.series.stageId, opts.categoryId)
   const { data, error } = await q
   if (error) throw error
   return (data ?? []).map((row) => row.id)
@@ -34,50 +45,8 @@ export async function GET(request: Request) {
     const activeOnly = searchParams.get("activeOnly") !== "false"
 
     let query = supabaseAdmin
-      .from("v2_instance")
-      .select(`
-        *,
-        program:v2_program(
-          id,
-          name,
-          display_name,
-          category_id,
-          franchise_id,
-          start_date,
-          end_date,
-          category:v2_category(
-            id,
-            name,
-            display_name
-          ),
-          franchise:v2_franchise(
-            id,
-            code,
-            name
-          )
-        ),
-        offering:v2_offering(
-          id,
-          name,
-          slug,
-          description,
-          base_price,
-          currency,
-          status,
-          offering_type:v2_offering_type(
-            id,
-            code,
-            name,
-            instance_schema
-          )
-        ),
-        campus:v2_campus(
-          id,
-          name,
-          display_name,
-          address
-        )
-      `)
+      .from(catalogTables.session)
+      .select(catalogSelect.adminSessionList())
       .order("start_date", { ascending: true })
       .order("start_time", { ascending: true })
 
@@ -86,7 +55,7 @@ export async function GET(request: Request) {
     }
 
     if (programId) {
-      query = query.eq("program_id", programId)
+      query = query.eq(catalogCols.session.seriesId, programId)
     }
 
     if (offeringId) {
@@ -103,7 +72,7 @@ export async function GET(request: Request) {
       if (programIds.length === 0) {
         return NextResponse.json([], { status: 200 })
       }
-      query = query.in("program_id", programIds)
+      query = query.in(catalogCols.session.seriesId, programIds)
     }
 
     if (status) {
@@ -120,7 +89,7 @@ export async function GET(request: Request) {
       )
     }
 
-    return NextResponse.json(data || [], { status: 200 })
+    return NextResponse.json((data || []).map((row) => normalizeSessionRow(row)), { status: 200 })
   } catch (error: unknown) {
     console.error("Error fetching instances v2:", error)
     return NextResponse.json(
@@ -174,16 +143,8 @@ export async function POST(request: Request) {
 
     // 1. 验证 Program 存在并获取 category 信息
     const { data: program, error: programError } = await supabaseAdmin
-      .from("v2_program")
-      .select(`
-        id,
-        category_id,
-        franchise_id,
-        category:v2_category(
-          id,
-          config_base
-        )
-      `)
+      .from(catalogTables.series)
+      .select(adminSeriesValidationSelect())
       .eq("id", program_id)
       .single()
 
@@ -194,9 +155,11 @@ export async function POST(request: Request) {
       )
     }
 
+    const programRow = normalizeSeriesRow(program)
+
     // 获取 category 的 config_base 作为默认配置
     let categoryConfigBase: Record<string, unknown> = {}
-    const programData = program as {
+    const programData = programRow as {
       category?: { config_base?: Record<string, unknown> } | { config_base?: Record<string, unknown> }[]
     }
     if (programData.category && typeof programData.category === "object" && !Array.isArray(programData.category)) {
@@ -208,49 +171,51 @@ export async function POST(request: Request) {
 
     // 2. 验证 Offering 存在且状态为 published（并取 type_config_data、offering_type.portal_service_role 用于 is_course_type / portal_service_role）
     const { data: offering, error: offeringError } = await supabaseAdmin
-      .from("v2_offering")
-      .select(`
-        id,
-        status,
-        category_id,
-        offering_type_id,
-        type_config_data,
-        offering_type:v2_offering_type(
-          id,
-          code,
-          name,
-          instance_schema,
-          portal_service_role
-        )
-      `)
+      .from(catalogTables.offering)
+      .select(adminOfferingValidationSelect())
       .eq("id", offering_id)
       .single()
 
     if (offeringError || !offering) {
+      console.error(`[${catalogTables.offering}] Lookup failed:`, offeringError)
       return NextResponse.json(
-        { error: "Offering not found" },
+        {
+          error:
+            getErrorMessage(offeringError) ||
+            (offering_id ? "Offering not found" : "Missing offering_id"),
+        },
         { status: 400 }
       )
     }
 
-    if (offering.status !== "published") {
+    const offeringRow = offering as unknown as {
+      status: string
+      category_id?: string | null
+      offering_type?: unknown
+      type_config_data?: unknown
+    }
+
+    if (offeringRow.status !== "published") {
       return NextResponse.json(
-        { error: `Cannot create instance for offering with status '${offering.status}'. Only 'published' offerings can have instances.` },
+        { error: `Cannot create instance for offering with status '${offeringRow.status}'. Only 'published' offerings can have instances.` },
         { status: 400 }
       )
     }
 
-    // 3. 验证 Offering 属于 Program 对应的 Category
-    if (offering.category_id !== program.category_id) {
+    // 3. 验证 Offering 属于 Program 对应的 Category（v3 无 offering.category_id）
+    if (
+      !isCatalogV3() &&
+      offeringRow.category_id !== programRow.category_id
+    ) {
       return NextResponse.json(
         { error: "Offering category does not match program category" },
         { status: 400 }
       )
     }
 
-    const schemaSource = Array.isArray(offering.offering_type)
-      ? offering.offering_type[0]
-      : offering.offering_type
+    const schemaSource = Array.isArray(offeringRow.offering_type)
+      ? offeringRow.offering_type[0]
+      : offeringRow.offering_type
     const instanceSchemaFields = (
       schemaSource as { instance_schema?: { fields?: Record<string, SchemaFieldConfig> } } | null
     )?.instance_schema?.fields
@@ -386,8 +351,8 @@ export async function POST(request: Request) {
     // 6. 验证 Campus（如果提供）
     if (campus_id) {
       const { data: campus, error: campusError } = await supabaseAdmin
-        .from("v2_campus")
-        .select("id, franchise_id")
+        .from(catalogTables.location)
+        .select(`id, ${catalogCols.location.campusId}`)
         .eq("id", campus_id)
         .single()
 
@@ -398,8 +363,10 @@ export async function POST(request: Request) {
         )
       }
 
+      const campusCampusId = campus[catalogCols.location.campusId as keyof typeof campus]
+      const programCampusId = programRow[catalogCols.series.campusId as keyof typeof programRow]
       // 验证 Campus 属于 Program 的 Franchise
-      if (campus.franchise_id !== program.franchise_id) {
+      if (campusCampusId !== programCampusId) {
         return NextResponse.json(
           { error: "Campus does not belong to program's franchise" },
           { status: 400 }
@@ -430,7 +397,7 @@ export async function POST(request: Request) {
       }
       offering_type?: { portal_service_role?: string } | Array<{ portal_service_role?: string }>
     }
-    const offeringPortal = offering as OfferingPortalConfig
+    const offeringPortal = offeringRow as OfferingPortalConfig
     // 7.1 is_course_type：从 v2_offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
     const isCourseType = !!offeringPortal.type_config_data?.portal_config?.is_course_type
     // 7.2 portal_service_role：从 type_config_data 平铺，缺省时用 v2_offering_type.portal_service_role（设计文档 INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3）
@@ -449,53 +416,38 @@ export async function POST(request: Request) {
           : null
 
     // 8. 创建 Instance（行级字段用从 instance_data_ext 推导后的值）
+    const sessionInsert = sessionInsertFromBody({
+      program_id,
+      offering_id,
+      campus_id,
+      price_override: finalPriceOverride ?? price_override ?? null,
+      start_date: finalStartDate ?? null,
+      end_date: finalEndDate ?? null,
+      start_time: finalStartTime ?? null,
+      end_time: finalEndTime ?? null,
+      session_count: session_count || null,
+      days_of_week: finalDaysOfWeek ?? null,
+      max_students: finalMaxStudents ?? max_students ?? null,
+      current_students,
+      instance_data_ext: mergedInstanceDataExt,
+      icalendar_rrule: icalendar_rrule || null,
+      icalendar_exdates: icalendar_exdates || null,
+      icalendar_rdates: icalendar_rdates || null,
+      timezone,
+      status,
+      notes: notes || null,
+      is_active,
+      featured: !!featured,
+      is_course_type: isCourseType,
+      portal_service_role: portalServiceRole,
+      amilia_link:
+        typeof amilia_link === "string" && amilia_link.trim() ? amilia_link.trim() : null,
+    })
+
     const { data: instance, error: instanceError } = await supabaseAdmin
-      .from("v2_instance")
-      .insert({
-        program_id,
-        offering_id,
-        campus_id: campus_id || null,
-        price_override: finalPriceOverride ?? price_override ?? null,
-        start_date: finalStartDate ?? null,
-        end_date: finalEndDate ?? null,
-        start_time: finalStartTime ?? null,
-        end_time: finalEndTime ?? null,
-        session_count: session_count || null,
-        days_of_week: finalDaysOfWeek ?? null,
-        max_students: finalMaxStudents ?? max_students ?? null,
-        current_students,
-        instance_data_ext: mergedInstanceDataExt,
-        icalendar_rrule: icalendar_rrule || null,
-        icalendar_exdates: icalendar_exdates || null,
-        icalendar_rdates: icalendar_rdates || null,
-        timezone,
-        status,
-        notes: notes || null,
-        is_active,
-        featured: !!featured,
-        is_course_type: isCourseType,
-        portal_service_role: portalServiceRole,
-        amilia_link:
-          typeof amilia_link === "string" && amilia_link.trim() ? amilia_link.trim() : null,
-      })
-      .select(`
-        *,
-        program:v2_program(
-          id,
-          name,
-          display_name,
-          category:v2_category(id, name, display_name),
-          franchise:v2_franchise(id, code, name)
-        ),
-        offering:v2_offering(
-          id,
-          name,
-          base_price,
-          currency,
-          offering_type:v2_offering_type(code, name)
-        ),
-        campus:v2_campus(id, name, display_name)
-      `)
+      .from(catalogTables.session)
+      .insert(sessionInsert)
+      .select(catalogSelect.adminSessionMutationResponse())
       .single()
 
     if (instanceError) {
@@ -506,7 +458,7 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json(instance, { status: 201 })
+    return NextResponse.json(normalizeSessionRow(instance), { status: 201 })
   } catch (error: unknown) {
     console.error("Error creating instance v2:", error)
     return NextResponse.json(

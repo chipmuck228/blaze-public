@@ -4,6 +4,8 @@ import Link from "next/link"
 import Image from "next/image"
 import { ArrowRight, Star } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { RichTextDisplay, hasRichContent, plainTextFromRichContent } from "@/components/RichTextDisplay"
+import { journeyHrefForStage } from "@/lib/stage-journey-links"
 import { buildProgramsPageHref } from "@/lib/programs-catalog-view"
 
 export type LocationProgram = {
@@ -25,6 +27,7 @@ export type CategoryGroup = {
     description?: string | null
     poster_url?: string | null
     display_order?: number | null
+    link?: string | null
   }
   programs: LocationProgram[]
 }
@@ -35,9 +38,11 @@ interface LocationProgramsByCategoryProps {
   locationName: string
 }
 
-function journeyHrefForProgram(categoryName: string): string {
-  const code = (categoryName || "").toLowerCase()
-  return `/journey/${encodeURIComponent(code)}`
+function journeyHrefForCategory(
+  category: CategoryGroup["category"],
+  franchiseCode: string
+): string {
+  return journeyHrefForStage(category.link, category.name, franchiseCode)
 }
 
 function sessionCountLabel(count: number): string {
@@ -71,16 +76,16 @@ function humanizeActivityName(name: string): string {
 /** Omit description when it repeats the title or exposes raw activity name. */
 function getActivityDescription(program: LocationProgram, title: string): string | null {
   const description = program.description?.trim()
-  if (!description) return null
+  if (!hasRichContent(description)) return null
 
   const normalizedTitle = normalizeActivityText(title)
-  const normalizedDescription = normalizeActivityText(description)
+  const normalizedDescription = normalizeActivityText(plainTextFromRichContent(description))
   const normalizedName = normalizeActivityText(program.name)
 
   if (normalizedDescription === normalizedTitle) return null
   if (normalizedDescription === normalizedName) return null
 
-  return description
+  return description ?? null
 }
 
 function LocationHeader({
@@ -141,16 +146,18 @@ export function LocationProgramsByCategory({
                 <div className="mb-6">
                   <h3 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100">
                     <Link
-                      href={journeyHrefForProgram(group.category.name)}
+                      href={journeyHrefForCategory(group.category, franchiseCode)}
                       className="hover:text-[#2563eb] dark:hover:text-blue-400 transition-colors"
                     >
                       {group.category.display_name}
                     </Link>
                   </h3>
-                  {group.category.description ? (
-                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 max-w-2xl lg:max-w-none">
-                      {group.category.description}
-                    </p>
+                  {hasRichContent(group.category.description) ? (
+                    <RichTextDisplay
+                      content={group.category.description}
+                      className="text-slate-600 dark:text-slate-400 mt-1 max-w-2xl lg:max-w-none [&_a]:text-[#2563eb]"
+                      preserveFormatting
+                    />
                   ) : null}
                 </div>
 
@@ -204,9 +211,12 @@ export function LocationProgramsByCategory({
                               {activityTitle}
                             </h4>
                             {activityDescription ? (
-                              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 line-clamp-3 flex-grow">
-                                {activityDescription}
-                              </p>
+                              <RichTextDisplay
+                                content={activityDescription}
+                                className="text-slate-600 dark:text-slate-400 mt-1 flex-grow [&_a]:text-[#2563eb]"
+                                lineClamp={3}
+                                preserveFormatting
+                              />
                             ) : null}
                             <div className={`flex items-center justify-between ${activityDescription ? "mt-3" : "mt-auto pt-3"}`}>
                               <span className="text-xs text-slate-500">View schedule</span>

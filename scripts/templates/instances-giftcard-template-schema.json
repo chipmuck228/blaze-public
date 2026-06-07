@@ -1,0 +1,56 @@
+{
+  "offering_type_code": "giftcard",
+  "offering_type_id": "603b3459-eb7c-450e-a645-68e8819feb6c",
+  "schema_updated_at": "2026-05-28T16:32:57.515683+00:00",
+  "schema_hash": "ae13592ec03685e0",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "greeting|message",
+      "path": "greeting.message",
+      "type": "text",
+      "required": false,
+      "label": "Greeting Message"
+    },
+    {
+      "header": "card_value|expiry_date",
+      "path": "card_value.expiry_date",
+      "type": "date",
+      "required": false,
+      "label": "Expiration Date"
+    },
+    {
+      "header": "card_value|denomination",
+      "path": "card_value.denomination",
+      "type": "number",
+      "required": true,
+      "label": "Denomination"
+    },
+    {
+      "header": "recipient_delivery|recipient_name",
+      "path": "recipient_delivery.recipient_name",
+      "type": "text",
+      "required": false,
+      "label": "Recipient Name"
+    },
+    {
+      "header": "recipient_delivery|delivery_method",
+      "path": "recipient_delivery.delivery_method",
+      "type": "select",
+      "required": true,
+      "label": "Delivery Method"
+    }
+  ]
+}

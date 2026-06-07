@@ -1,0 +1,84 @@
+{
+  "offering_type_code": "competition",
+  "offering_type_id": "61e53a6d-091f-462a-843b-0d502b2f22dc",
+  "schema_updated_at": "2026-05-28T16:27:02.888616+00:00",
+  "schema_hash": "41ba9bc4702d389b",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "schedule|end_date",
+      "path": "schedule.end_date",
+      "type": "date",
+      "required": true,
+      "label": "Competition End Date"
+    },
+    {
+      "header": "schedule|end_time",
+      "path": "schedule.end_time",
+      "type": "time",
+      "required": false,
+      "label": "End Time"
+    },
+    {
+      "header": "schedule|start_date",
+      "path": "schedule.start_date",
+      "type": "date",
+      "required": true,
+      "label": "Competition Start Date"
+    },
+    {
+      "header": "schedule|start_time",
+      "path": "schedule.start_time",
+      "type": "time",
+      "required": false,
+      "label": "Start Time"
+    },
+    {
+      "header": "additional|notes",
+      "path": "additional.notes",
+      "type": "text",
+      "required": false,
+      "label": "Notes"
+    },
+    {
+      "header": "event_info|venue",
+      "path": "event_info.venue",
+      "type": "text",
+      "required": false,
+      "label": "Venue"
+    },
+    {
+      "header": "event_info|round_name",
+      "path": "event_info.round_name",
+      "type": "text",
+      "required": false,
+      "label": "Round Name"
+    },
+    {
+      "header": "event_info|registration_deadline",
+      "path": "event_info.registration_deadline",
+      "type": "date",
+      "required": false,
+      "label": "Registration Deadline"
+    },
+    {
+      "header": "capacity_price|max_students",
+      "path": "capacity_price.max_students",
+      "type": "number",
+      "required": true,
+      "label": "Maximum Participants / Teams"
+    }
+  ]
+}

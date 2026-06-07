@@ -145,6 +145,7 @@ franchise → campus → category → program → instance
 ### 3.7 流量统计（公众侧埋点）
 
 - `/api/public/traffic/track`、`track-exit` → Admin 流量看板数据源
+- 规范与渠道分类：`.cursor/rules/traffic-analytics.mdc`（referrer、渠道拆分、Geography、GSC Keywords）
 
 ---
 
@@ -159,7 +160,7 @@ franchise → campus → category → program → instance
 | `/admin` | 统计概览、近期动态、流量快照 |
 | `/admin/users` | 用户 CRUD、角色、重发邀请 |
 | `/admin/teams` | About 页团队成员 CMS |
-| `/admin/traffic` | 访问分析、实时 SSE、导出 |
+| `/admin/traffic` | 访问分析、渠道拆分、Geography、GSC Keywords、实时 SSE、导出 |
 | `/admin/guide` | 运维手册（环境、Supabase、Stripe、导入、AI） |
 | `/admin/notifications` | 站内通知 |
 | `/admin/learning-paths` | 学习路径 CMS |
@@ -175,7 +176,7 @@ franchise → campus → category → program → instance
 | `/admin/blaze/campuses` | Location（`v2_campus`） |
 | `/admin/blaze/categories` | Program 轨道（`v2_category`） |
 | `/admin/blaze/programs` | Activity（`v2_program`） |
-| `/admin/blaze/offerings` | Session 模板（`v2_offering`） |
+| `/admin/blaze/offerings` | Session 模板（`v2_offering`）；status 迁移见 `offering-status-lifecycle.mdc` |
 | `/admin/blaze/instance` | Session 排期（`v2_instance`） |
 | `/admin/blaze/offering-types` | 类型与 JSON schema |
 | `/admin/blaze/resources` | 资源库与分类 |
@@ -238,7 +239,7 @@ API：`/api/coach/stats`、`/api/coach/instances/*`
 | Admin CRUD | `/api/admin/*` | 全站后台数据操作 |
 | Newsletter | `/api/admin/newsletter/*`、`/api/public/newsletter/*` | 订阅、发送、统计 |
 | Webhooks | `/api/webhooks/resend` | Resend 联系人/退订同步 |
-| Traffic | `/api/public/traffic/*`、`/api/admin/traffic/*` | 采集与分析 |
+| Traffic | `/api/public/traffic/*`、`/api/admin/traffic/*` | 采集与分析（见 `traffic-analytics.mdc`） |
 | AI | `/api/ai/chat`、`/api/ai/programs-chat` | Gemini 校区 / DeepSeek 目录 |
 | Cron | `/api/cron/*` | 过期购物车、候补、Newsletter |
 | Legacy | `/api/courses/*` | 旧课程 API |
@@ -258,16 +259,20 @@ API：`/api/coach/stats`、`/api/coach/instances/*`
 
 | 脚本 | 用途 |
 |------|------|
-| `import-instances.js` / `import-instances-camp.js` / `import-instances-course.js` | CSV/Excel → `v2_instance` |
-| `import-offerings-camp.js` / `import-offerings-course.js` | Offering 模板导入 |
-| `extract-instances-from-raw.js` | 原始数据 → 可导入 JSON |
-| `lib/import-instances-common.js` | 导入共享逻辑 |
+| `import-instances.js` / `export-instances.js` / `bootstrap-instance-csv.js` | `v2_instance` CSV 往返（schema 驱动，见 `instance-csv-import.mdc`） |
+| `export-offerings.js` / `import-offerings.js` / `bootstrap-offering-csv.js` | `v2_offering` CSV 往返导入（schema 驱动，见 `offering-csv-import.mdc`） |
+| `import-offerings-camp.js` / `import-offerings-course.js` | **Deprecated** → `import-offerings.js --type camp\|course` |
+| `import-instances-camp.js` / `import-instances-course.js` / `extract-instances-from-raw.js` | **Deprecated** → schema per type; archived in `_archive/scripts/` |
+| `lib/import-offerings-common.js` | Offering 导入共享逻辑 |
+| `lib/import-instances-common.js` | Instance 导入/导出共享逻辑 |
+| `lib/csv-schema-utils.js` | Offering/Instance schema CSV 列工具 |
 | `audit-instances-integrity.js` | 实例 FK/一致性审计 |
 | `audit-db-table-inventory.js` | 表清单审计 |
 | `seed-newsletter-templates.ts` | `npm run seed:newsletter-templates` |
 | `create-coach-user.ts`、`create-test-students.js`、`update-user-role.js` | 用户/bootstrap |
 | `check/check-env.js` 等 | 环境检查 |
-| `design/unified-instance-import.md` | 导入列映射说明（gitignored `.md`，本地设计稿） |
+| `design/instance-csv-import.md` | Instance CSV 往返导入操作手册（schema 按 type） |
+| `design/offering-csv-import.md` | Offering CSV 往返导入操作手册 |
 
 运行日志默认写入 `scripts/output/`（一般不提交 git）。
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { unwrapRelation } from "@/lib/supabase-relation"
+import { catalogTables, catalogCols } from "@/lib/catalog-db"
 
 /**
  * 获取指定 franchise 订阅的 categories（公开 API）
@@ -17,7 +18,7 @@ export async function GET(
 
     // 获取 franchise（从 v2_franchise 表）
     const { data: franchise, error: franchiseError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("id, code, name, is_active")
       .eq("code", normalizedCode)
       .eq("is_active", true)
@@ -32,12 +33,15 @@ export async function GET(
     }
 
     // 先检查是否有任何订阅记录（不限制 is_visible）
-    const { data: allMaps, error: allMapsError } = await supabaseAdmin
-      .from("v2_franchise_category_map")
-      .select("id, franchise_id, category_id, is_visible, display_order")
-      .eq("franchise_id", franchise.id)
+    const mapCampusFk = catalogCols.campusStageMap.campusId
+    const mapStageFk = catalogCols.campusStageMap.stageId
 
-    console.log('[v2_franchise_category_map] Step 1 - All maps:', {
+    const { data: allMaps, error: allMapsError } = await supabaseAdmin
+      .from(catalogTables.campusStageMap)
+      .select(`id, ${mapCampusFk}, ${mapStageFk}, is_visible, display_order`)
+      .eq(mapCampusFk, franchise.id)
+
+    console.log(`[${catalogTables.campusStageMap}] Step 1 - All maps:`, {
       franchiseCode: normalizedCode,
       franchiseId: franchise.id,
       allMapsCount: allMaps?.length || 0,
@@ -47,35 +51,36 @@ export async function GET(
 
     // 如果没有订阅记录，返回空数组（不显示任何 category）
     if (!allMaps || allMaps.length === 0) {
-      console.log('[v2_franchise_category_map] No subscriptions found, returning empty array')
+      console.log(`[${catalogTables.campusStageMap}] No subscriptions found, returning empty array`)
       return NextResponse.json({ categories: [] }, { status: 200 })
     }
 
     // 获取 franchise 订阅的 categories（只返回 is_visible = true 的）
     // 使用 inner join 确保只返回存在的 category
     const { data, error } = await supabaseAdmin
-      .from("v2_franchise_category_map")
+      .from(catalogTables.campusStageMap)
       .select(`
         id,
-        franchise_id,
-        category_id,
+        ${mapCampusFk},
+        ${mapStageFk},
         is_visible,
         display_order,
-        category:v2_category!inner(
+        category:${catalogTables.stage}!inner(
           id,
           name,
           display_name,
           description,
           poster_url,
+          link,
           is_active,
           display_order
         )
       `)
-      .eq("franchise_id", franchise.id)
+      .eq(mapCampusFk, franchise.id)
       .eq("is_visible", true)
       .order("display_order", { ascending: true })
 
-    console.log('[v2_franchise_category_map] Step 2 - Query result:', {
+    console.log(`[${catalogTables.campusStageMap}] Step 2 - Query result:`, {
       franchiseCode: normalizedCode,
       franchiseId: franchise.id,
       dataCount: data?.length || 0,
@@ -101,12 +106,13 @@ export async function GET(
         display_name: cat.display_name,
         description: cat.description,
         poster_url: cat.poster_url,
+        link: cat.link,
         is_active: cat.is_active,
         display_order: cat.display_order,
       }))
 
     // 添加调试日志（始终输出）
-    console.log('[v2_franchise_category_map] Final result:', {
+    console.log(`[${catalogTables.campusStageMap}] Final result:`, {
       franchiseCode: normalizedCode,
       franchiseId: franchise.id,
       rawDataCount: data?.length || 0,

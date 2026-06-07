@@ -1,129 +1,258 @@
 /**
- * Traffic Analytics 工具函数
- * 用于解析 User-Agent、分类访问来源、设备类型等
+ * Traffic analytics utilities — attribution, UA parsing, session cookie.
+ * Single source of truth per .cursor/rules/traffic-analytics.mdc
  */
 
-// 访问来源分类
-export function classifySource(referrer: string | null, currentDomain: string): string {
-  if (!referrer || referrer === '') {
-    return 'direct'
-  }
+export type TrafficSourceType =
+  | 'direct'
+  | 'google'
+  | 'bing'
+  | 'duckduckgo'
+  | 'yahoo'
+  | 'baidu'
+  | 'social'
+  | 'other'
 
+export type TrafficChannel =
+  | 'direct'
+  | 'organic_search'
+  | 'social'
+  | 'other_referral'
+
+export interface TrafficAttribution {
+  source_type: TrafficSourceType
+  channel: TrafficChannel
+  referrer_domain: string | null
+  platform: string | null
+}
+
+export const ORGANIC_SEARCH_SOURCE_TYPES: TrafficSourceType[] = [
+  'google',
+  'bing',
+  'duckduckgo',
+  'yahoo',
+  'baidu',
+]
+
+const SEARCH_DOMAIN_RULES: Array<{ source_type: TrafficSourceType; patterns: string[] }> = [
+  { source_type: 'google', patterns: ['google.com', 'google.'] },
+  { source_type: 'bing', patterns: ['bing.com', 'bing.'] },
+  { source_type: 'duckduckgo', patterns: ['duckduckgo.com'] },
+  { source_type: 'yahoo', patterns: ['yahoo.com', 'search.yahoo.com'] },
+  { source_type: 'baidu', patterns: ['baidu.com'] },
+]
+
+const SOCIAL_DOMAIN_RULES: Array<{ platform: string; patterns: string[] }> = [
+  { platform: 'Facebook', patterns: ['facebook.com', 'fb.com', 'm.facebook.com'] },
+  { platform: 'Instagram', patterns: ['instagram.com'] },
+  { platform: 'X (Twitter)', patterns: ['twitter.com', 'x.com', 't.co'] },
+  { platform: 'LinkedIn', patterns: ['linkedin.com', 'lnkd.in'] },
+  { platform: 'YouTube', patterns: ['youtube.com', 'youtu.be'] },
+  { platform: 'Xiaohongshu', patterns: ['xiaohongshu.com', 'xhslink.com'] },
+  { platform: 'TikTok', patterns: ['tiktok.com'] },
+  { platform: 'Pinterest', patterns: ['pinterest.com', 'pin.it'] },
+  { platform: 'Reddit', patterns: ['reddit.com'] },
+  { platform: 'WeChat', patterns: ['weixin.qq.com'] },
+]
+
+/** Paths excluded from public traffic collection */
+export const TRAFFIC_TRACK_SKIP_PREFIXES = [
+  '/admin',
+  '/coach',
+  '/teacher-portal',
+  '/api',
+]
+
+export function shouldSkipTrafficPath(pagePath: string): boolean {
+  return TRAFFIC_TRACK_SKIP_PREFIXES.some((prefix) => pagePath.startsWith(prefix))
+}
+
+function hostnameMatches(domain: string, patterns: string[]): boolean {
+  const host = domain.toLowerCase()
+  return patterns.some((p) => host === p || host.endsWith(`.${p}`) || host.includes(p))
+}
+
+export function parseReferrerHostname(referrer: string | null | undefined): string | null {
+  if (!referrer?.trim()) return null
   try {
-    const referrerUrl = new URL(referrer)
-    const referrerDomain = referrerUrl.hostname
-
-    // 如果 referrer 是当前域名，视为直接访问
-    if (referrerDomain === currentDomain || referrerDomain === `www.${currentDomain}`) {
-      return 'direct'
-    }
-
-    // Google 搜索
-    if (referrerDomain.includes('google.com') || referrerDomain.includes('google.')) {
-      return 'google'
-    }
-
-    // Bing 搜索
-    if (referrerDomain.includes('bing.com') || referrerDomain.includes('bing.')) {
-      return 'bing'
-    }
-
-    // 社交媒体
-    const socialDomains = [
-      'facebook.com',
-      'instagram.com',
-      'twitter.com',
-      'x.com',
-      'linkedin.com',
-      'youtube.com',
-      'xiaohongshu.com',
-      'tiktok.com',
-      'pinterest.com',
-    ]
-
-    if (socialDomains.some((domain) => referrerDomain.includes(domain))) {
-      return 'social'
-    }
-
-    return 'other'
+    return new URL(referrer).hostname.toLowerCase()
   } catch {
-    // URL 解析失败，视为其他来源
-    return 'other'
+    return null
   }
 }
 
-// 设备类型分类（基于屏幕尺寸和 User-Agent）
+function isSameSiteReferrer(referrerDomain: string, currentDomain: string): boolean {
+  const current = currentDomain.toLowerCase().replace(/^www\./, '')
+  const ref = referrerDomain.toLowerCase().replace(/^www\./, '')
+  return ref === current || ref === `www.${current}` || current === `www.${ref}`
+}
+
+export function channelFromSourceType(sourceType: string): TrafficChannel {
+  if (sourceType === 'direct') return 'direct'
+  if ((ORGANIC_SEARCH_SOURCE_TYPES as string[]).includes(sourceType)) {
+    return 'organic_search'
+  }
+  if (sourceType === 'social') return 'social'
+  return 'other_referral'
+}
+
+export function formatSourceTypeLabel(sourceType: string): string {
+  const labels: Record<string, string> = {
+    direct: 'Direct',
+    google: 'Google',
+    bing: 'Bing',
+    duckduckgo: 'DuckDuckGo',
+    yahoo: 'Yahoo',
+    baidu: 'Baidu',
+    social: 'Social',
+    other: 'Other',
+  }
+  return labels[sourceType] ?? sourceType.charAt(0).toUpperCase() + sourceType.slice(1)
+}
+
+export function formatChannelLabel(channel: TrafficChannel): string {
+  const labels: Record<TrafficChannel, string> = {
+    direct: 'Direct',
+    organic_search: 'Search engines',
+    social: 'Social media',
+    other_referral: 'Other referrals',
+  }
+  return labels[channel]
+}
+
+export function platformLabelFromVisit(
+  sourceType: string,
+  referrerDomain: string | null
+): string | null {
+  if (sourceType === 'social' && referrerDomain) {
+    for (const rule of SOCIAL_DOMAIN_RULES) {
+      if (hostnameMatches(referrerDomain, rule.patterns)) {
+        return rule.platform
+      }
+    }
+    return referrerDomain
+  }
+  if ((ORGANIC_SEARCH_SOURCE_TYPES as string[]).includes(sourceType)) {
+    return formatSourceTypeLabel(sourceType)
+  }
+  return null
+}
+
+/**
+ * Classify visit attribution from referrer (and optional site host).
+ */
+export function classifyTrafficAttribution(
+  referrer: string | null | undefined,
+  currentDomain: string
+): TrafficAttribution {
+  const referrerDomain = parseReferrerHostname(referrer)
+  const domain = currentDomain.toLowerCase().replace(/^www\./, '')
+
+  if (!referrerDomain) {
+    return {
+      source_type: 'direct',
+      channel: 'direct',
+      referrer_domain: null,
+      platform: null,
+    }
+  }
+
+  if (isSameSiteReferrer(referrerDomain, domain)) {
+    return {
+      source_type: 'direct',
+      channel: 'direct',
+      referrer_domain: referrerDomain,
+      platform: null,
+    }
+  }
+
+  for (const rule of SEARCH_DOMAIN_RULES) {
+    if (hostnameMatches(referrerDomain, rule.patterns)) {
+      return {
+        source_type: rule.source_type,
+        channel: 'organic_search',
+        referrer_domain: referrerDomain,
+        platform: formatSourceTypeLabel(rule.source_type),
+      }
+    }
+  }
+
+  for (const rule of SOCIAL_DOMAIN_RULES) {
+    if (hostnameMatches(referrerDomain, rule.patterns)) {
+      return {
+        source_type: 'social',
+        channel: 'social',
+        referrer_domain: referrerDomain,
+        platform: rule.platform,
+      }
+    }
+  }
+
+  return {
+    source_type: 'other',
+    channel: 'other_referral',
+    referrer_domain: referrerDomain,
+    platform: null,
+  }
+}
+
+/** @deprecated Use classifyTrafficAttribution — kept for TrafficTracker */
+export function classifySource(referrer: string | null, currentDomain: string): string {
+  return classifyTrafficAttribution(referrer, currentDomain).source_type
+}
+
 export function classifyDevice(
   screenWidth: number,
   userAgent: string
 ): 'mobile' | 'desktop' | 'tablet' {
-  // 简单的 User-Agent 检测
   const ua = userAgent.toLowerCase()
 
-  // 移动设备关键词
   if (
     ua.includes('mobile') ||
     ua.includes('android') ||
     ua.includes('iphone') ||
     ua.includes('ipod')
   ) {
-    // 进一步判断是否为平板
     if (ua.includes('ipad') || (ua.includes('android') && screenWidth >= 768)) {
       return 'tablet'
     }
     return 'mobile'
   }
 
-  // 平板设备关键词
   if (ua.includes('ipad') || ua.includes('tablet')) {
     return 'tablet'
   }
 
-  // 基于屏幕尺寸判断
   if (screenWidth < 768) {
     return 'mobile'
-  } else if (screenWidth < 1024) {
-    return 'tablet'
-  } else {
-    return 'desktop'
   }
+  if (screenWidth < 1024) {
+    return 'tablet'
+  }
+  return 'desktop'
 }
 
-// 浏览器类型分类（基于 User-Agent）
 export function classifyBrowser(userAgent: string): string {
   const ua = userAgent.toLowerCase()
 
-  // Chrome Mobile
   if (ua.includes('chrome') && ua.includes('mobile')) {
     return 'Chrome Mobile'
   }
-
-  // Mobile Safari
   if (ua.includes('safari') && (ua.includes('iphone') || ua.includes('ipad'))) {
     return 'Mobile Safari'
   }
-
-  // Chrome (桌面版)
   if (ua.includes('chrome') && !ua.includes('edg')) {
     return 'Chrome'
   }
-
-  // Edge
   if (ua.includes('edg') || ua.includes('edge')) {
     return 'Edge'
   }
-
-  // Firefox
   if (ua.includes('firefox')) {
     return 'Firefox'
   }
-
-  // Safari (桌面版)
   if (ua.includes('safari')) {
     return 'Safari'
   }
-
-  // Opera
   if (ua.includes('opera') || ua.includes('opr')) {
     return 'Opera'
   }
@@ -131,31 +260,21 @@ export function classifyBrowser(userAgent: string): string {
   return 'Others'
 }
 
-// 操作系统分类（基于 User-Agent）
 export function classifyOS(userAgent: string): string {
   const ua = userAgent.toLowerCase()
 
-  // iOS
   if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')) {
     return 'iOS'
   }
-
-  // Android
   if (ua.includes('android')) {
     return 'Android'
   }
-
-  // macOS
   if (ua.includes('mac os') || ua.includes('macintosh')) {
     return 'macOS'
   }
-
-  // Windows
   if (ua.includes('windows')) {
     return 'Windows'
   }
-
-  // Linux
   if (ua.includes('linux')) {
     return 'Linux'
   }
@@ -163,7 +282,6 @@ export function classifyOS(userAgent: string): string {
   return 'Other'
 }
 
-// 获取当前域名
 export function getCurrentDomain(): string {
   if (typeof window !== 'undefined') {
     return window.location.hostname
@@ -171,7 +289,6 @@ export function getCurrentDomain(): string {
   return ''
 }
 
-// 生成或获取 Session ID
 export function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') {
     return ''
@@ -180,16 +297,31 @@ export function getOrCreateSessionId(): string {
   const cookieName = 'traffic_session_id'
   const cookies = document.cookie.split('; ')
 
-  // 查找现有的 session_id
   const existingCookie = cookies.find((row) => row.startsWith(`${cookieName}=`))
   if (existingCookie) {
     return existingCookie.split('=')[1]
   }
 
-  // 生成新的 session_id
   const sessionId = crypto.randomUUID()
-  const maxAge = 30 * 24 * 60 * 60 // 30 天
+  const maxAge = 30 * 24 * 60 * 60
   document.cookie = `${cookieName}=${sessionId}; max-age=${maxAge}; path=/; SameSite=Lax`
 
   return sessionId
+}
+
+/** Build sorted breakdown rows for admin charts */
+export function buildVisitBreakdown(
+  counts: Record<string, number>,
+  total: number,
+  labelFn: (key: string) => string,
+  limit = 10
+): Array<{ name: string; visits: number; percentage: number }> {
+  return Object.entries(counts)
+    .map(([key, visits]) => ({
+      name: labelFn(key),
+      visits,
+      percentage: total > 0 ? Math.round((visits / total) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, limit)
 }

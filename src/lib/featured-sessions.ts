@@ -1,4 +1,5 @@
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+import { catalogSelect } from "@/lib/catalog-db"
 import type { StringKeyRecord } from "@/lib/typed-error"
 
 export interface FeaturedSession {
@@ -14,48 +15,13 @@ export interface FeaturedSession {
   category: { name: string; display_name: string } | null
 }
 
-export const FEATURED_INSTANCE_SELECT = `
-  id,
-  start_date,
-  start_time,
-  campus_id,
-  campus:v2_campus(
-    id,
-    name,
-    display_name
-  ),
-  program:v2_program!inner(
-    id,
-    name,
-    display_name,
-    description,
-    poster_url,
-    franchise_id,
-    category:v2_category(
-      id,
-      name,
-      display_name
-    ),
-    franchise:v2_franchise(
-      id,
-      code,
-      name,
-      is_active
-    )
-  ),
-  offering:v2_offering(
-    id,
-    name,
-    description,
-    poster_url,
-    status,
-    category:v2_category(
-      id,
-      name,
-      display_name
-    )
-  )
-`
+/** PostgREST select for featured sessions (v2/v3 via CATALOG_SCHEMA) */
+export function getFeaturedInstanceSelect(options?: { includeSeriesPoster?: boolean }): string {
+  return catalogSelect.featuredSession(options)
+}
+
+/** @deprecated use getFeaturedInstanceSelect() */
+export const FEATURED_INSTANCE_SELECT = getFeaturedInstanceSelect()
 
 export function categoryNameToSlug(name: string): string {
   return (name || "").replace(/_/g, "-")

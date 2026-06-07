@@ -46,6 +46,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, Eye, EyeOff, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from "lucide-react"
+import { STAGE_JOURNEY_ADMIN_LINK_HINTS } from "@/lib/stage-journey-config"
 import { adminUiLabels } from "@/lib/admin-ui-labels"
 import { adminToast, adminConfirm, getErrorMessage } from "@/lib/admin-toast"
 
@@ -63,6 +64,7 @@ interface V2Category {
   display_name: string
   description?: string
   poster_url?: string
+  link?: string | null
   config_base: CategoryConfigBase
   display_order: number
   is_active: boolean
@@ -115,6 +117,7 @@ export default function BlazeCategoriesManagementPage() {
     display_name: "",
     description: "",
     poster_url: "",
+    link: "",
     config_base: {},
     display_order: 0,
     is_active: true,
@@ -245,6 +248,7 @@ export default function BlazeCategoriesManagementPage() {
       display_name: category.display_name,
       description: category.description || "",
       poster_url: category.poster_url || "",
+      link: category.link || "",
       config_base: configBase,
       display_order: category.display_order,
       is_active: category.is_active,
@@ -281,6 +285,7 @@ export default function BlazeCategoriesManagementPage() {
       display_name: "",
       description: "",
       poster_url: "",
+      link: "",
       config_base: {},
       display_order: 0,
       is_active: true,
@@ -353,6 +358,7 @@ export default function BlazeCategoriesManagementPage() {
         const submitData = {
           ...formData,
           description: formData.description || undefined,
+          link: formData.link?.trim() || null,
           poster_url: posterUrl,
           config_base: configBase,
         }
@@ -380,6 +386,7 @@ export default function BlazeCategoriesManagementPage() {
       const submitData = {
         ...formData,
         description: formData.description || undefined,
+        link: formData.link?.trim() || null,
         poster_url: undefined,
         config_base: configBase,
       }
@@ -911,12 +918,18 @@ export default function BlazeCategoriesManagementPage() {
                         id="name"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value.toLowerCase().trim() })}
-                        placeholder="e.g. robotics_basics, coding_intro"
+                        placeholder="e.g. ignitecuriosity, buildmastery, compete, innovate"
                         required
                         disabled={!!editingCategory}
                         className="font-mono"
                       />
-                      <p className="text-xs text-muted-foreground">Lowercase, numbers, underscores only. Unique globally.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Lowercase, numbers, underscores only. Unique globally. Stage journey pages use{" "}
+                        <span className="font-mono">ignitecuriosity</span>,{" "}
+                        <span className="font-mono">buildmastery</span>,{" "}
+                        <span className="font-mono">compete</span>,{" "}
+                        <span className="font-mono">innovate</span>.
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="display_name">Display Name *</Label>
@@ -939,6 +952,25 @@ export default function BlazeCategoriesManagementPage() {
                       rows={3}
                       className="resize-none"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="link">Link</Label>
+                    <Input
+                      id="link"
+                      value={formData.link || ""}
+                      onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                      placeholder={
+                        STAGE_JOURNEY_ADMIN_LINK_HINTS[formData.name] ??
+                        "e.g. /journey/ignite"
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Navbar Program item destination. Journey stages:{" "}
+                      {Object.entries(STAGE_JOURNEY_ADMIN_LINK_HINTS)
+                        .map(([name, path]) => `${name} → ${path}`)
+                        .join("; ")}
+                      . Leave empty to hide from the website navbar.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

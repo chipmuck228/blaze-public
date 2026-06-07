@@ -1,0 +1,2 @@
+id,slug,Title,Offering Type,Program (tag),Status,Description for admin,Image Link,content|description,content|prerequisites,content|target_audience,content|learning_outcomes,content|curriculum_outline,options|materials_included,options|certificate_available,pricing|currency,pricing|base_price,portal_config|is_course_type,portal_config|show_care_service,portal_config|show_meal_service,capacity_sessions|base_capacity,capacity_sessions|base_sessions_count
+,,Example Offering,course,Explore,draft,,,(required Description),,,,,No,No,(required Currency),1,No,No,No,1,1

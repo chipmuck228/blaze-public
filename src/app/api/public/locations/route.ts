@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { unwrapRelation } from "@/lib/supabase-relation"
+import { catalogFrom, catalogSelect, catalogTables, isCatalogV3 } from "@/lib/catalog-db"
 
 interface FranchiseRef {
   id: string
@@ -16,31 +17,20 @@ interface FranchiseRef {
 export async function GET() {
   try {
     // 优先查询 v2_campus 表（新表，关联 v2_franchise）
-    const { data: v2Campuses, error: v2CampusesError } = await supabaseAdmin
-      .from("v2_campus")
-      .select(`
-        id,
-        name,
-        display_name,
-        address,
-        city,
-        state,
-        zip_code,
-        franchise:v2_franchise!inner(
-          id,
-          code,
-          name,
-          is_active
-        )
-      `)
+    const parentEmbedFilter = isCatalogV3() ? "campus.is_active" : "franchise.is_active"
+
+    const { data: v2Campuses, error: v2CampusesError } = await catalogFrom("location")
+      .select(catalogSelect.locationWithCampus())
       .eq("is_active", true)
-      .eq("franchise.is_active", true)
+      .eq(parentEmbedFilter, true)
       .order("name", { ascending: true })
 
-    // 如果 v2_campus 有数据，直接使用
+    // 如果 v2_campus / v3_location 有数据，直接使用
     if (!v2CampusesError && v2Campuses && v2Campuses.length > 0) {
-      const enrichedLocations = v2Campuses.map((campus) => {
-        const franchise = unwrapRelation(campus.franchise) as FranchiseRef | null
+      const enrichedLocations = v2Campuses.map((campus: Record<string, unknown>) => {
+        const franchise = (
+          unwrapRelation(campus.franchise) ?? unwrapRelation((campus as { campus?: unknown }).campus)
+        ) as FranchiseRef | null
         return {
           id: campus.id,
           name: campus.display_name || campus.name,
@@ -76,13 +66,12 @@ export async function GET() {
     }
 
     // 获取所有 v2_franchise（新表）
-    const { data: v2Franchises, error: v2FranchisesError } = await supabaseAdmin
-      .from("v2_franchise")
+    const { data: v2Franchises, error: v2FranchisesError } = await catalogFrom("campus")
       .select("id, code, name, is_active")
       .eq("is_active", true)
 
     if (v2FranchisesError) {
-      console.warn("[v2_franchise] Error fetching:", v2FranchisesError)
+      console.warn(`[${catalogTables.campus}] Error fetching:`, v2FranchisesError)
     }
 
     // 如果没有 v2_franchise 数据，尝试查询 franchises_v2（过渡表）
@@ -140,7 +129,7 @@ export async function GET() {
 
     return NextResponse.json(filteredData, { status: 200 })
   } catch (error: unknown) {
-    console.error("[v2_campus] Error fetching public locations:", error)
+    console.error(`[${catalogTables.location}] Error fetching public locations:`, error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to fetch locations" },
       { status: 500 }

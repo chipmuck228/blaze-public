@@ -1,0 +1,2 @@
+id,slug,Title,Offering Type,Program (tag),Status,Description for admin,Image Link,content|notes,content|policy,content|description,portal_config|is_course_type,portal_config|show_care_service,portal_config|show_meal_service
+,,Example Offering,freetrial,Explore,draft,,,,,,No,No,No

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 /**
  * GET /api/public/resources/v2
@@ -9,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase"
 export async function GET() {
   try {
     const { data: categories, error: catError } = await supabaseAdmin
-      .from("v2_resource_category")
+      .from(catalogTables.resourceCategory)
       .select("id, display_name, display_order")
       .eq("is_active", true)
       .order("display_order", { ascending: true })
@@ -28,7 +29,7 @@ export async function GET() {
     }
 
     const { data: resources, error: resError } = await supabaseAdmin
-      .from("v2_resource")
+      .from(catalogTables.resource)
       .select("id, resource_category_id, title, description, icon, icon_color, document_url, document_label, open_in_new_tab, display_order")
       .eq("is_active", true)
       .order("display_order", { ascending: true })

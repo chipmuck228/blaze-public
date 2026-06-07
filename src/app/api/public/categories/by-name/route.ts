@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 /**
  * GET /api/public/categories/by-name?name=beginner_robotics
@@ -15,14 +16,14 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .select("id, name, display_name, description, poster_url, is_active, display_order")
       .eq("is_active", true)
       .eq("name", name)
       .maybeSingle()
 
     if (error) {
-      console.error("[v2_category] Error:", error)
+      console.error(`[${catalogTables.stage}] Error:`, error)
       return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
 
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(data, { status: 200 })
   } catch (err: unknown) {
-    console.error("[v2_category] Error:", err)
+    console.error(`[${catalogTables.stage}] Error:`, err)
     return NextResponse.json(
       { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch category" },
       { status: 500 }

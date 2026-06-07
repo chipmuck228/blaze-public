@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 export async function GET(
   _request: Request,
@@ -15,7 +16,7 @@ export async function GET(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_resource")
+      .from(catalogTables.resource)
       .select("*, resource_category:v2_resource_category(id, name, display_name)")
       .eq("id", id)
       .single()
@@ -78,7 +79,7 @@ export async function PUT(
     if (is_active !== undefined) updateData.is_active = is_active
 
     const { data, error } = await supabaseAdmin
-      .from("v2_resource")
+      .from(catalogTables.resource)
       .update(updateData)
       .eq("id", id)
       .select()
@@ -122,7 +123,7 @@ export async function DELETE(
     }
 
     const { error } = await supabaseAdmin
-      .from("v2_resource")
+      .from(catalogTables.resource)
       .delete()
       .eq("id", id)
 

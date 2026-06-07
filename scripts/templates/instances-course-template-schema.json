@@ -1,0 +1,112 @@
+{
+  "offering_type_code": "course",
+  "offering_type_id": "25ad93d1-688f-43a6-b436-572e48e80e1a",
+  "schema_updated_at": "2026-05-28T16:33:16.194279+00:00",
+  "schema_hash": "2218ef3aa5f7c2e3",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "audience|target_grades",
+      "path": "audience.target_grades",
+      "type": "multiselect",
+      "required": false,
+      "label": "Target Grades"
+    },
+    {
+      "header": "schedule|end_date",
+      "path": "schedule.end_date",
+      "type": "date",
+      "required": true,
+      "label": "End Date"
+    },
+    {
+      "header": "schedule|end_time",
+      "path": "schedule.end_time",
+      "type": "time",
+      "required": false,
+      "label": "End Time"
+    },
+    {
+      "header": "schedule|start_date",
+      "path": "schedule.start_date",
+      "type": "date",
+      "required": true,
+      "label": "Start Date"
+    },
+    {
+      "header": "schedule|start_time",
+      "path": "schedule.start_time",
+      "type": "time",
+      "required": false,
+      "label": "Start Time"
+    },
+    {
+      "header": "schedule|days_of_week",
+      "path": "schedule.days_of_week",
+      "type": "multiselect",
+      "required": false,
+      "label": "Days of Week"
+    },
+    {
+      "header": "age_range|age_max",
+      "path": "age_range.age_max",
+      "type": "number",
+      "required": true,
+      "label": "Maximum Age"
+    },
+    {
+      "header": "age_range|age_min",
+      "path": "age_range.age_min",
+      "type": "number",
+      "required": true,
+      "label": "Minimum Age"
+    },
+    {
+      "header": "class_info|instructor_name",
+      "path": "class_info.instructor_name",
+      "type": "text",
+      "required": false,
+      "label": "Instructor Name"
+    },
+    {
+      "header": "class_info|classroom_number",
+      "path": "class_info.classroom_number",
+      "type": "text",
+      "required": false,
+      "label": "Classroom Number"
+    },
+    {
+      "header": "class_info|special_equipment",
+      "path": "class_info.special_equipment",
+      "type": "array",
+      "required": false,
+      "label": "Special Equipment"
+    },
+    {
+      "header": "capacity_price|max_students",
+      "path": "capacity_price.max_students",
+      "type": "number",
+      "required": false,
+      "label": "Class Size"
+    },
+    {
+      "header": "capacity_price|price_override",
+      "path": "capacity_price.price_override",
+      "type": "number",
+      "required": false,
+      "label": "Price Override"
+    }
+  ]
+}

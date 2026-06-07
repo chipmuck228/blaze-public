@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 // 获取所有全局 categories
 export async function GET(request: Request) {
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const includeInactive = searchParams.get("includeInactive") === "true"
 
     let query = supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .select("*")
       .order("display_order", { ascending: true })
       .order("name", { ascending: true })
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
       display_name,
       description,
       poster_url,
+      link,
       config_base,
       display_order,
       is_active,
@@ -79,12 +81,13 @@ export async function POST(request: Request) {
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .insert({
         name: name.toLowerCase().trim(),
         display_name,
         description: description || null,
         poster_url: poster_url || null,
+        link: link?.trim() || null,
         config_base: config_base || {},
         display_order: display_order || 0,
         is_active: is_active !== undefined ? is_active : true,

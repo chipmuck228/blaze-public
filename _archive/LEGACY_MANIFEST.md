@@ -115,3 +115,10 @@
 | src/app/api/admin/instances/v2/** | B | archived | admin/instance/v2 | Removed from src 2026-05 |
 | src/lib/db-v2.ts | C | deprecated | v2_* + supabaseAdmin | Do not extend |
 | src/lib/db.ts | C | active | — | auth/enrollment/payment; delete after migration |
+| _archive/scripts/import-instances-camp.js | B | archived | import-instances.js --type camp | Unified wide-table legacy; archived 2026-06 |
+| _archive/scripts/import-instances-course.js | B | archived | import-instances.js --type course | Unified wide-table legacy; archived 2026-06 |
+| _archive/scripts/extract-instances-from-raw.js | B | archived | Per-type schema CSV export/edit | Raw → unified wide table; archived 2026-06 |
+| _archive/scripts/design/unified-instance-import.md | D | archived | instance-csv-import.md | Unified camp+course spec; archived 2026-06 |
+| scripts/import-instances-camp.js | B | deprecated stub | import-instances.js --type camp | Prints message; real script in _archive |
+| scripts/import-instances-course.js | B | deprecated stub | import-instances.js --type course | Prints message; real script in _archive |
+| scripts/extract-instances-from-raw.js | B | deprecated stub | export-instances.js --type {code} | Prints message; real script in _archive |

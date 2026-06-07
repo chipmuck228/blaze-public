@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables, catalogCols } from "@/lib/catalog-db"
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
 
     if (franchiseCode) {
       const { data: franchise } = await supabaseAdmin
-        .from("v2_franchise")
+        .from(catalogTables.campus)
         .select("id")
         .eq("code", franchiseCode.toLowerCase())
         .eq("is_active", true)
@@ -46,9 +47,9 @@ export async function GET(request: Request) {
 
       if (franchise) {
         const { data: campuses } = await supabaseAdmin
-          .from("v2_campus")
+          .from(catalogTables.location)
           .select("id")
-          .eq("franchise_id", franchise.id)
+          .eq(catalogCols.location.campusId, franchise.id)
 
         const campusIds = (campuses || []).map((c) => c.id)
         if (campusIds.length > 0) {
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
     const campusById = new Map<string, { id: string; name: string; display_name: string | null }>()
     if (campusIds.length > 0) {
       const { data: campuses, error: campusError } = await supabaseAdmin
-        .from("v2_campus")
+        .from(catalogTables.location)
         .select("id, name, display_name")
         .in("id", campusIds)
       if (campusError) {

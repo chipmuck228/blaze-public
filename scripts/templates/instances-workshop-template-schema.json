@@ -1,0 +1,70 @@
+{
+  "offering_type_code": "workshop",
+  "offering_type_id": "8765f3ad-653d-4837-9df8-a22a9dfb69d0",
+  "schema_updated_at": "2026-05-28T16:32:34.35503+00:00",
+  "schema_hash": "bda99fe15749b0fb",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "age_range|age_max",
+      "path": "age_range.age_max",
+      "type": "number",
+      "required": false,
+      "label": "Maximum Age"
+    },
+    {
+      "header": "age_range|age_min",
+      "path": "age_range.age_min",
+      "type": "number",
+      "required": false,
+      "label": "Minimum Age"
+    },
+    {
+      "header": "workshop_info|workshop_topic",
+      "path": "workshop_info.workshop_topic",
+      "type": "text",
+      "required": false,
+      "label": "Workshop Topic"
+    },
+    {
+      "header": "workshop_info|instructor_name",
+      "path": "workshop_info.instructor_name",
+      "type": "text",
+      "required": false,
+      "label": "Instructor Name"
+    },
+    {
+      "header": "workshop_info|available_drop_ins",
+      "path": "workshop_info.available_drop_ins",
+      "type": "number",
+      "required": false,
+      "label": "Available Drop-in Spots"
+    },
+    {
+      "header": "workshop_info|special_requirements",
+      "path": "workshop_info.special_requirements",
+      "type": "text",
+      "required": false,
+      "label": "Special Requirements"
+    },
+    {
+      "header": "capacity_price|max_students",
+      "path": "capacity_price.max_students",
+      "type": "number",
+      "required": true,
+      "label": "Maximum Students"
+    }
+  ]
+}

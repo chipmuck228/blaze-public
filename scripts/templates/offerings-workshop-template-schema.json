@@ -1,0 +1,116 @@
+{
+  "offering_type_code": "workshop",
+  "offering_type_id": "8765f3ad-653d-4837-9df8-a22a9dfb69d0",
+  "schema_updated_at": "2026-05-28T16:32:34.35503+00:00",
+  "schema_hash": "dd46e7c2472faabd",
+  "fixed_columns": [
+    "id",
+    "slug",
+    "Title",
+    "Offering Type",
+    "Program (tag)",
+    "Status",
+    "Description for admin",
+    "Image Link"
+  ],
+  "columns": [
+    {
+      "header": "content|description",
+      "path": "content.description",
+      "type": "text",
+      "required": true,
+      "label": "Workshop Description"
+    },
+    {
+      "header": "content|prerequisites",
+      "path": "content.prerequisites",
+      "type": "text",
+      "required": false,
+      "label": "Prerequisites"
+    },
+    {
+      "header": "content|target_audience",
+      "path": "content.target_audience",
+      "type": "text",
+      "required": false,
+      "label": "Target Audience"
+    },
+    {
+      "header": "content|learning_outcomes",
+      "path": "content.learning_outcomes",
+      "type": "text",
+      "required": false,
+      "label": "Learning Outcomes"
+    },
+    {
+      "header": "pricing|currency",
+      "path": "pricing.currency",
+      "type": "text",
+      "required": true,
+      "label": "Currency"
+    },
+    {
+      "header": "pricing|base_price",
+      "path": "pricing.base_price",
+      "type": "number",
+      "required": true,
+      "label": "Base Price"
+    },
+    {
+      "header": "portal_config|is_course_type",
+      "path": "portal_config.is_course_type",
+      "type": "boolean",
+      "required": false,
+      "label": "Treat as course-type on customer portal"
+    },
+    {
+      "header": "portal_config|show_care_service",
+      "path": "portal_config.show_care_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Care Service on instance detail page"
+    },
+    {
+      "header": "portal_config|show_meal_service",
+      "path": "portal_config.show_meal_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Meal Service on instance detail page"
+    },
+    {
+      "header": "workshop_settings|skill_level",
+      "path": "workshop_settings.skill_level",
+      "type": "select",
+      "required": false,
+      "label": "Skill Level"
+    },
+    {
+      "header": "workshop_settings|is_multidrop",
+      "path": "workshop_settings.is_multidrop",
+      "type": "boolean",
+      "required": false,
+      "label": "Allow Multiple Registrations"
+    },
+    {
+      "header": "workshop_settings|drop_in_price",
+      "path": "workshop_settings.drop_in_price",
+      "type": "number",
+      "required": false,
+      "label": "Drop-in Price"
+    },
+    {
+      "header": "workshop_settings|workshop_duration",
+      "path": "workshop_settings.workshop_duration",
+      "type": "number",
+      "required": true,
+      "label": "Workshop Duration (hours)"
+    },
+    {
+      "header": "workshop_settings|materials_provided",
+      "path": "workshop_settings.materials_provided",
+      "type": "boolean",
+      "required": false,
+      "label": "Materials Provided"
+    }
+  ]
+}

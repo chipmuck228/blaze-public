@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 export async function GET(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const includeInactive = searchParams.get("includeInactive") === "true"
 
     let query = supabaseAdmin
-      .from("v2_resource")
+      .from(catalogTables.resource)
       .select("*, resource_category:v2_resource_category(id, name, display_name)")
       .order("display_order", { ascending: true })
       .order("title", { ascending: true })
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_resource")
+      .from(catalogTables.resource)
       .insert({
         resource_category_id,
         title,

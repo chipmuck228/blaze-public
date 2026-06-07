@@ -2,6 +2,14 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import {
+  catalogCols,
+  catalogSelect,
+  catalogTables,
+  isCatalogV3,
+  normalizeSeriesRow,
+  seriesInsertFromBody,
+} from "@/lib/catalog-db"
 
 // 获取所有 programs（支持按 categoryId 和 franchiseId 筛选）
 export async function GET(request: Request) {
@@ -17,24 +25,8 @@ export async function GET(request: Request) {
     const activeOnly = searchParams.get("activeOnly") === "true"
 
     let query = supabaseAdmin
-      .from("v2_program")
-      .select(`
-        *,
-        category:v2_category(
-          id,
-          name,
-          display_name,
-          description,
-          poster_url,
-          is_active
-        ),
-        franchise:v2_franchise(
-          id,
-          code,
-          name,
-          is_active
-        )
-      `)
+      .from(catalogTables.series)
+      .select(catalogSelect.seriesWithRelations())
       .order("display_order", { ascending: true })
       .order("start_date", { ascending: false })
 
@@ -43,11 +35,11 @@ export async function GET(request: Request) {
     }
 
     if (categoryId) {
-      query = query.eq("category_id", categoryId)
+      query = query.eq(catalogCols.series.stageId, categoryId)
     }
 
     if (franchiseId) {
-      query = query.eq("franchise_id", franchiseId)
+      query = query.eq(catalogCols.series.campusId, franchiseId)
     }
 
     const { data, error } = await query
@@ -60,7 +52,7 @@ export async function GET(request: Request) {
       )
     }
 
-    return NextResponse.json(data || [], { status: 200 })
+    return NextResponse.json((data || []).map((row) => normalizeSeriesRow(row)), { status: 200 })
   } catch (error: unknown) {
     console.error("Error fetching programs:", error)
     return NextResponse.json(
@@ -119,7 +111,7 @@ export async function POST(request: Request) {
 
     // 验证 franchise 是否存在
     const { data: franchise, error: franchiseError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("id")
       .eq("id", franchise_id)
       .single()
@@ -133,7 +125,7 @@ export async function POST(request: Request) {
 
     // 验证 category 是否存在
     const { data: category, error: categoryError } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .select("id")
       .eq("id", category_id)
       .single()
@@ -147,10 +139,10 @@ export async function POST(request: Request) {
 
     // 验证 category 是否被 franchise 订阅
     const { data: subscription, error: subscriptionError } = await supabaseAdmin
-      .from("v2_franchise_category_map")
+      .from(catalogTables.campusStageMap)
       .select("id")
-      .eq("franchise_id", franchise_id)
-      .eq("category_id", category_id)
+      .eq(catalogCols.campusStageMap.campusId, franchise_id)
+      .eq(catalogCols.campusStageMap.stageId, category_id)
       .single()
 
     if (subscriptionError || !subscription) {
@@ -162,10 +154,10 @@ export async function POST(request: Request) {
 
     // 检查 name 在 franchise_id 和 category_id 组合下是否唯一
     const { data: existing, error: existingError } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .select("id")
-      .eq("franchise_id", franchise_id)
-      .eq("category_id", category_id)
+      .eq(catalogCols.series.campusId, franchise_id)
+      .eq(catalogCols.series.stageId, category_id)
       .eq("name", name.toLowerCase().trim())
       .single()
 
@@ -177,42 +169,31 @@ export async function POST(request: Request) {
     }
 
     // 创建 program
+    const insertPayload = seriesInsertFromBody({
+      franchise_id,
+      category_id,
+      name: name.toLowerCase().trim(),
+      display_name,
+      description: description || null,
+      start_date,
+      end_date,
+      display_order: display_order || 0,
+      is_active: is_active !== undefined ? is_active : true,
+      featured: featured === true,
+      poster_url: poster_url || null,
+    })
+
+    const table = catalogTables.series
+    console.log(`[${table}] Creating series (schema=${isCatalogV3() ? "v3" : "v2"})`)
+
     const { data, error } = await supabaseAdmin
-      .from("v2_program")
-      .insert({
-        franchise_id,
-        category_id,
-        name: name.toLowerCase().trim(),
-        display_name,
-        description: description || null,
-        start_date,
-        end_date,
-        display_order: display_order || 0,
-        is_active: is_active !== undefined ? is_active : true,
-        featured: featured === true,
-        poster_url: poster_url || null,
-      })
-      .select(`
-        *,
-        category:v2_category(
-          id,
-          name,
-          display_name,
-          description,
-          poster_url,
-          is_active
-        ),
-        franchise:v2_franchise(
-          id,
-          code,
-          name,
-          is_active
-        )
-      `)
+      .from(table)
+      .insert(insertPayload)
+      .select(catalogSelect.seriesWithRelations())
       .single()
 
     if (error) {
-      console.error("Error creating program:", error)
+      console.error(`[${table}] Error creating program:`, error)
       
       // 检查是否是唯一性约束错误
       if (error.code === "23505") {
@@ -228,7 +209,7 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(normalizeSeriesRow(data), { status: 201 })
   } catch (error: unknown) {
     console.error("Error creating program:", error)
     return NextResponse.json(

@@ -1,0 +1,85 @@
+---
+description: Offering status transitions (draft/published/suspended/archived) and session side effects
+globs:
+  - src/app/admin/blaze/offerings/**
+  - src/app/api/admin/offering/**
+  - src/app/api/admin/instance/**
+  - src/app/api/public/instances-v2/**
+  - src/app/api/public/instance-v2/**
+  - scripts/lib/import-offerings-common.js
+  - scripts/design/offering-status-lifecycle.md
+alwaysApply: false
+---
+
+# Offering Status Lifecycle
+
+Admin **offering** (`v2_offering` / `v3_offering`) status rules and impact on linked **sessions** (`v2_instance` / `v3_session`). Web term: **Session** — see `product-hierarchy.mdc`.
+
+**Full spec:** [`scripts/design/offering-status-lifecycle.md`](scripts/design/offering-status-lifecycle.md)
+
+## Status semantics
+
+| Status | Admin edit | C-end catalog | New sessions | Rename |
+|--------|------------|---------------|--------------|--------|
+| `draft` | yes | no | no | yes |
+| `published` | yes (not name) | yes | yes | no |
+| `suspended` | yes (not name) | no | no | no |
+| `archived` | **no** | no | no | no |
+
+Session statuses (separate): `scheduled` | `ongoing` | `completed` | `cancelled` + `is_active` — see `database-schema.mdc`.
+
+## Allowed transitions
+
+| From | To |
+|------|-----|
+| `draft` | `published`, `suspended`, `archived` |
+| `published` | `suspended`, `archived` — **not** `draft` |
+| `suspended` | `published`, `archived` — **not** `draft` |
+| `archived` | *(terminal — no changes)* |
+
+**Archive guard:** no `scheduled` or `ongoing` sessions on that offering.  
+**Publish / suspend:** Admin UI must show English confirmation (design doc §5).
+
+## Session side effects (soft cascade)
+
+Apply **only when offering status actually changes** (PUT API or import `--execute`):
+
+| Transition | Session action |
+|------------|----------------|
+| → `suspended` | `scheduled` + `current_students=0` + `is_active=true` → `is_active=false`; set `instance_data_ext._auto_hidden_by_offering_status='suspended'` |
+| `suspended` → `published` | Reverse only rows with that marker → `is_active=true`; clear marker |
+| → `archived` | No session cascade (archive guard already blocks active sessions) |
+| Other | No automatic session `status` → `cancelled` |
+
+**Never** auto-modify sessions with `current_students > 0`. **Never** cancel enrollments.
+
+C-end visibility: public APIs require `offering.status === 'published'` (existing). Session create API: same (existing).
+
+## Implementation
+
+Shared module (when implemented): `src/lib/offering-status-lifecycle.ts`
+
+- `validateOfferingStatusTransition(from, to)`
+- `assertCanArchiveOffering(supabase, offeringId)`
+- `applyOfferingStatusSessionSideEffects(supabase, offeringId, from, to)`
+
+Node import scripts: mirror in `scripts/lib/offering-status-lifecycle.js` or shared compile.
+
+**Until implemented:** design doc is source of truth; partial rules exist in offerings Admin UI + PUT API (draft rename lock, `published → draft` block).
+
+## Do not
+
+- Change offering `status` in API/import **without** transition validation and archive guard
+- Allow Admin edit of `archived` offerings
+- Bulk-archive via CSV without dry-run and session checks
+- Hardcode `v2_*` table names — use `catalogTables` from `@/lib/catalog-db.ts`
+- Set session `status=cancelled` automatically on offering suspend/archive
+
+## Logging
+
+Prefix: `[v2_offering]` or `[v3_offering]` + `[offering-lifecycle]` (canonical table name from `catalogTables.offering`).
+
+## Related
+
+- Offering CSV: `offering-csv-import.mdc` — `Status` column must follow this lifecycle on UPDATE
+- Instance CSV: `instance-csv-import.mdc` — sessions only on `published` offerings

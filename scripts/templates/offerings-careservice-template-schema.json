@@ -1,0 +1,67 @@
+{
+  "offering_type_code": "careservice",
+  "offering_type_id": "3f73e9c2-b70c-4db5-884b-285bb6b49337",
+  "schema_updated_at": "2026-05-28T16:22:11.089672+00:00",
+  "schema_hash": "828954611f1b0dd6",
+  "fixed_columns": [
+    "id",
+    "slug",
+    "Title",
+    "Offering Type",
+    "Program (tag)",
+    "Status",
+    "Description for admin",
+    "Image Link"
+  ],
+  "columns": [
+    {
+      "header": "content|eligibility_notes",
+      "path": "content.eligibility_notes",
+      "type": "text",
+      "required": false,
+      "label": "Eligibility Notes"
+    },
+    {
+      "header": "pricing|currency",
+      "path": "pricing.currency",
+      "type": "text",
+      "required": true,
+      "label": "Currency"
+    },
+    {
+      "header": "pricing|base_price",
+      "path": "pricing.base_price",
+      "type": "number",
+      "required": true,
+      "label": "Price"
+    },
+    {
+      "header": "portal_config|is_course_type",
+      "path": "portal_config.is_course_type",
+      "type": "boolean",
+      "required": false,
+      "label": "Treat as course-type on customer portal"
+    },
+    {
+      "header": "portal_config|show_care_service",
+      "path": "portal_config.show_care_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Care Service on instance detail page"
+    },
+    {
+      "header": "portal_config|show_meal_service",
+      "path": "portal_config.show_meal_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Meal Service on instance detail page"
+    },
+    {
+      "header": "admin_settings|portal_service_role",
+      "path": "admin_settings.portal_service_role",
+      "type": "select",
+      "required": false,
+      "label": "Instance detail page service role"
+    }
+  ]
+}

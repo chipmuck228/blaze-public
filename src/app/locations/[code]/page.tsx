@@ -1,7 +1,6 @@
 import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
 import { notFound } from "next/navigation"
-import { supabaseAdmin } from "@/lib/supabase"
 import { unwrapRelation } from "@/lib/supabase-relation"
 import { LocationProgramsByCategory } from "@/components/location/LocationProgramsByCategory"
 import type { CategoryGroup, LocationProgram } from "@/components/location/LocationProgramsByCategory"
@@ -15,11 +14,18 @@ import { Newsletter } from "@/components/Newsletter"
 import { LocationCta } from "@/components/location/LocationCta"
 import type { StringKeyRecord } from "@/lib/typed-error"
 import {
-  FEATURED_INSTANCE_SELECT,
+  getFeaturedInstanceSelect,
   mapInstanceRowToFeaturedSession,
   sortFeaturedInstanceRows,
   type FeaturedSession,
 } from "@/lib/featured-sessions"
+import {
+  campusPublicSelect,
+  catalogCols,
+  catalogFrom,
+  catalogTables,
+  isMissingPosterUrlColumnError,
+} from "@/lib/catalog-db"
 
 interface LocationPageProps {
   params: Promise<{ code: string }>
@@ -144,8 +150,7 @@ export async function generateMetadata({ params }: LocationPageProps) {
   const { code } = await params
   const normalizedCode = decodeURIComponent(code).toLowerCase()
 
-  const { data: franchise } = await supabaseAdmin
-    .from("v2_franchise")
+  const { data: franchise } = await catalogFrom("campus")
     .select("name, marketing_config")
     .eq("code", normalizedCode)
     .eq("is_active", true)
@@ -183,46 +188,52 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
   const normalizedCode = decodeURIComponent(code).toLowerCase()
 
   // v2_franchise（含 branding_config、marketing_config、poster_url 供 Hero/CTA/SEO）
-  const { data: franchise, error: franchiseError } = await supabaseAdmin
-    .from("v2_franchise")
-    .select("id, code, name, branding_config, marketing_config, poster_url")
+  let { data: franchise, error: franchiseError } = await catalogFrom("campus")
+    .select(`${campusPublicSelect(true)}, branding_config, marketing_config`)
     .eq("code", normalizedCode)
     .eq("is_active", true)
     .single()
+
+  if (franchiseError && isMissingPosterUrlColumnError(franchiseError)) {
+    ;({ data: franchise, error: franchiseError } = await catalogFrom("campus")
+      .select(`${campusPublicSelect(false)}, branding_config, marketing_config`)
+      .eq("code", normalizedCode)
+      .eq("is_active", true)
+      .single())
+  }
 
   if (franchiseError || !franchise) {
     notFound()
   }
 
-  const v2Franchise = franchise as V2Franchise
+  const v2Franchise = franchise as unknown as V2Franchise
 
   // v2_campus：该 franchise 下全部 active campuses（用于主地址 + 多地点列表）
-  const { data: campusesData } = await supabaseAdmin
-    .from("v2_campus")
+  const { data: campusesData } = await catalogFrom("location")
     .select(
       "id, name, display_name, address, city, state, zip_code, country, phone, email, latitude, longitude"
     )
-    .eq("franchise_id", v2Franchise.id)
+    .eq(catalogCols.location.campusId, v2Franchise.id)
     .eq("is_active", true)
     .order("name", { ascending: true })
 
-  const { data: categoryMapsData, error: categoryMapsError } = await supabaseAdmin
-    .from("v2_franchise_category_map")
+  const { data: categoryMapsData, error: categoryMapsError } = await catalogFrom("campusStageMap")
     .select(
       `
       display_order,
-      category:v2_category!inner(
+      category:${catalogTables.stage}!inner(
         id,
         name,
         display_name,
         description,
         poster_url,
         display_order,
-        is_active
+        is_active,
+        link
       )
     `
     )
-    .eq("franchise_id", v2Franchise.id)
+    .eq(catalogCols.campusStageMap.campusId, v2Franchise.id)
     .eq("is_visible", true)
     .order("display_order", { ascending: true })
 
@@ -234,31 +245,56 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
   const firstCampus = allCampuses[0] ?? null
 
   // v2_program：该 franchise 下所有 active programs（含 featured、category，category 含 display_order/description/poster 用于按兴趣分组展示）
-  const { data: programsData, error: programsError } = await supabaseAdmin
-    .from("v2_program")
-    .select(
-      `
+  const seriesIdCol = catalogCols.session.seriesId
+  const seriesSelectWithPoster = `
       id,
       name,
       display_name,
       description,
       poster_url,
       featured,
-      category:v2_category(
+      category:${catalogTables.stage}(
         id,
         name,
         display_name,
         description,
         poster_url,
-        display_order
+        display_order,
+        link
       )
     `
-    )
-    .eq("franchise_id", v2Franchise.id)
+  const seriesSelectNoPoster = `
+      id,
+      name,
+      display_name,
+      description,
+      category:${catalogTables.stage}(
+        id,
+        name,
+        display_name,
+        description,
+        poster_url,
+        display_order,
+        link
+      )
+    `
+
+  let { data: programsData, error: programsError } = await catalogFrom("series")
+    .select(seriesSelectWithPoster)
+    .eq(catalogCols.series.campusId, v2Franchise.id)
     .eq("is_active", true)
     .order("display_order", { ascending: true })
     .order("featured", { ascending: false })
     .order("name", { ascending: true })
+
+  if (programsError && isMissingPosterUrlColumnError(programsError)) {
+    ;({ data: programsData, error: programsError } = await catalogFrom("series")
+      .select(seriesSelectNoPoster)
+      .eq(catalogCols.series.campusId, v2Franchise.id)
+      .eq("is_active", true)
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true }))
+  }
 
   if (programsError) {
     console.error("[LocationPage] Error fetching v2_program:", programsError)
@@ -270,18 +306,17 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
   if (programIds.length > 0) {
     // Filter on v2_instance.program_id — not program.franchise_id embed (PostgREST embed
     // filters on nested columns are unreliable without resolving program ids first).
-    const { data: sessionCountRows, error: sessionCountError } = await supabaseAdmin
-      .from("v2_instance")
+    const { data: sessionCountRows, error: sessionCountError } = await catalogFrom("session")
       .select(
         `
-        program_id,
+        ${seriesIdCol},
         portal_service_role,
-        offering:v2_offering!inner(status)
+        offering:${catalogTables.offering}!inner(status)
       `
       )
       .eq("is_active", true)
       .in("status", ["scheduled", "ongoing"])
-      .in("program_id", programIds)
+      .in(catalogCols.session.seriesId, programIds)
 
     if (sessionCountError) {
       console.error("[LocationPage] Error fetching session counts:", sessionCountError)
@@ -290,23 +325,28 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
         if (row.portal_service_role) continue
         const offering = Array.isArray(row.offering) ? row.offering[0] : row.offering
         if ((offering as { status?: string } | null)?.status !== "published") continue
-        const programId = row.program_id as string | null
+        const programId = row[seriesIdCol as keyof typeof row] as string | null
         if (!programId) continue
         sessionCountByProgramId.set(programId, (sessionCountByProgramId.get(programId) ?? 0) + 1)
       }
     }
   }
 
-  const programs: LocationProgram[] = (programsData || []).map((row) => {
-    const category = unwrapRelation(row.category)
+  const programs: LocationProgram[] = (programsData || []).map((row: Record<string, unknown>) => {
+    const category = unwrapRelation(row.category) as {
+      id: string
+      name: string
+      display_name: string
+    } | null
+    const id = String(row.id)
     return {
-      id: row.id,
-      name: row.name,
-      display_name: row.display_name,
-      description: row.description ?? null,
-      poster_url: row.poster_url ?? null,
+      id,
+      name: String(row.name ?? ""),
+      display_name: String(row.display_name ?? row.name ?? ""),
+      description: row.description != null ? String(row.description) : null,
+      poster_url: row.poster_url != null ? String(row.poster_url) : null,
       featured: row.featured === true,
-      session_count: sessionCountByProgramId.get(row.id) ?? 0,
+      session_count: sessionCountByProgramId.get(id) ?? 0,
       category: category
         ? {
             id: category.id,
@@ -316,6 +356,8 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
         : null,
     }
   })
+
+  type SubscribedCategoryGroup = CategoryGroup & { mapOrder: number | null }
 
   // 该 franchise 订阅的 category；仅展示至少有一个 activity 的 program
   const programsGroupedByCategory: CategoryGroup[] = (() => {
@@ -340,6 +382,7 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
           poster_url?: string | null
           display_order?: number | null
           is_active?: boolean
+          link?: string | null
         }
         if (c.is_active === false) return null
         return {
@@ -351,13 +394,17 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
             description: c.description ?? null,
             poster_url: c.poster_url ?? null,
             display_order: c.display_order ?? null,
+            link: c.link ?? null,
           },
           programs: programsByCategoryId.get(c.id) ?? [],
         }
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null && item.programs.length > 0)
+      .filter(
+        (item: SubscribedCategoryGroup | null): item is SubscribedCategoryGroup =>
+          item !== null && item.programs.length > 0
+      )
 
-    return subscribed.sort((a, b) => {
+    return subscribed.sort((a: SubscribedCategoryGroup, b: SubscribedCategoryGroup) => {
       const orderA = a.mapOrder ?? a.category.display_order ?? 999
       const orderB = b.mapOrder ?? b.category.display_order ?? 999
       if (orderA !== orderB) return orderA - orderB
@@ -365,13 +412,21 @@ export default async function GenericLocationPage({ params }: LocationPageProps)
     })
   })()
 
-  const { data: featuredInstancesData, error: featuredInstancesError } = await supabaseAdmin
-    .from("v2_instance")
-    .select(FEATURED_INSTANCE_SELECT)
+  let { data: featuredInstancesData, error: featuredInstancesError } = await catalogFrom("session")
+    .select(getFeaturedInstanceSelect())
     .eq("is_active", true)
     .eq("featured", true)
     .in("status", ["scheduled", "ongoing"])
-    .eq("program.franchise_id", v2Franchise.id)
+    .eq(`program.${catalogCols.series.campusId}`, v2Franchise.id)
+
+  if (featuredInstancesError && isMissingPosterUrlColumnError(featuredInstancesError)) {
+    ;({ data: featuredInstancesData, error: featuredInstancesError } = await catalogFrom("session")
+      .select(getFeaturedInstanceSelect({ includeSeriesPoster: false }))
+      .eq("is_active", true)
+      .eq("featured", true)
+      .in("status", ["scheduled", "ongoing"])
+      .eq(`program.${catalogCols.series.campusId}`, v2Franchise.id))
+  }
 
   if (featuredInstancesError) {
     console.error("[LocationPage] Error fetching featured instances:", featuredInstancesError)

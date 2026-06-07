@@ -1,59 +1,78 @@
 ---
-description: V2 database schema, table relationships, and data operation conventions
-globs: v2/**
+description: V2/V3 database schema, table relationships, and catalog access conventions
+globs: v2/**,v3/**,src/lib/catalog-db.ts,src/app/api/**/v2/**
 alwaysApply: false
 ---
 
-# V2 Database Schema
+# Database Schema (V2 / V3)
 
 ## Source of Truth
 
-DDL lives in `v2/` — run order per `v2/README.md` (`00_helpers.sql` first, then `01`–`08`). Schema changes require a new numbered SQL file in `v2/`.
+| Version | DDL directory | Default in app |
+|---------|---------------|----------------|
+| **V2** (production default) | `v2/` — `v2/README.md` | `CATALOG_SCHEMA` unset or `v2` |
+| **V3** (user-perspective names) | `v3/` — `v3/README.md` | `CATALOG_SCHEMA=v3` after migration |
 
-## Table Naming
+Schema changes: add numbered SQL in the target version directory. **Do not DROP v2 tables** until Phase D (see `v3/README.md`).
 
-Always use `v2_*` prefix. Never create `offerings_v2`, `franchises_v2`, or `instance_v2` style names. Do not extend `@/lib/db-v2.ts` (deprecated old table names).
+## Catalog access (required for new code)
 
-## C-end vs Admin naming
-
-**Canonical mapping:** see always-applied rule `product-hierarchy.mdc`.
-
-Summary: Web Campus = `v2_franchise`; Web Location = `v2_campus`; Web Program = `v2_category`; Web Activity = `v2_program`; Web Session = `v2_instance`. Session card title = `v2_offering.name` (offering is not a Web nav level).
-
-## Entity Hierarchy
-
-- **Config**: `v2_offering_type` — `offering_schema` / `instance_schema` drive dynamic fields
-- **Global**: `v2_category`, `v2_offering`
-- **Franchise**: `v2_franchise`, `v2_franchise_category_map`, `v2_campus`
-- **Operations**: `v2_program`, `v2_instance` (user purchase target)
-- `v2_instance.featured` (boolean, default `false`) — marks an instance for featured/recommended display on the C-end
-- `v2_instance.amilia_link` (text, nullable) — external Amilia enrollment URL; C-end instance detail uses it for “Enroll now” when set (migration `11_v2_instance_amilia_link.sql`)
-
-## Schema-Driven Fields
-
-- `v2_offering.type_config_data` ← `offering_schema`; flatten nested keys (e.g. `pricing.base_price`) to table columns on write
-- `v2_instance.instance_data_ext` ← `instance_schema`; object groups (`schedule`, `capacity_price`) derive row columns (`start_date`, `max_students`, etc.)
-- Validate against schema before insert/update; display via `@/lib/instance-schema.ts` (see `admin/instance/v2/route.ts`)
-- **C-end date labels**: format `v2_instance.start_date` / `end_date` (DATE / `YYYY-MM-DD`) with `@/lib/format-calendar-date.ts` — show the stored calendar day for all users; do not use `new Date(isoDateOnly)` or viewer timezone for display
-
-## Status & Integrity
-
-- Offering status: `draft` | `published` | `suspended` | `archived`
-- Instance status: `scheduled` | `ongoing` | `completed` | `cancelled`
-- Program: category must be subscribed by franchise (`v2_franchise_category_map`)
-- Instance: offering.category_id must match program.category_id; campus must belong to program's franchise
-
-## Query Pattern
+Use `@/lib/catalog-db.ts` — **do not hardcode** `v2_*` / `v3_*` in API routes or import scripts.
 
 ```typescript
-supabaseAdmin.from("v2_instance").select(`
-  *,
-  program:v2_program(id, name, franchise:v2_franchise(code, name)),
-  offering:v2_offering(id, name, offering_type:v2_offering_type(instance_schema))
-`)
+import { catalogTables, catalogCols, catalogSelect, isCatalogV3 } from "@/lib/catalog-db"
+
+supabaseAdmin.from(catalogTables.session).select(catalogSelect.sessionWithRelations())
 ```
 
-Use `supabaseAdmin`; copy joins from `src/app/api/admin/*/v2/` routes. Treat `PGRST116` as not-found.
-## Non-Catalog Tables
+- Server: `CATALOG_SCHEMA=v2|v3`
+- Client (Admin UI v3 behavior): `NEXT_PUBLIC_CATALOG_SCHEMA=v3`
+- Rollback: set both to `v2`
 
-Auth/users, enrollments (`instance_enrollments`), Stripe are separate — `v2_resource` tables follow existing API routes, not `v2/` DDL.
+Validate migration: `node scripts/validate-v3-migration.js`
+
+## V2 tables (current production)
+
+Always use `v2_*` prefix when `CATALOG_SCHEMA=v2`. Never create `offerings_v2`, `franchises_v2`, etc.
+
+**Web mapping:** see `product-hierarchy.mdc`.
+
+- Config: `v2_offering_type`
+- Global: `v2_category`, `v2_offering` (offering has `category_id`)
+- Franchise layer: `v2_franchise`, `v2_franchise_category_map`, `v2_campus`
+- Operations: `v2_program`, `v2_instance`
+
+**V2 integrity:** instance offering.category_id must match program.category_id.
+
+## V3 tables (after migration)
+
+| V3 table | Replaces | Web term |
+|----------|----------|----------|
+| `v3_offering_type` | `v2_offering_type` | — |
+| `v3_campus` | `v2_franchise` | Campus |
+| `v3_location` | `v2_campus` | Location |
+| `v3_stage` | `v2_category` | Program (track) |
+| `v3_series` | `v2_program` | Activity |
+| `v3_offering` | `v2_offering` | Offering (**no stage FK**) |
+| `v3_session` | `v2_instance` | Session |
+| `v3_campus_stage_map` | `v2_franchise_category_map` | Subscription |
+
+**V3 integrity:** series requires campus stage subscription; session location must belong to series campus; **no** offering-stage match.
+
+## Schema-driven fields (both versions)
+
+- Offering: `type_config_data` ← `offering_schema`
+- Session: `instance_data_ext` ← `instance_schema`; flatten schedule/capacity to row columns on write
+- Validate via `@/lib/instance-schema.ts` and admin `*/v2/` routes
+- C-end dates: `@/lib/format-calendar-date.ts` on `start_date` / `end_date`
+
+## Status enums
+
+- Offering: `draft` | `published` | `suspended` | `archived` — transitions and session side effects: [`scripts/design/offering-status-lifecycle.md`](scripts/design/offering-status-lifecycle.md), rule [`offering-status-lifecycle.mdc`](offering-status-lifecycle.mdc)
+- Session: `scheduled` | `ongoing` | `completed` | `cancelled`
+
+## Non-catalog tables
+
+Auth, `instance_enrollments`, Stripe, traffic — unchanged. Enrollment → `v3_session` is a **separate PR** after catalog v3 stable.
+
+Design doc: `Database_redesign_document_v3.md`

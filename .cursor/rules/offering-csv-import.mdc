@@ -1,0 +1,103 @@
+---
+description: v2_offering CSV export/import — schema-driven CLI pipeline, bootstrap, and operator SOP
+globs:
+  - scripts/export-offerings.js
+  - scripts/import-offerings.js
+  - scripts/bootstrap-offering-csv.js
+  - scripts/import-offerings-camp.js
+  - scripts/import-offerings-course.js
+  - scripts/lib/import-offerings-common.js
+  - scripts/design/offering-csv-import.md
+  - scripts/design/offering-status-lifecycle.md
+  - scripts/templates/offerings-*
+alwaysApply: false
+---
+
+# Offering CSV Import / Export
+
+Bulk **Admin/DB** workflow for `v2_offering` (Session **template** layer). Not C-end UI. Web term: **Session card title** comes from `v2_offering.name`; this is not a Web navigation level — see `product-hierarchy.mdc`.
+
+**Full operator spec:** [`scripts/design/offering-csv-import.md`](scripts/design/offering-csv-import.md)
+
+**Status transitions** (UPDATE rows with `Status` change): [`offering-status-lifecycle.mdc`](offering-status-lifecycle.mdc) / [`scripts/design/offering-status-lifecycle.md`](scripts/design/offering-status-lifecycle.md)
+
+## Scope
+
+- **CLI only** — no Admin UI upload for offerings CSV.
+- **Per offering type file** — one CSV per `v2_offering_type.code` (`camp`, `course`, `workshop`, …).
+- **Schema-driven columns** — from `v2_offering_type.offering_schema.fields`; re-export after schema changes.
+- **Runs locally** against Supabase via `.env.local` (`SUPABASE_SERVICE_ROLE_KEY`).
+
+## Pipeline
+
+```text
+Export (DB → CSV + manifest)
+  → Edit in Excel/Numbers (add rows: id empty; updates: keep id)
+  → Import dry-run (validate, JSON report)
+  → Import --execute (upsert v2_offering)
+  → [later] import-instances.js (Session Title = offering.name + category)
+```
+
+Bootstrap (all active types): `node scripts/bootstrap-offering-csv.js`
+
+## Scripts
+
+| Script | Role |
+|--------|------|
+| [`scripts/export-offerings.js`](scripts/export-offerings.js) | `--type <code>` export or `--write-template` |
+| [`scripts/import-offerings.js`](scripts/import-offerings.js) | `--type <code> --file …` dry-run (default) / `--execute` |
+| [`scripts/bootstrap-offering-csv.js`](scripts/bootstrap-offering-csv.js) | All active types: templates + verify + inventory |
+| [`scripts/lib/import-offerings-common.js`](scripts/lib/import-offerings-common.js) | Shared: parse, schema columns, FK, validate, upsert, reports |
+| `import-offerings-camp.js` / `import-offerings-course.js` | **Deprecated** thin wrappers → `import-offerings.js --type …` |
+
+## Data model (import writes)
+
+| CSV | DB |
+|-----|-----|
+| `Title` | `v2_offering.name` |
+| `Offering Type` | must match `--type` → `offering_type_id` |
+| `Program (tag)` | `v2_category` (Learn / Explore / Compete) → `category_id` |
+| `Image Link` | `poster_url` |
+| `Description for admin` | `description` (admin note; ≠ `content\|description`) |
+| `{group}\|{field}` | `type_config_data` nested JSON |
+| (derived) | flatten `content.*` / `pricing.*` to table columns on write |
+
+Before insert/update: merge `v2_category.config_base` into `type_config_data` (category defaults, row values win).
+
+## Upsert keys
+
+1. Row has `id` → UPDATE by id (id must exist).
+2. No `id` → match `name` + `offering_type_id` → UPDATE or INSERT.
+3. New rows: **leave `id` and `slug` empty**; slug auto-allocated on INSERT.
+4. `UNCHANGED` when diff empty; `failed > 0` → exit 1.
+
+**Guards:** no `offering_type_id` change on update; no `category_id` change if `v2_instance` references offering.
+
+## Import logging
+
+- **Console:** per-row `[rowNum] ACTION Title (Program) id=…`; final `Summary: { insert, update, unchanged, skipped, failed }`.
+- **JSON report:** `scripts/output/import-offerings-{type}-{timestamp}.json` — `mode`, `file`, `manifest`, `schema_hash`, `drift_warnings`, `summary`, `results[]` (`action`, `id`, `slug`, `error`).
+- No separate `.log` text file (unlike `import-instances.js`).
+
+## Schema drift
+
+Companion manifest: `{csvBasename}-schema.json`. If `schema_hash` ≠ DB → WARN, validate against live schema. After Admin edits `offering_schema`, re-run `export-offerings.js` before editing CSV.
+
+## Active type inventory
+
+- Design doc §10 (auto-patched by bootstrap): `scripts/design/offering-csv-import.md`
+- Runtime output: `scripts/output/offering-types-inventory.json` / `.md`
+- List CLI: `node scripts/bootstrap-offering-csv.js --list`
+
+## Conventions for code changes
+
+- Extend [`import-offerings-common.js`](scripts/lib/import-offerings-common.js); keep export/import CLIs thin.
+- Match flatten/validate behavior in [`src/app/api/admin/offering/v2/route.ts`](src/app/api/admin/offering/v2/route.ts).
+- Log prefix: `[v2_offering]` when adding server-side logs.
+- Do not hardcode camp/course column maps — use `offering_schema`.
+- Reports under `scripts/output/` (generally not committed).
+
+## Catalog import order
+
+1. **Offerings** (this pipeline) — posters via `Image Link`
+2. **Instances** — [`instance-csv-import.md`](scripts/design/instance-csv-import.md); `Session Title` = `v2_offering.name` + matching category

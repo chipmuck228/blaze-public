@@ -35,6 +35,18 @@ export interface ExportData {
     visits: number
     percentage: number
   }>
+  geography?: Array<{
+    name: string
+    visits: number
+    percentage: number
+  }>
+  keywords?: Array<{
+    query: string
+    clicks: number
+    impressions: number
+    ctr: number
+    position: number
+  }>
 }
 
 /**
@@ -100,6 +112,26 @@ export function exportToCSV(data: ExportData, filename: string = 'traffic-data')
     csvRows.push('OS,Visits,Percentage')
     data.operatingSystems.forEach((row) => {
       csvRows.push(`${row.name},${row.visits},${row.percentage}%`)
+    })
+    csvRows.push('')
+  }
+
+  if (data.geography && data.geography.length > 0) {
+    csvRows.push('Geography')
+    csvRows.push('Country,Visits,Percentage')
+    data.geography.forEach((row) => {
+      csvRows.push(`${row.name},${row.visits},${row.percentage}%`)
+    })
+    csvRows.push('')
+  }
+
+  if (data.keywords && data.keywords.length > 0) {
+    csvRows.push('Search Keywords (GSC)')
+    csvRows.push('Query,Clicks,Impressions,CTR,Position')
+    data.keywords.forEach((row) => {
+      csvRows.push(
+        `"${row.query.replace(/"/g, '""')}",${row.clicks},${row.impressions},${row.ctr}%,${row.position}`
+      )
     })
   }
 

@@ -1,0 +1,84 @@
+{
+  "offering_type_code": "camp",
+  "offering_type_id": "617e3414-c357-4df4-ab9e-fb5317126d6a",
+  "schema_updated_at": "2026-05-27T04:09:28.426525+00:00",
+  "schema_hash": "436deb133eabe61b",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "schedule|end_date",
+      "path": "schedule.end_date",
+      "type": "date",
+      "required": true,
+      "label": "End Date"
+    },
+    {
+      "header": "schedule|start_date",
+      "path": "schedule.start_date",
+      "type": "date",
+      "required": true,
+      "label": "Start Date"
+    },
+    {
+      "header": "age_range|age_max",
+      "path": "age_range.age_max",
+      "type": "number",
+      "required": true,
+      "label": "Max Age"
+    },
+    {
+      "header": "age_range|age_min",
+      "path": "age_range.age_min",
+      "type": "number",
+      "required": true,
+      "label": "Min Age"
+    },
+    {
+      "header": "additional|special_needs",
+      "path": "additional.special_needs",
+      "type": "text",
+      "required": false,
+      "label": "Special Needs"
+    },
+    {
+      "header": "camp_services|meal_provided",
+      "path": "camp_services.meal_provided",
+      "type": "boolean",
+      "required": false,
+      "label": "Meals provided"
+    },
+    {
+      "header": "camp_services|camp_shirt_provided",
+      "path": "camp_services.camp_shirt_provided",
+      "type": "boolean",
+      "required": false,
+      "label": "Camp shirt provided"
+    },
+    {
+      "header": "camp_services|after_care_available",
+      "path": "camp_services.after_care_available",
+      "type": "boolean",
+      "required": false,
+      "label": "After-care available"
+    },
+    {
+      "header": "capacity_price|max_students",
+      "path": "capacity_price.max_students",
+      "type": "number",
+      "required": false,
+      "label": "Max Campers"
+    }
+  ]
+}

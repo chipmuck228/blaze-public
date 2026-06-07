@@ -40,7 +40,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { getAdminUiLabels } from "@/lib/admin-ui-labels"
 import { ADMIN_ENROLLMENTS_ENABLED } from "@/lib/admin-features"
 import type { LucideIcon } from "lucide-react"
 
@@ -71,24 +71,24 @@ const newsletterMenuItems: MenuItem[] = [
   { title: "Failed Sends", href: "/admin/newsletter/failed-sends", icon: AlertCircle },
 ]
 
-const blazeContentMenuItems: MenuItem[] = [
+const blazeContentMenuItems = (labels: ReturnType<typeof getAdminUiLabels>): MenuItem[] => [
   {
-    title: adminUiLabels.campus.plural,
+    title: labels.campus.plural,
     href: "/admin/blaze/campuses",
     icon: MapPin,
   },
   {
-    title: adminUiLabels.program.plural,
+    title: labels.program.plural,
     href: "/admin/blaze/programs",
     icon: Layers,
   },
   {
-    title: adminUiLabels.instance.plural,
+    title: labels.instance.plural,
     href: "/admin/blaze/instance",
     icon: CalendarDays,
   },
   {
-    title: adminUiLabels.offering.plural,
+    title: labels.offering.plural,
     href: "/admin/blaze/offerings",
     icon: Package,
   },
@@ -104,19 +104,19 @@ const blazeContentMenuItems: MenuItem[] = [
   },
 ]
 
-const blazeSettingsMenuItems: MenuItem[] = [
+const blazeSettingsMenuItems = (labels: ReturnType<typeof getAdminUiLabels>): MenuItem[] => [
   {
-    title: adminUiLabels.franchise.plural,
+    title: labels.franchise.plural,
     href: "/admin/blaze/franchises",
     icon: Building2,
   },
   {
-    title: adminUiLabels.category.plural,
+    title: labels.category.plural,
     href: "/admin/blaze/categories",
     icon: FolderTree,
   },
   {
-    title: adminUiLabels.offeringType.plural,
+    title: labels.offeringType.plural,
     href: "/admin/blaze/offering-types",
     icon: Shapes,
   },
@@ -143,6 +143,9 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
   const pathname = usePathname()
   const router = useRouter()
   const { isCollapsed, setIsCollapsed } = useSidebar()
+  const labels = getAdminUiLabels()
+  const contentMenuItems = blazeContentMenuItems(labels)
+  const settingsMenuItems = blazeSettingsMenuItems(labels)
 
   const handleSignOut = async () => {
     await signOut({ redirect: false })
@@ -153,10 +156,10 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
   const isAnyNewsletterPageActive = newsletterMenuItems.some((item) =>
     isPathActive(pathname, item.href)
   )
-  const isAnyBlazeContentPageActive = blazeContentMenuItems.some((item) =>
+  const isAnyBlazeContentPageActive = contentMenuItems.some((item) =>
     isPathActive(pathname, item.href)
   )
-  const isAnyBlazeSettingsPageActive = blazeSettingsMenuItems.some((item) =>
+  const isAnyBlazeSettingsPageActive = settingsMenuItems.some((item) =>
     isPathActive(pathname, item.href)
   )
 
@@ -253,16 +256,16 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps = {}) {
           "blaze-content",
           "Blaze Content Admin",
           LayoutGrid,
-          blazeContentMenuItems,
+          contentMenuItems,
           isAnyBlazeContentPageActive
         )}
 
-        {blazeSettingsMenuItems.length > 0
+        {settingsMenuItems.length > 0
           ? renderAccordionSection(
               "blaze-settings",
               "Blaze Settings",
               Settings,
-              blazeSettingsMenuItems,
+              settingsMenuItems,
               isAnyBlazeSettingsPageActive
             )
           : null}

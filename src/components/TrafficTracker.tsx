@@ -5,10 +5,11 @@ import { usePathname } from 'next/navigation'
 import {
   getOrCreateSessionId,
   getCurrentDomain,
-  classifySource,
+  classifyTrafficAttribution,
   classifyDevice,
   classifyBrowser,
   classifyOS,
+  shouldSkipTrafficPath,
 } from '@/lib/traffic-utils'
 
 /**
@@ -33,10 +34,12 @@ export function TrafficTracker() {
         const screenWidth = window.screen.width
         const screenHeight = window.screen.height
         const pagePath = window.location.pathname
+        if (shouldSkipTrafficPath(pagePath)) {
+          return
+        }
         const pageTitle = document.title
 
-        // 分类访问来源
-        const sourceType = classifySource(referrer, currentDomain)
+        const attribution = classifyTrafficAttribution(referrer, currentDomain)
 
         // 分类设备类型
         const deviceType = classifyDevice(screenWidth, userAgent)
@@ -61,7 +64,8 @@ export function TrafficTracker() {
             screen_width: screenWidth,
             screen_height: screenHeight,
             page_title: pageTitle,
-            source_type: sourceType,
+            source_type: attribution.source_type,
+            page_url: window.location.href,
             device_type: deviceType,
             browser_name: browserName,
             os_name: osName,

@@ -45,9 +45,25 @@ import { Search, MoreVertical, Edit, Trash2, Plus, Loader2, RefreshCcw, List, Ca
 import { adminToast, getErrorMessage } from "@/lib/admin-toast"
 import type { StringKeyRecord } from "@/lib/typed-error"
 import { PosterUploadField } from "@/components/ui/poster-upload-field"
+import { RichTextEditor } from "@/components/admin/RichTextEditor"
+import { plainTextFromRichContent, hasRichContent, RichTextDisplay } from "@/components/RichTextDisplay"
 import { InstanceCreateDialog } from "@/components/admin/InstanceCreateDialogV2"
 import { iterateInstanceSchemaFieldsForDisplay, type SchemaFieldConfig } from "@/lib/instance-schema"
 import { adminUiLabels } from "@/lib/admin-ui-labels"
+import { marked } from "marked"
+
+/** 将库中已有纯文本/Markdown 转为 HTML，供 TipTap 加载；已是 HTML 则原样返回。 */
+function richTextValueForEditor(raw: unknown): string {
+  if (raw == null) return ""
+  const s = typeof raw === "string" ? raw.trim() : String(raw).trim()
+  if (!s) return ""
+  if (s.startsWith("<") && s.includes(">")) return s
+  try {
+    return marked.parse(s) as string
+  } catch {
+    return s
+  }
+}
 
 interface BlazeProgram {
   id: string
@@ -843,7 +859,7 @@ export default function BlazeProgramsManagementPage() {
                     category.programs.some((programItem) =>
                       programItem.name.toLowerCase().includes(q) ||
                       programItem.display_name.toLowerCase().includes(q) ||
-                      programItem.description?.toLowerCase().includes(q)
+                      plainTextFromRichContent(programItem.description).toLowerCase().includes(q)
                     )
                   )
                 }
@@ -905,7 +921,7 @@ export default function BlazeProgramsManagementPage() {
                                     return (
                                       programItem.name.toLowerCase().includes(q) ||
                                       programItem.display_name.toLowerCase().includes(q) ||
-                                      programItem.description?.toLowerCase().includes(q)
+                                      plainTextFromRichContent(programItem.description).toLowerCase().includes(q)
                                     )
                                   })
                                   .map((programItem) => {
@@ -944,8 +960,17 @@ export default function BlazeProgramsManagementPage() {
                                                     )}
                                                   </div>
                                                   <CardDescription className="text-xs">{programItem.name}</CardDescription>
-                                                  {programItem.description && (
-                                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{programItem.description}</p>
+                                                  {hasRichContent(programItem.description) && (
+                                                    <div className="mt-2 space-y-1">
+                                                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                                                        Description
+                                                      </p>
+                                                      <RichTextDisplay
+                                                        content={programItem.description}
+                                                        className="text-muted-foreground"
+                                                        preserveFormatting
+                                                      />
+                                                    </div>
                                                   )}
                                                 </div>
                                                 <DropdownMenu>
@@ -1223,17 +1248,15 @@ export default function BlazeProgramsManagementPage() {
                       />
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="description" className="text-xs">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder={`${adminUiLabels.program.singular} description`}
-                      rows={3}
-                      className="resize-none text-sm"
-                    />
-                  </div>
+                  <RichTextEditor
+                    label="Description"
+                    hint="Rich text is stored as HTML in the database. Use the toolbar for headings, lists, links, and more."
+                    value={richTextValueForEditor(formData.description)}
+                    onChange={(v) => setFormData({ ...formData, description: v })}
+                    placeholder={`${adminUiLabels.program.singular} description`}
+                    minHeight={180}
+                    disabled={isSubmitting}
+                  />
                 </CardContent>
               </Card>
 

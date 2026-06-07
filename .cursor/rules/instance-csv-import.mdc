@@ -1,0 +1,79 @@
+---
+description: Instance CSV export/import — schema-driven per offering type
+globs:
+  - scripts/**/import-instances*
+  - scripts/**/export-instances*
+  - scripts/**/export-instance-xlsx-template*
+  - scripts/**/bootstrap-instance-csv*
+  - scripts/lib/import-instances-common.js
+  - scripts/lib/instance-xlsx-template.js
+  - scripts/lib/csv-schema-utils.js
+  - scripts/design/instance-csv-import.md
+---
+
+# Instance CSV Import / Export
+
+Bulk **Admin/DB** workflow for `v2_instance` (Web **Session** — bookable offering). See `product-hierarchy.mdc`.
+
+**Full operator spec:** [`scripts/design/instance-csv-import.md`](scripts/design/instance-csv-import.md)
+
+## Scope
+
+- **CLI only** — no Admin UI upload for instance CSV.
+- **Schema mode only:** one CSV per `v2_offering_type.code` + `{basename}-schema.json` manifest.
+- **Runs locally** via `.env.local` (`SUPABASE_SERVICE_ROLE_KEY`).
+
+Legacy unified wide-table scripts archived under `_archive/scripts/` (2026-06).
+
+## Pipeline
+
+```text
+Import offerings first (Session Title = v2_offering.name)
+  → Export instances per type (DB → CSV + manifest)
+  → Edit CSV (id empty for INSERT; keep id for UPDATE)
+  → Import dry-run → Import --execute
+```
+
+Bootstrap: `node scripts/bootstrap-instance-csv.js`
+
+## Scripts
+
+| Script | Role |
+|--------|------|
+| [`scripts/export-instances.js`](scripts/export-instances.js) | `--type <code>`; `--write-template` |
+| [`scripts/export-instance-xlsx-template.js`](scripts/export-instance-xlsx-template.js) | `--type <code>` → xlsx with dropdowns + column protection (`CATALOG_SCHEMA=v3`) |
+| [`scripts/import-instances.js`](scripts/import-instances.js) | `--type <code> --file …` (+ `--audit`) |
+| [`scripts/bootstrap-instance-csv.js`](scripts/bootstrap-instance-csv.js) | All active types: templates + verify + inventory |
+| [`scripts/lib/import-instances-common.js`](scripts/lib/import-instances-common.js) | Shared: FK resolve, schema columns, upsert, reports |
+| [`scripts/lib/instance-xlsx-template.js`](scripts/lib/instance-xlsx-template.js) | XLSX template writer: operator headers, lookups, validation |
+| [`scripts/lib/csv-schema-utils.js`](scripts/lib/csv-schema-utils.js) | Schema column expand / serialize (shared with offerings) |
+
+## Schema mode fixed columns
+
+`id`, `Location Code`, `Programs (category)`, `Activity (program)`, `Session Title`, `Location Name`, `Status`, `Is Active`, `Featured`, `Amilia Link`, `Notes` + dynamic `{group}|{field}` from `instance_schema`. Legacy header `Campus` accepted as alias.
+
+## Upsert keys
+
+1. Row has `id` → UPDATE by id.
+2. No `id` → natural key: `location|category|activity|sessionTitle|startDate|campus`.
+3. `current_students` never overwritten on UPDATE.
+4. Merge `v2_category.config_base` into `instance_data_ext` before validate.
+
+## Import requirements
+
+- `--type <code>` required (e.g. `camp`, `course`, `workshop`).
+- Companion `{csvBasename}-schema.json` beside CSV (from export).
+- `--type unified` / `--type all` removed — use separate CSV per type.
+
+## Conventions for code changes
+
+- Extend [`import-instances-common.js`](scripts/lib/import-instances-common.js); keep CLIs thin.
+- Match Admin API: [`src/app/api/admin/instance/v2/route.ts`](src/app/api/admin/instance/v2/route.ts).
+- Log prefix: `[v2_instance]` for server-side logs.
+- Schema columns via `csv-schema-utils.buildSchemaColumns(instance_schema)` — do not hardcode new types.
+- Reports under `scripts/output/` (generally not committed).
+
+## Catalog import order
+
+1. **Offerings** — [`offering-csv-import.mdc`](offering-csv-import.mdc)
+2. **Instances** — this pipeline (one file per offering type)

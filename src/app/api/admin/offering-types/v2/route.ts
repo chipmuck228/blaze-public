@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 // 获取所有 offering types (使用 v2 表)
 export async function GET(request: Request) {
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const includeInactive = searchParams.get("includeInactive") === "true"
 
     let query = supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .select("*")
       .order("display_order", { ascending: true })
       .order("name", { ascending: true })
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
 
     // 检查 code 是否已存在
     const { data: existing } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .select("id")
       .eq("code", code)
       .single()
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
 
     // 创建 offering type
     const { data: offeringType, error: createError } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .insert({
         code,
         name,

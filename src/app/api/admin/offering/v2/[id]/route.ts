@@ -3,6 +3,14 @@ import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import type { SchemaFieldConfig } from "@/lib/instance-schema"
+import {
+  adminOfferingExistingSelect,
+  adminOfferingTypeSchemaSelect,
+  catalogFrom,
+  catalogSelect,
+  catalogTables,
+  isCatalogV3,
+} from "@/lib/catalog-db"
 
 /** Flatten nested type_config_data for v2_offering table columns. */
 function flattenTypeConfigDataForTable(config: Record<string, unknown> | null | undefined): {
@@ -38,22 +46,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("v2_offering")
-      .select(`
-        *,
-        offering_type:v2_offering_type(
-          id,
-          code,
-          name,
-          description,
-          icon,
-          color,
-          is_active,
-          offering_schema,
-          instance_schema
-        )
-      `)
+    const { data, error } = await catalogFrom("offering")
+      .select(catalogSelect.offeringWithRelations())
       .eq("id", id)
       .single()
 
@@ -108,9 +102,8 @@ export async function PUT(
     } = body
 
     // 获取现有的 offering
-    const { data: existing, error: fetchError } = await supabaseAdmin
-      .from("v2_offering")
-      .select("id, slug, offering_type_id, category_id")
+    const { data: existing, error: fetchError } = await catalogFrom("offering")
+      .select(adminOfferingExistingSelect())
       .eq("id", id)
       .single()
 
@@ -121,20 +114,47 @@ export async function PUT(
       )
     }
 
+    const existingStatus = existing.status as string
+    const existingName = existing.name as string
+
+    if (
+      existingStatus !== "draft" &&
+      name !== undefined &&
+      name !== existingName
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Cannot rename offering after it has left draft status. Only draft offerings allow name changes.",
+        },
+        { status: 400 }
+      )
+    }
+
+    if (existingStatus === "published" && status === "draft") {
+      return NextResponse.json(
+        { error: "Published offerings cannot be reverted to draft." },
+        { status: 400 }
+      )
+    }
+
     // 确定要使用的 offering_type_id 和 category_id（如果改变）
     const targetOfferingTypeId = offering_type_id || existing.offering_type_id
-    const targetCategoryId = category_id || existing.category_id
+    const targetCategoryId = isCatalogV3()
+      ? null
+      : category_id || (existing as { category_id?: string }).category_id
 
-    // 获取 offering type 的 schema 与 portal_service_role（用于验证及 instance 同步回退）
-    const { data: offeringType, error: offeringTypeError } = await supabaseAdmin
-      .from("v2_offering_type")
-      .select("id, is_active, offering_schema, portal_service_role")
+    // 获取 offering type 的 schema（v2 另含 portal_service_role，用于 instance 同步回退）
+    const { data: offeringType, error: offeringTypeError } = await catalogFrom("offeringType")
+      .select(adminOfferingTypeSchemaSelect())
       .eq("id", targetOfferingTypeId)
       .single()
 
     if (offeringTypeError || !offeringType) {
       return NextResponse.json(
-        { error: "Invalid offering_type_id. Offering type must exist in v2_offering_type table." },
+        {
+          error: `Invalid offering_type_id. Offering type must exist in ${catalogTables.offeringType} table.`,
+        },
         { status: 400 }
       )
     }
@@ -149,10 +169,13 @@ export async function PUT(
       }
     }
 
-    // 如果 category_id 改变，验证新的 category 存在且激活
-    if (category_id && category_id !== existing.category_id) {
-      const { data: category, error: categoryError } = await supabaseAdmin
-        .from("v2_category")
+    // 如果 category_id 改变，验证新的 category 存在且激活（v3 offering 无 category FK）
+    if (
+      !isCatalogV3() &&
+      category_id &&
+      category_id !== (existing as { category_id?: string }).category_id
+    ) {
+      const { data: category, error: categoryError } = await catalogFrom("stage")
         .select("id, config_base, is_active")
         .eq("id", category_id)
         .single()
@@ -175,8 +198,7 @@ export async function PUT(
     // 获取 category 的 config_base（如果 category_id 改变或需要合并配置）
     let categoryConfigBase = {}
     if (targetCategoryId) {
-      const { data: category } = await supabaseAdmin
-        .from("v2_category")
+      const { data: category } = await catalogFrom("stage")
         .select("config_base")
         .eq("id", targetCategoryId)
         .single()
@@ -231,8 +253,7 @@ export async function PUT(
         )
       }
 
-      const { data: slugExists } = await supabaseAdmin
-        .from("v2_offering")
+      const { data: slugExists } = await catalogFrom("offering")
         .select("id")
         .eq("slug", normalizedSlug)
         .neq("id", id)
@@ -273,18 +294,17 @@ export async function PUT(
     if (currency !== undefined) updateData.currency = currency
     else if (flattened?.currency !== undefined) updateData.currency = flattened.currency ?? 'USD'
     if (poster_url !== undefined) updateData.poster_url = poster_url || null
-    if (category_id !== undefined) updateData.category_id = category_id
+    if (!isCatalogV3() && category_id !== undefined) updateData.category_id = category_id
     if (offering_type_id !== undefined) updateData.offering_type_id = offering_type_id
     if (configData !== undefined) updateData.type_config_data = configData
     if (status !== undefined) updateData.status = status
 
-    const { data, error } = await supabaseAdmin
-      .from("v2_offering")
+    const { data, error } = await catalogFrom("offering")
       .update(updateData)
       .eq("id", id)
       .select(`
         *,
-        offering_type:v2_offering_type(
+        offering_type:${catalogTables.offeringType}(
           id,
           code,
           name,
@@ -326,7 +346,9 @@ export async function PUT(
           ? portalConfig.is_course_type
           : undefined
       const rawRole = configData.portal_service_role
-      const typeRole = offeringType?.portal_service_role
+      const typeRole = isCatalogV3()
+        ? undefined
+        : (offeringType as { portal_service_role?: string | null })?.portal_service_role
       // 优先用 type_config_data.portal_service_role；缺省时用 type 级 portal_service_role，确保 care/lunch 类型即使 schema 未包含该字段也能同步到 instance
       const portalServiceRole =
         rawRole === "meal_service" || rawRole === "care_service"
@@ -340,8 +362,7 @@ export async function PUT(
       instanceUpdate.portal_service_role = portalServiceRole
 
       if (Object.keys(instanceUpdate).length > 0) {
-        const { error: instanceErr } = await supabaseAdmin
-          .from("v2_instance")
+        const { error: instanceErr } = await catalogFrom("session")
           .update(instanceUpdate)
           .eq("offering_id", id)
         if (instanceErr) {
@@ -374,8 +395,7 @@ export async function DELETE(
     }
 
     // 获取 offering 信息
-    const { data: offering, error: fetchError } = await supabaseAdmin
-      .from("v2_offering")
+    const { data: offering, error: fetchError } = await catalogFrom("offering")
       .select("id, status")
       .eq("id", id)
       .single()
@@ -388,8 +408,7 @@ export async function DELETE(
     }
 
     // 检查是否有 instances 使用此 offering（表名为 v2_instance）
-    const { data: instancesData, error: instancesError } = await supabaseAdmin
-      .from("v2_instance")
+    const { data: instancesData, error: instancesError } = await catalogFrom("session")
       .select("id")
       .eq("offering_id", id)
       .limit(1)
@@ -410,8 +429,7 @@ export async function DELETE(
     }
 
     // 删除 offering
-    const { error } = await supabaseAdmin
-      .from("v2_offering")
+    const { error } = await catalogFrom("offering")
       .delete()
       .eq("id", id)
 

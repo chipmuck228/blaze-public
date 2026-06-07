@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import { isStudentAccount, getStudentPayer } from './permissions'
 import { resolveTeamMemberImageUrl } from './team-avatar'
 import { unwrapRelation } from './supabase-relation'
+import { catalogTables } from '@/lib/catalog-db'
 
 type TeamUserJoin = {
   id: string
@@ -734,13 +735,13 @@ export async function getAdminStatsCourses(): Promise<AdminStats["courses"]> {
     { count: ongoingInstances },
     { count: completedInstances },
   ] = await Promise.all([
-    supabaseAdmin.from("v2_program").select("id", { count: "exact", head: true }),
-    supabaseAdmin.from("v2_program").select("id", { count: "exact", head: true }).eq("is_active", true),
-    supabaseAdmin.from("v2_program").select("id", { count: "exact", head: true }).eq("is_active", false),
-    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true),
-    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "scheduled"),
-    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "ongoing"),
-    supabaseAdmin.from("v2_instance").select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "completed"),
+    supabaseAdmin.from(catalogTables.series).select("id", { count: "exact", head: true }),
+    supabaseAdmin.from(catalogTables.series).select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabaseAdmin.from(catalogTables.series).select("id", { count: "exact", head: true }).eq("is_active", false),
+    supabaseAdmin.from(catalogTables.session).select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabaseAdmin.from(catalogTables.session).select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "scheduled"),
+    supabaseAdmin.from(catalogTables.session).select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "ongoing"),
+    supabaseAdmin.from(catalogTables.session).select("id", { count: "exact", head: true }).eq("is_active", true).eq("status", "completed"),
   ])
   const activeInstances = (scheduledInstances || 0) + (ongoingInstances || 0)
   return {
@@ -812,11 +813,11 @@ export async function getAdminStatsRevenue(): Promise<AdminStats["revenue"]> {
 export async function getAdminStatsRecentActivity(): Promise<AdminStats["recentActivity"]> {
   const [{ data: recentUsers }, { data: recentCourses }, { data: recentEnrollmentsData }] = await Promise.all([
     supabaseAdmin.from("users").select("id, name, email, created_at").order("created_at", { ascending: false }).limit(5),
-    supabaseAdmin.from("v2_program").select("id, name, display_name, is_active, created_at").order("created_at", { ascending: false }).limit(5),
+    supabaseAdmin.from(catalogTables.series).select("id, name, display_name, is_active, created_at").order("created_at", { ascending: false }).limit(5),
     supabaseAdmin
       .from("instance_enrollments")
       .select(
-        `id, status, created_at, user:users!inner(name), instance:v2_instance(program:v2_program(name, display_name))`
+        `id, status, created_at, user:users!inner(name), instance:${catalogTables.session}(program:${catalogTables.series}(name, display_name))`
       )
       .order("created_at", { ascending: false })
       .limit(10),

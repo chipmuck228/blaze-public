@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables, catalogCols } from "@/lib/catalog-db"
 
 // 获取单个 category
 export async function GET(
@@ -16,7 +17,7 @@ export async function GET(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .select("*")
       .eq("id", id)
       .single()
@@ -59,6 +60,7 @@ export async function PUT(
       display_name,
       description,
       poster_url,
+      link,
       config_base,
       display_order,
       is_active,
@@ -77,12 +79,13 @@ export async function PUT(
     if (display_name !== undefined) updateData.display_name = display_name
     if (description !== undefined) updateData.description = description || null
     if (poster_url !== undefined) updateData.poster_url = poster_url || null
+    if (link !== undefined) updateData.link = link?.trim() || null
     if (config_base !== undefined) updateData.config_base = config_base || {}
     if (display_order !== undefined) updateData.display_order = display_order
     if (is_active !== undefined) updateData.is_active = is_active
 
     const { data, error } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .update(updateData)
       .eq("id", id)
       .select()
@@ -132,9 +135,9 @@ export async function DELETE(
 
     // 检查是否有 franchise 订阅
     const { data: subscriptions, error: subscriptionError } = await supabaseAdmin
-      .from("v2_franchise_category_map")
+      .from(catalogTables.campusStageMap)
       .select("id")
-      .eq("category_id", id)
+      .eq(catalogCols.campusStageMap.stageId, id)
       .limit(1)
 
     if (subscriptionError) {
@@ -154,9 +157,9 @@ export async function DELETE(
 
     // 检查是否有 program 使用（通过 v2_program）
     const { data: programs, error: programError } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .select("id")
-      .eq("category_id", id)
+      .eq(catalogCols.series.stageId, id)
       .limit(1)
 
     if (programError) {
@@ -176,7 +179,7 @@ export async function DELETE(
 
     // 删除 category
     const { error } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .delete()
       .eq("id", id)
 

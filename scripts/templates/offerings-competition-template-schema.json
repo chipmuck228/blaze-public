@@ -1,0 +1,123 @@
+{
+  "offering_type_code": "competition",
+  "offering_type_id": "61e53a6d-091f-462a-843b-0d502b2f22dc",
+  "schema_updated_at": "2026-05-28T16:27:02.888616+00:00",
+  "schema_hash": "638b2a4b3f673ff7",
+  "fixed_columns": [
+    "id",
+    "slug",
+    "Title",
+    "Offering Type",
+    "Program (tag)",
+    "Status",
+    "Description for admin",
+    "Image Link"
+  ],
+  "columns": [
+    {
+      "header": "content|rules_url",
+      "path": "content.rules_url",
+      "type": "text",
+      "required": false,
+      "label": "Rules Document URL"
+    },
+    {
+      "header": "content|description",
+      "path": "content.description",
+      "type": "text",
+      "required": true,
+      "label": "Competition Description"
+    },
+    {
+      "header": "content|prerequisites",
+      "path": "content.prerequisites",
+      "type": "text",
+      "required": false,
+      "label": "Eligibility / Prerequisites"
+    },
+    {
+      "header": "content|target_audience",
+      "path": "content.target_audience",
+      "type": "text",
+      "required": false,
+      "label": "Target Participants"
+    },
+    {
+      "header": "content|learning_outcomes",
+      "path": "content.learning_outcomes",
+      "type": "text",
+      "required": false,
+      "label": "What Participants Gain"
+    },
+    {
+      "header": "details|equipment_required",
+      "path": "details.equipment_required",
+      "type": "array",
+      "required": false,
+      "label": "Required Equipment / Kits"
+    },
+    {
+      "header": "pricing|currency",
+      "path": "pricing.currency",
+      "type": "text",
+      "required": true,
+      "label": "Currency"
+    },
+    {
+      "header": "pricing|base_price",
+      "path": "pricing.base_price",
+      "type": "number",
+      "required": true,
+      "label": "Base Price"
+    },
+    {
+      "header": "portal_config|is_course_type",
+      "path": "portal_config.is_course_type",
+      "type": "boolean",
+      "required": false,
+      "label": "Treat as course-type on customer portal"
+    },
+    {
+      "header": "portal_config|show_care_service",
+      "path": "portal_config.show_care_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Care Service on instance detail page"
+    },
+    {
+      "header": "portal_config|show_meal_service",
+      "path": "portal_config.show_meal_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Meal Service on instance detail page"
+    },
+    {
+      "header": "capacity_format|base_capacity",
+      "path": "capacity_format.base_capacity",
+      "type": "number",
+      "required": true,
+      "label": "Base Capacity"
+    },
+    {
+      "header": "capacity_format|max_team_size",
+      "path": "capacity_format.max_team_size",
+      "type": "number",
+      "required": false,
+      "label": "Maximum Team Size"
+    },
+    {
+      "header": "capacity_format|min_team_size",
+      "path": "capacity_format.min_team_size",
+      "type": "number",
+      "required": false,
+      "label": "Minimum Team Size"
+    },
+    {
+      "header": "capacity_format|competition_format",
+      "path": "capacity_format.competition_format",
+      "type": "select",
+      "required": true,
+      "label": "Competition Format"
+    }
+  ]
+}

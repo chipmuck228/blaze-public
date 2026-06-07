@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
-import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
+import { getErrorMessage } from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogCols, catalogFrom, catalogTables, publicRecommendOfferingSelect } from "@/lib/catalog-db"
 
 /**
  * GET /api/public/offerings/recommend?offeringTypeId=xxx&excludeOfferingId=yyy&categoryId=zzz&limit=4
@@ -22,23 +23,10 @@ export async function GET(request: Request) {
       )
     }
 
-    let query = supabaseAdmin
-      .from("v2_offering")
-      .select(
-        `
-        id,
-        name,
-        slug,
-        poster_url,
-        base_price,
-        category_id,
-        category:v2_category(
-          id,
-          name,
-          display_name
-        )
-      `
-      )
+    const stageCol = catalogCols.offering.stageId
+
+    let query = catalogFrom("offering")
+      .select(publicRecommendOfferingSelect())
       .eq("status", "published")
       .eq("offering_type_id", offeringTypeId)
       .limit(limit)
@@ -46,18 +34,18 @@ export async function GET(request: Request) {
     if (excludeOfferingId) {
       query = query.neq("id", excludeOfferingId)
     }
-    if (categoryId) {
-      query = query.eq("category_id", categoryId)
+    if (categoryId && stageCol) {
+      query = query.eq(stageCol, categoryId)
     }
 
     const { data: rows, error } = await query
 
     if (error) {
-      console.error("[v2_offering] Error:", error)
+      console.error(`[${catalogTables.offering}] Error:`, error)
       return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
 
-    const list = (rows || []).map((row) => {
+    const list = (rows || []).map((row: Record<string, unknown>) => {
       const cat = Array.isArray(row.category) ? row.category[0] : row.category
       const categorySlug = cat?.name ? String(cat.name).replace(/_/g, "-") : undefined
       return {
@@ -72,7 +60,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(list, { status: 200 })
   } catch (err: unknown) {
-    console.error("[v2_offering] Error:", err)
+    console.error(`[${catalogTables.offering}] Error:`, err)
     return NextResponse.json(
       { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch recommendations" },
       { status: 500 }

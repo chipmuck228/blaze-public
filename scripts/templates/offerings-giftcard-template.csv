@@ -1,0 +1,2 @@
+id,slug,Title,Offering Type,Program (tag),Status,Description for admin,Image Link,content|description,content|usage_restrictions,pricing|currency,pricing|base_price,portal_config|is_course_type,portal_config|show_care_service,portal_config|show_meal_service,gift_card_settings|valid_through,gift_card_settings|denomination_options
+,,Example Offering,giftcard,Explore,draft,,,(required Gift Card Description),,(required Currency),1,No,No,No,1,

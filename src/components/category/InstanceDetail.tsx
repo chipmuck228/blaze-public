@@ -5,7 +5,8 @@ import { useParams, usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
-import DOMPurify from "dompurify"
+import { plainTextFromHtml, RICH_TEXT_SANITIZE_OPTIONS } from "@/lib/sanitize-html"
+import { useSanitizedHtml } from "@/hooks/use-sanitized-html"
 import {
   ArrowLeft,
   Calendar,
@@ -37,14 +38,18 @@ import {
 function RichTextContent({ content, className = "" }: { content: string; className?: string }) {
   const trimmed = content.trim()
   const isHtml = trimmed.startsWith("<") && trimmed.includes(">")
+  const sanitized = useSanitizedHtml(trimmed, Boolean(trimmed) && isHtml, RICH_TEXT_SANITIZE_OPTIONS)
 
   if (!trimmed) return null
 
   if (isHtml) {
-    const sanitized = DOMPurify.sanitize(trimmed, {
-      ALLOWED_TAGS: ["p", "br", "strong", "em", "s", "u", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "span"],
-      ALLOWED_ATTR: ["href", "target", "rel", "class", "style"],
-    })
+    if (!sanitized) {
+      return (
+        <div className={`text-slate-600 leading-relaxed prose prose-slate max-w-none ${className}`}>
+          {plainTextFromHtml(trimmed)}
+        </div>
+      )
+    }
     return (
       <div
         className={`text-slate-600 leading-relaxed prose prose-slate max-w-none ${className}`}

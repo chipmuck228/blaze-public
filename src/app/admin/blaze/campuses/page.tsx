@@ -233,6 +233,7 @@ export default function BlazeCampusesManagementPage() {
         email: formData.email || undefined,
         latitude: formData.latitude || undefined,
         longitude: formData.longitude || undefined,
+        ...(editingCampusId ? {} : { name: formData.name }),
       }
 
       const url = editingCampusId
@@ -322,8 +323,16 @@ export default function BlazeCampusesManagementPage() {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder={`${adminUiLabels.campus.singular} name`}
-            required
+            required={!editingCampusId}
+            readOnly={!!editingCampusId}
+            disabled={!!editingCampusId}
+            className={editingCampusId ? "bg-muted font-mono text-sm" : undefined}
           />
+          {editingCampusId && (
+            <p className="text-xs text-muted-foreground">
+              Internal identifier — cannot be changed after creation.
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${formId}-display_name`}>Display Name *</Label>
@@ -414,7 +423,7 @@ export default function BlazeCampusesManagementPage() {
         <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit} className="flex-1">
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={isSubmitting || !formData.name || !formData.display_name || !formData.franchise_id} className="flex-1">
+        <Button type="submit" size="sm" disabled={isSubmitting || (!editingCampusId && !formData.name) || !formData.display_name || !formData.franchise_id} className="flex-1">
           {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : editingCampusId ? "Update" : "Create"}
         </Button>
       </div>

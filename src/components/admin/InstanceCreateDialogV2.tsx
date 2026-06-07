@@ -1,5 +1,6 @@
 'use client'
 
+import { isCatalogV3Client } from "@/lib/catalog-db"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { useState, useEffect, type ReactElement } from "react"
 import { Button } from "@/components/ui/button"
@@ -399,9 +400,11 @@ export function InstanceCreateDialog({
       const response = await fetch(`/api/admin/offering/v2`)
       if (response.ok) {
         const allOfferings = await response.json()
-        const filteredOfferings = (allOfferings || []).filter((offering: Offering) =>
-          offering.category_id === program.category_id
-        )
+        const filteredOfferings = isCatalogV3Client()
+          ? (allOfferings || [])
+          : (allOfferings || []).filter((offering: Offering) =>
+              offering.category_id === program.category_id
+            )
         setOfferings(filteredOfferings)
       }
     } catch (error) {

@@ -3,6 +3,13 @@ import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import type { SchemaFieldConfig } from "@/lib/instance-schema"
+import {
+  adminOfferingTypeSchemaSelect,
+  catalogFrom,
+  catalogSelect,
+  catalogTables,
+  isCatalogV3,
+} from "@/lib/catalog-db"
 
 /** Flatten nested type_config_data (e.g. pricing.base_price, content.description) for v2_offering table columns. */
 function flattenTypeConfigDataForTable(config: Record<string, unknown> | null | undefined): {
@@ -40,27 +47,8 @@ export async function GET(request: Request) {
     const status = searchParams.get("status")
     const offeringTypeId = searchParams.get("offeringTypeId")
 
-    let query = supabaseAdmin
-      .from("v2_offering")
-      .select(`
-        *,
-        offering_type:v2_offering_type(
-          id,
-          code,
-          name,
-          description,
-          icon,
-          color,
-          is_active,
-          offering_schema,
-          instance_schema
-        ),
-        category:v2_category(
-          id,
-          name,
-          display_name
-        )
-      `)
+    let query = catalogFrom("offering")
+      .select(catalogSelect.offeringWithRelations())
       .order("created_at", { ascending: false })
 
     if (status) {
@@ -85,7 +73,7 @@ export async function GET(request: Request) {
 
     // 如果不需要包含非激活的 offering types，进行过滤
     if (!includeInactive) {
-      offerings = offerings.filter((offering) => {
+      offerings = offerings.filter((offering: Record<string, unknown>) => {
         const offeringType = Array.isArray(offering.offering_type)
           ? offering.offering_type[0]
           : offering.offering_type
@@ -96,15 +84,15 @@ export async function GET(request: Request) {
     // 如果提供了搜索参数，进行过滤
     if (search) {
       const searchLower = search.toLowerCase()
-      offerings = offerings.filter((offering) => {
+      offerings = offerings.filter((offering: Record<string, unknown>) => {
         const offeringType = Array.isArray(offering.offering_type)
           ? offering.offering_type[0]
           : offering.offering_type
         return (
-          offering.name?.toLowerCase().includes(searchLower) ||
-          offering.description?.toLowerCase().includes(searchLower) ||
-          offering.slug?.toLowerCase().includes(searchLower) ||
-          offeringType?.name?.toLowerCase().includes(searchLower)
+          String(offering.name ?? "").toLowerCase().includes(searchLower) ||
+          String(offering.description ?? "").toLowerCase().includes(searchLower) ||
+          String(offering.slug ?? "").toLowerCase().includes(searchLower) ||
+          String(offeringType?.name ?? "").toLowerCase().includes(searchLower)
         )
       })
     }
@@ -159,44 +147,48 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!category_id) {
+    if (!isCatalogV3() && !category_id) {
       return NextResponse.json(
         { error: "Missing required field: category_id" },
         { status: 400 }
       )
     }
 
-    // 验证 category 存在并获取 config_base
-    const { data: category, error: categoryError } = await supabaseAdmin
-      .from("v2_category")
-      .select("id, config_base, is_active")
-      .eq("id", category_id)
-      .single()
+    let category: { id: string; config_base?: unknown; is_active?: boolean } | null = null
+    if (!isCatalogV3() && category_id) {
+      // 验证 category 存在并获取 config_base
+      const { data: categoryRow, error: categoryError } = await catalogFrom("stage")
+        .select("id, config_base, is_active")
+        .eq("id", category_id)
+        .single()
 
-    if (categoryError || !category) {
-      return NextResponse.json(
-        { error: "Invalid category_id. Category must exist in v2_category table." },
-        { status: 400 }
-      )
+      if (categoryError || !categoryRow) {
+        return NextResponse.json(
+          { error: "Invalid category_id. Category must exist in stage table." },
+          { status: 400 }
+        )
+      }
+
+      if (!categoryRow.is_active) {
+        return NextResponse.json(
+          { error: "Cannot create offering with inactive category" },
+          { status: 400 }
+        )
+      }
+      category = categoryRow
     }
 
-    if (!category.is_active) {
-      return NextResponse.json(
-        { error: "Cannot create offering with inactive category" },
-        { status: 400 }
-      )
-    }
-
-    // 验证 offering_type_id 存在于 v2_offering_type 表中，并获取 offering_schema
-    const { data: offeringType, error: offeringTypeError } = await supabaseAdmin
-      .from("v2_offering_type")
-      .select("id, is_active, offering_schema")
+    // 验证 offering_type_id 存在，并获取 offering_schema
+    const { data: offeringType, error: offeringTypeError } = await catalogFrom("offeringType")
+      .select(adminOfferingTypeSchemaSelect())
       .eq("id", offering_type_id)
       .single()
 
     if (offeringTypeError || !offeringType) {
       return NextResponse.json(
-        { error: "Invalid offering_type_id. Offering type must exist in v2_offering_type table." },
+        {
+          error: `Invalid offering_type_id. Offering type must exist in ${catalogTables.offeringType} table.`,
+        },
         { status: 400 }
       )
     }
@@ -211,9 +203,10 @@ export async function POST(request: Request) {
 
     // 处理 type_config_data（优先使用 type_config_data，兼容 type_config）
     // 合并 category 的 config_base：category 的 config_base 作为基础，用户提供的配置优先覆盖
-    const categoryConfigBase = (category.config_base && typeof category.config_base === 'object') 
-      ? category.config_base 
-      : {}
+    const categoryConfigBase =
+      category?.config_base && typeof category.config_base === "object"
+        ? (category.config_base as Record<string, unknown>)
+        : {}
     const userConfigData = type_config_data || type_config || {}
     
     // 合并配置：category 的 config_base 作为基础，用户配置覆盖
@@ -255,8 +248,7 @@ export async function POST(request: Request) {
       }
 
       // 检查 slug 是否已存在
-      const { data: existing } = await supabaseAdmin
-        .from("v2_offering")
+      const { data: existing } = await catalogFrom("offering")
         .select("id")
         .eq("slug", normalizedSlug)
         .single()
@@ -278,9 +270,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("v2_offering")
-      .insert({
+    const insertPayload: Record<string, unknown> = {
         name,
         slug: slug ? String(slug).trim().toLowerCase() : null,
         description: description ?? flattened.description ?? null,
@@ -290,14 +280,19 @@ export async function POST(request: Request) {
         base_price: base_price ?? flattened.base_price ?? null,
         currency: currency ?? flattened.currency ?? 'USD',
         poster_url: poster_url || null,
-        category_id,
         offering_type_id,
         type_config_data: configData,
         status: status || 'draft',
-      })
+      }
+    if (!isCatalogV3() && category_id) {
+      insertPayload.category_id = category_id
+    }
+
+    const { data, error } = await catalogFrom("offering")
+      .insert(insertPayload)
       .select(`
         *,
-        offering_type:v2_offering_type(
+        offering_type:${catalogTables.offeringType}(
           id,
           code,
           name,

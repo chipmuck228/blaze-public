@@ -1,5 +1,6 @@
 'use client'
 
+import { isCatalogV3Client } from "@/lib/catalog-db"
 import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -199,7 +200,6 @@ export default function BlazeOfferingsManagementPage() {
 
   const [formData, setFormData] = useState<{
     name: string
-    slug: string
     description: string
     poster_url: string
     category_id: string
@@ -207,13 +207,19 @@ export default function BlazeOfferingsManagementPage() {
     status: V2Offering['status']
   }>({
     name: "",
-    slug: "",
     description: "",
     poster_url: "",
     category_id: "",
     offering_type_id: "",
     status: "draft",
   })
+
+  /** Name editable only while offering is still draft (locked after publish) */
+  const isNameLocked =
+    !!editingOffering && editingOffering.status !== "draft"
+  /** Published offerings cannot revert to draft */
+  const canSelectDraft =
+    !editingOffering || editingOffering.status !== "published"
 
   useEffect(() => {
     fetchOfferings()
@@ -415,7 +421,6 @@ export default function BlazeOfferingsManagementPage() {
     
     setFormData({
       name: offering.name,
-      slug: offering.slug || "",
       description: offering.description || "",
       poster_url: offering.poster_url || "",
       category_id: categoryId,
@@ -465,7 +470,6 @@ export default function BlazeOfferingsManagementPage() {
     setEditingOffering(null)
     setFormData({
       name: "",
-      slug: "",
       description: "",
       poster_url: "",
       category_id: "",
@@ -481,6 +485,23 @@ export default function BlazeOfferingsManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (
+      editingOffering?.status === "draft" &&
+      formData.status === "published"
+    ) {
+      if (
+        !(await adminConfirm({
+          title: "Publish this offering?",
+          description:
+            "Once published, the offering name cannot be changed and it cannot be reverted to draft. Published offerings are visible when creating sessions.",
+          confirmLabel: "Publish",
+        }))
+      ) {
+        return
+      }
+    }
+
     setIsSubmitting(true)
     let uploadedPosterUrlToCleanup: string | null = null
 
@@ -510,11 +531,10 @@ export default function BlazeOfferingsManagementPage() {
       }
 
       const submitData = {
-        name: formData.name,
-        slug: formData.slug || undefined,
+        ...(isNameLocked ? {} : { name: formData.name }),
         description: formData.description || undefined,
         poster_url: uploadedPosterUrlToCleanup || formData.poster_url || undefined,
-        category_id: formData.category_id || undefined,
+        ...(isCatalogV3Client() ? {} : { category_id: formData.category_id || undefined }),
         offering_type_id: formData.offering_type_id,
         status: formData.status,
         type_config_data: typeConfigData,
@@ -883,11 +903,18 @@ export default function BlazeOfferingsManagementPage() {
                   <div className="space-y-4">
                     <Card>
                       <CardHeader className="py-3">
-                        <CardTitle className="text-sm font-medium">{adminUiLabels.category.singular} &amp; type</CardTitle>
-                        <CardDescription className="text-xs">{adminUiLabels.category.singular} and offering type cannot be changed after creation.</CardDescription>
+                        <CardTitle className="text-sm font-medium">
+                          {isCatalogV3Client() ? "Offering type" : `${adminUiLabels.category.singular} & type`}
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          {isCatalogV3Client()
+                            ? "Offering type cannot be changed after creation."
+                            : `${adminUiLabels.category.singular} and offering type cannot be changed after creation.`}
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3 pt-0">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className={`grid grid-cols-1 gap-3 ${isCatalogV3Client() ? "" : "sm:grid-cols-2"}`}>
+                          {!isCatalogV3Client() && (
                           <div className="space-y-1.5">
                             <Label htmlFor="category_id" className="text-xs">{adminUiLabels.category.singular} *</Label>
                             <Select value={formData.category_id || ""} onValueChange={(value) => setFormData({ ...formData, category_id: value })} required disabled={isLoadingCategories || !!editingOffering}>
@@ -901,6 +928,7 @@ export default function BlazeOfferingsManagementPage() {
                               </SelectContent>
                             </Select>
                           </div>
+                          )}
                           <div className="space-y-1.5">
                             <Label htmlFor="offering_type_id" className="text-xs">Offering Type *</Label>
                             <Select value={formData.offering_type_id} onValueChange={(value) => setFormData({ ...formData, offering_type_id: value })} required disabled={!!editingOffering}>
@@ -915,15 +943,23 @@ export default function BlazeOfferingsManagementPage() {
                             </Select>
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="name" className="text-xs">Name *</Label>
-                            <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Introduction to Robotics" required className="h-9 text-sm" />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="slug" className="text-xs">Slug</Label>
-                            <Input id="slug" value={formData.slug || ""} onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} placeholder="introduction-to-robotics" className="h-9 text-sm font-mono" />
-                          </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="name" className="text-xs">Name *</Label>
+                          <Input
+                            id="name"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            placeholder="e.g. Introduction to Robotics"
+                            required
+                            readOnly={isNameLocked}
+                            disabled={isNameLocked}
+                            className={cn("h-9 text-sm", isNameLocked && "bg-muted")}
+                          />
+                          {isNameLocked && (
+                            <p className="text-xs text-muted-foreground">
+                              Name cannot be changed after the offering is published. Only draft offerings allow renaming.
+                            </p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -977,12 +1013,19 @@ export default function BlazeOfferingsManagementPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="draft">Draft</SelectItem>
+                              {canSelectDraft && (
+                                <SelectItem value="draft">Draft</SelectItem>
+                              )}
                               <SelectItem value="published">Published</SelectItem>
                               <SelectItem value="suspended">Suspended</SelectItem>
                               <SelectItem value="archived">Archived</SelectItem>
                             </SelectContent>
                           </Select>
+                          {!canSelectDraft && (
+                            <p className="text-xs text-muted-foreground">
+                              Published offerings cannot be reverted to draft.
+                            </p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1376,7 +1419,7 @@ export default function BlazeOfferingsManagementPage() {
                 disabled={
                   isSubmitting ||
                   !formData.name ||
-                  !formData.category_id ||
+                  (!isCatalogV3Client() && !formData.category_id) ||
                   !formData.offering_type_id
                 }
                 className="w-full sm:w-auto"

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getErrorMessage } from "@/lib/typed-error"
+import { classifyTrafficAttribution } from '@/lib/traffic-utils'
+import { resolveGeoFromRequest } from '@/lib/traffic-geo'
 import { supabaseAdmin } from '@/lib/supabase'
 
 /**
@@ -17,7 +19,6 @@ export async function POST(request: NextRequest) {
       screen_width,
       screen_height,
       page_title,
-      source_type,
       device_type,
       browser_name,
       os_name,
@@ -37,15 +38,19 @@ export async function POST(request: NextRequest) {
       request.headers.get('x-real-ip') ||
       ''
 
-    // 解析 referrer domain
-    let referrerDomain = null
-    if (referrer) {
-      try {
-        const referrerUrl = new URL(referrer)
-        referrerDomain = referrerUrl.hostname
-      } catch {
-        // 忽略无效的 referrer URL
-      }
+    const siteHost =
+      request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
+      request.headers.get('host') ||
+      request.nextUrl.hostname
+
+    const attribution = classifyTrafficAttribution(referrer, siteHost)
+    const resolvedSourceType = attribution.source_type
+    const referrerDomain = attribution.referrer_domain
+    const geo = resolveGeoFromRequest(request)
+    const visitGeoFields = {
+      country_code: geo.country_code,
+      region: geo.region,
+      city: geo.city,
     }
 
     // 检查 session 是否存在
@@ -130,13 +135,14 @@ export async function POST(request: NextRequest) {
           page_path,
           referrer: referrer || null,
           referrer_domain: referrerDomain,
-          source_type: source_type || 'other',
+          source_type: resolvedSourceType,
           device_type: device_type || 'desktop',
           browser_name: browser_name || 'Others',
           os_name: os_name || 'Other',
           user_agent: user_agent,
           ip_address: ipAddress || null,
           is_bounce: true, // 初始假设为跳出，后续更新
+          ...visitGeoFields,
         })
         .select('id')
         .single()
@@ -181,13 +187,14 @@ export async function POST(request: NextRequest) {
             page_path,
             referrer: referrer || null,
             referrer_domain: referrerDomain,
-            source_type: source_type || 'other',
+            source_type: resolvedSourceType,
             device_type: device_type || 'desktop',
             browser_name: browser_name || 'Others',
             os_name: os_name || 'Other',
             user_agent: user_agent,
             ip_address: ipAddress || null,
             is_bounce: true,
+            ...visitGeoFields,
           })
           .select('id')
           .single()

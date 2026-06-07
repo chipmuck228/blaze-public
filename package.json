@@ -15,7 +15,8 @@
     "cap:open:android": "npx cap open android",
     "cap:copy": "npx cap copy",
     "cap:update": "npx cap update",
-    "seed:newsletter-templates": "tsx scripts/seed-newsletter-templates.ts"
+    "seed:newsletter-templates": "tsx scripts/seed-newsletter-templates.ts",
+    "check:v3-poster-columns": "node scripts/check-v3-poster-columns.js"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^1.0.19",
@@ -67,6 +68,8 @@
     "date-fns-tz": "^3.2.0",
     "dompurify": "^3.3.1",
     "embla-carousel-react": "^8.6.0",
+    "exceljs": "^4.4.0",
+    "googleapis": "^144.0.0",
     "ical-generator": "^10.0.0",
     "lucide-react": "^0.553.0",
     "marked": "^17.0.3",

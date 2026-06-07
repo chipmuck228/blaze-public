@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 // 获取单个 offering type (使用 v2 表)
 export async function GET(
@@ -17,7 +18,7 @@ export async function GET(
     const { id } = await params
 
     const { data: offeringType, error } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .select("*")
       .eq("id", id)
       .single()
@@ -67,7 +68,7 @@ export async function PUT(
 
     // 获取现有的 offering type
     const { data: existing, error: fetchError } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .select("code")
       .eq("id", id)
       .single()
@@ -90,7 +91,7 @@ export async function PUT(
       }
 
       const { data: codeExists } = await supabaseAdmin
-        .from("v2_offering_type")
+        .from(catalogTables.offeringType)
         .select("id")
         .eq("code", code)
         .neq("id", id)
@@ -123,7 +124,7 @@ export async function PUT(
     if (portal_service_role !== undefined) updateData.portal_service_role = validRole
 
     const { data: offeringType, error: updateError } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .update(updateData)
       .eq("id", id)
       .select()
@@ -158,7 +159,7 @@ export async function DELETE(
 
     // 获取 offering type 信息
     const { data: offeringType, error: fetchError } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .select("id, code")
       .eq("id", id)
       .single()
@@ -172,7 +173,7 @@ export async function DELETE(
 
     // 检查是否有 offerings 使用此类型
     const { data: offeringsData, error: offeringsError } = await supabaseAdmin
-      .from("v2_offering")
+      .from(catalogTables.offering)
       .select("id")
       .eq("offering_type_id", id)
       .limit(1)
@@ -190,7 +191,7 @@ export async function DELETE(
 
     // 删除 offering type
     const { error } = await supabaseAdmin
-      .from("v2_offering_type")
+      .from(catalogTables.offeringType)
       .delete()
       .eq("id", id)
 

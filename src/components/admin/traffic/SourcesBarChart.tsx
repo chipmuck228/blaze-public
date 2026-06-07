@@ -33,7 +33,22 @@ const getSourceColor = (sourceName: string, index: number): string => {
   if (name.includes('bing')) {
     return '#f59e0b' // Amber
   }
-  if (name.includes('social')) {
+  if (name.includes('duckduckgo')) {
+    return '#14b8a6'
+  }
+  if (name.includes('yahoo')) {
+    return '#a855f7'
+  }
+  if (name.includes('baidu')) {
+    return '#dc2626'
+  }
+  if (name.includes('search')) {
+    return '#10b981'
+  }
+  if (name.includes('facebook') || name.includes('instagram') || name.includes('linkedin')) {
+    return '#ef4444'
+  }
+  if (name.includes('social') || name.includes('youtube') || name.includes('tiktok')) {
     return '#ef4444' // Red
   }
   if (name.includes('other')) {

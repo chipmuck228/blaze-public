@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables, catalogCols } from "@/lib/catalog-db"
 
 // 获取单个 franchise (使用 v2 表)
 export async function GET(
@@ -17,7 +18,7 @@ export async function GET(
     const { id } = await params
 
     const { data: franchise, error } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("*")
       .eq("id", id)
       .single()
@@ -70,7 +71,7 @@ export async function PUT(
 
     // 获取现有的 franchise
     const { data: existing, error: fetchError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("code, domain")
       .eq("id", id)
       .single()
@@ -93,7 +94,7 @@ export async function PUT(
     }
 
       const { data: codeExists } = await supabaseAdmin
-        .from("v2_franchise")
+        .from(catalogTables.campus)
         .select("id")
         .eq("code", code)
         .neq("id", id)
@@ -111,7 +112,7 @@ export async function PUT(
     if (domain !== undefined && domain !== existing.domain) {
       if (domain) {
         const { data: domainExists } = await supabaseAdmin
-          .from("v2_franchise")
+          .from(catalogTables.campus)
           .select("id")
           .eq("domain", domain)
           .neq("id", id)
@@ -143,7 +144,7 @@ export async function PUT(
     if (is_active !== undefined) updateData.is_active = is_active
 
     const { data: franchise, error: updateError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .update(updateData)
       .eq("id", id)
       .select()
@@ -178,13 +179,13 @@ export async function DELETE(
 
     // 检查是否有相关的数据使用此 franchise
     // 检查 categories
-    const { data: categoriesData } = await supabaseAdmin
-      .from("v2_category")
+    const { data: categoryMapsData } = await supabaseAdmin
+      .from(catalogTables.campusStageMap)
       .select("id")
-      .eq("franchise_id", id)
+      .eq(catalogCols.campusStageMap.campusId, id)
       .limit(1)
 
-    if (categoriesData && categoriesData.length > 0) {
+    if (categoryMapsData && categoryMapsData.length > 0) {
       return NextResponse.json(
         { error: "Cannot delete franchise that has categories. Please delete or reassign categories first." },
         { status: 400 }
@@ -193,9 +194,9 @@ export async function DELETE(
 
     // 检查 campuses
     const { data: campusesData } = await supabaseAdmin
-      .from("v2_campus")
+      .from(catalogTables.location)
       .select("id")
-      .eq("franchise_id", id)
+      .eq(catalogCols.location.campusId, id)
       .limit(1)
 
     if (campusesData && campusesData.length > 0) {
@@ -207,9 +208,9 @@ export async function DELETE(
 
     // 检查 programs
     const { data: programsData } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .select("id")
-      .eq("franchise_id", id)
+      .eq(catalogCols.series.campusId, id)
       .limit(1)
 
     if (programsData && programsData.length > 0) {
@@ -221,7 +222,7 @@ export async function DELETE(
 
     // 删除 franchise
     const { error } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .delete()
       .eq("id", id)
 

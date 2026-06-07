@@ -1,0 +1,2 @@
+id,Location Code,Programs (category),Activity (program),Session Title,Location Name,Status,Is Active,Featured,Amilia Link,Notes,audience|target_grades,schedule|end_date,schedule|end_time,schedule|start_date,schedule|start_time,schedule|days_of_week,age_range|age_max,age_range|age_min,class_info|instructor_name,class_info|classroom_number,class_info|special_equipment,capacity_price|max_students,capacity_price|price_override
+,bellevue,learn,2026 Summer Camps,CSV Import Test Instance (course),"Bellevue, WA",scheduled,Yes,No,,,,2026-07-10,,2026-07-06,,,,,,,,,

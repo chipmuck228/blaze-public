@@ -1,0 +1,81 @@
+{
+  "offering_type_code": "giftcard",
+  "offering_type_id": "603b3459-eb7c-450e-a645-68e8819feb6c",
+  "schema_updated_at": "2026-05-28T16:32:57.515683+00:00",
+  "schema_hash": "0db037dbc0c8ab13",
+  "fixed_columns": [
+    "id",
+    "slug",
+    "Title",
+    "Offering Type",
+    "Program (tag)",
+    "Status",
+    "Description for admin",
+    "Image Link"
+  ],
+  "columns": [
+    {
+      "header": "content|description",
+      "path": "content.description",
+      "type": "text",
+      "required": true,
+      "label": "Gift Card Description"
+    },
+    {
+      "header": "content|usage_restrictions",
+      "path": "content.usage_restrictions",
+      "type": "text",
+      "required": false,
+      "label": "Usage Restrictions"
+    },
+    {
+      "header": "pricing|currency",
+      "path": "pricing.currency",
+      "type": "text",
+      "required": true,
+      "label": "Currency"
+    },
+    {
+      "header": "pricing|base_price",
+      "path": "pricing.base_price",
+      "type": "number",
+      "required": true,
+      "label": "Base Price"
+    },
+    {
+      "header": "portal_config|is_course_type",
+      "path": "portal_config.is_course_type",
+      "type": "boolean",
+      "required": false,
+      "label": "Treat as course-type on customer portal"
+    },
+    {
+      "header": "portal_config|show_care_service",
+      "path": "portal_config.show_care_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Care Service on instance detail page"
+    },
+    {
+      "header": "portal_config|show_meal_service",
+      "path": "portal_config.show_meal_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show Meal Service on instance detail page"
+    },
+    {
+      "header": "gift_card_settings|valid_through",
+      "path": "gift_card_settings.valid_through",
+      "type": "number",
+      "required": true,
+      "label": "Validity Period (months)"
+    },
+    {
+      "header": "gift_card_settings|denomination_options",
+      "path": "gift_card_settings.denomination_options",
+      "type": "array",
+      "required": false,
+      "label": "Denomination Options"
+    }
+  ]
+}

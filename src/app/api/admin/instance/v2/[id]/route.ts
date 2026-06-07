@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import type { SchemaFieldConfig } from "@/lib/instance-schema"
 import type { JsonRecord } from "@/types/json"
+import { catalogCols, catalogSelect, catalogTables, adminSessionUpdateFetchSelect, normalizeSessionRow } from "@/lib/catalog-db"
 
 // 获取单个 Instance V2
 export async function GET(
@@ -18,41 +19,8 @@ export async function GET(
     }
 
     const { data: instance, error } = await supabaseAdmin
-      .from("v2_instance")
-      .select(`
-        *,
-        program:v2_program(
-          id,
-          name,
-          display_name,
-          category_id,
-          franchise_id,
-          category:v2_category(id, name, display_name),
-          franchise:v2_franchise(id, code, name)
-        ),
-        offering:v2_offering(
-          id,
-          name,
-          slug,
-          description,
-          base_price,
-          currency,
-          status,
-          offering_type_id,
-          offering_type:v2_offering_type(
-            id,
-            code,
-            name,
-            instance_schema
-          )
-        ),
-        campus:v2_campus(
-          id,
-          name,
-          display_name,
-          address
-        )
-      `)
+      .from(catalogTables.session)
+      .select(catalogSelect.adminSessionDetail())
       .eq("id", id)
       .single()
 
@@ -67,7 +35,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(instance, { status: 200 })
+    return NextResponse.json(normalizeSessionRow(instance), { status: 200 })
   } catch (error: unknown) {
     console.error("Error fetching instance v2:", error)
     return NextResponse.json(
@@ -90,23 +58,17 @@ export async function PUT(
     }
 
     // 获取当前 instance 及 offering.type_config_data、offering_type.portal_service_role（用于 is_course_type / portal_service_role）
-    const { data: currentInstance, error: fetchError } = await supabaseAdmin
-      .from("v2_instance")
-      .select(`
-        *,
-        offering:v2_offering(
-          id,
-          offering_type_id,
-          type_config_data,
-          offering_type:v2_offering_type(instance_schema, portal_service_role)
-        )
-      `)
+    const { data: currentInstanceRaw, error: fetchError } = await supabaseAdmin
+      .from(catalogTables.session)
+      .select(adminSessionUpdateFetchSelect())
       .eq("id", id)
       .single()
 
-    if (fetchError || !currentInstance) {
+    if (fetchError || !currentInstanceRaw) {
       return NextResponse.json({ error: "Instance not found" }, { status: 404 })
     }
+
+    const currentInstance = currentInstanceRaw as unknown as Record<string, unknown>
 
     const body = await request.json()
     const {
@@ -132,8 +94,24 @@ export async function PUT(
       amilia_link,
     } = body
 
+    type OfferingJoin = {
+      type_config_data?: {
+        portal_config?: { is_course_type?: boolean }
+        portal_service_role?: string
+      }
+      offering_type?:
+        | { instance_schema?: unknown; portal_service_role?: string }
+        | Array<{ instance_schema?: unknown; portal_service_role?: string }>
+    }
+
+    const extBase =
+      typeof currentInstance.instance_data_ext === "object" &&
+      currentInstance.instance_data_ext !== null
+        ? (currentInstance.instance_data_ext as Record<string, unknown>)
+        : {}
+
     const nextDataExt = {
-      ...(currentInstance.instance_data_ext || {}),
+      ...extBase,
       ...(typeof instance_data_ext === "object" && instance_data_ext !== null ? instance_data_ext : {}),
     } as Record<string, unknown>
     const scheduleExt = nextDataExt.schedule as Record<string, unknown> | undefined
@@ -154,9 +132,15 @@ export async function PUT(
       )
     }
 
-    const offeringType = Array.isArray(currentInstance.offering?.offering_type)
-      ? currentInstance.offering.offering_type[0]
-      : currentInstance.offering?.offering_type
+    const offeringData = (
+      Array.isArray(currentInstance.offering)
+        ? currentInstance.offering[0]
+        : currentInstance.offering
+    ) as OfferingJoin | undefined
+
+    const offeringType = Array.isArray(offeringData?.offering_type)
+      ? offeringData.offering_type[0]
+      : offeringData?.offering_type
     if (offeringType?.instance_schema && typeof offeringType.instance_schema === "object") {
       const schema = offeringType.instance_schema as { fields?: Record<string, SchemaFieldConfig> }
       if (schema.fields) {
@@ -212,7 +196,10 @@ export async function PUT(
       }
     }
 
-    const finalCurrentStudents = current_students !== undefined ? current_students : currentInstance.current_students
+    const finalCurrentStudents =
+      current_students !== undefined
+        ? current_students
+        : Number(currentInstance.current_students ?? 0)
     if (finalMaxStudents != null && finalCurrentStudents > finalMaxStudents) {
       return NextResponse.json(
         { error: "current_students cannot exceed max_students" },
@@ -221,7 +208,7 @@ export async function PUT(
     }
 
     const updateData: StringKeyRecord = {}
-    if (campus_id !== undefined) updateData.campus_id = campus_id
+    if (campus_id !== undefined) updateData[catalogCols.session.locationId] = campus_id
     if (current_students !== undefined) updateData.current_students = current_students
     if (session_count !== undefined) updateData.session_count = session_count
     updateData.instance_data_ext = nextDataExt as JsonRecord
@@ -233,18 +220,6 @@ export async function PUT(
     updateData.max_students = finalMaxStudents
     updateData.price_override = finalPriceOverride
     // is_course_type：从 offering.type_config_data.portal_config.is_course_type 得出（设计文档 PORTAL_OFFERING_TYPE_DESIGN）
-    type OfferingJoin = {
-      type_config_data?: {
-        portal_config?: { is_course_type?: boolean }
-        portal_service_role?: string
-      }
-      offering_type?: { portal_service_role?: string } | Array<{ portal_service_role?: string }>
-    }
-    const offeringData = (
-      Array.isArray(currentInstance.offering)
-        ? currentInstance.offering[0]
-        : currentInstance.offering
-    ) as OfferingJoin | undefined
     updateData.is_course_type = !!offeringData?.type_config_data?.portal_config?.is_course_type
     // portal_service_role：从 type_config_data 平铺，缺省时用 offering_type.portal_service_role（设计文档 INSTANCE_DETAIL_MEAL_CARE_SERVICES_DESIGN 4.3）
     const rawRole = offeringData?.type_config_data?.portal_service_role
@@ -273,27 +248,10 @@ export async function PUT(
 
     // 更新 Instance
     const { data: updatedInstance, error: updateError } = await supabaseAdmin
-      .from("v2_instance")
+      .from(catalogTables.session)
       .update(updateData)
       .eq("id", id)
-      .select(`
-        *,
-        program:v2_program(
-          id,
-          name,
-          display_name,
-          category:v2_category(id, name, display_name),
-          franchise:v2_franchise(id, code, name)
-        ),
-        offering:v2_offering(
-          id,
-          name,
-          base_price,
-          currency,
-          offering_type:v2_offering_type(code, name)
-        ),
-        campus:v2_campus(id, name, display_name)
-      `)
+      .select(catalogSelect.adminSessionMutationResponse())
       .single()
 
     if (updateError) {
@@ -304,7 +262,7 @@ export async function PUT(
       )
     }
 
-    return NextResponse.json(updatedInstance, { status: 200 })
+    return NextResponse.json(normalizeSessionRow(updatedInstance), { status: 200 })
   } catch (error: unknown) {
     console.error("Error updating instance v2:", error)
     return NextResponse.json(
@@ -347,7 +305,7 @@ export async function DELETE(
 
     // 从 v2_instance 表物理删除
     const { error: deleteError } = await supabaseAdmin
-      .from("v2_instance")
+      .from(catalogTables.session)
       .delete()
       .eq("id", id)
 

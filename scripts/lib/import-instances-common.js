@@ -1,14 +1,34 @@
 /**
- * Shared logic for unified camp + course instance import into v2_instance.
- * Used by scripts/import-instances.js (and optionally legacy camp/course scripts).
+ * Shared logic for schema-driven v2_instance CSV export/import.
+ * Used by scripts/import-instances.js and scripts/export-instances.js.
  */
 
 const fs = require("fs")
 const path = require("path")
-const { execFileSync } = require("child_process")
+const {
+  computeSchemaHash,
+  buildSchemaColumns,
+  flattenToRow,
+  buildFromRow,
+  normalizeConfigForCompare,
+  stableStringify,
+  parseXlsxSpreadsheet,
+} = require("./csv-schema-utils")
+const { tables, cols, isCatalogV3, normalizeSeriesRow, instancePreflightSelects, sessionInsertFromBody } = require("./catalog-db")
 
-const DEFAULT_UNIFIED_CSV =
-  "/Users/zhen/Library/CloudStorage/OneDrive-个人/Blaze/Blaze-Instances-Unified.csv"
+const INSTANCE_FIXED_COLUMNS = [
+  "id",
+  "Location Code",
+  "Programs (category)",
+  "Activity (program)",
+  "Session Title",
+  "Location Name",
+  "Status",
+  "Is Active",
+  "Featured",
+  "Amilia Link",
+  "Notes",
+]
 
 const HEADER_ALIASES = {
   "location code": "Location Code",
@@ -23,7 +43,8 @@ const HEADER_ALIASES = {
   "program name": "Program Name",
   "offering title": "Offering Title",
   "offering type (tag)": "Offering Type (tag)",
-  campus: "Campus",
+  "location name": "Location Name",
+  campus: "Location Name",
   "start date": "Start Date",
   "end date": "End Date",
   "start time": "Start Time",
@@ -42,6 +63,40 @@ const HEADER_ALIASES = {
   featured: "Featured",
   "amilia link": "Amilia Link",
   notes: "Notes",
+  id: "id",
+  compus_code: "Location Code",
+  campus_code: "Location Code",
+  stage: "Program",
+  series_id: "Activity",
+  offering_name: "Session Title",
+  location_code: "Location Name",
+}
+
+const SERIES_DISPLAY_NAMES = {
+  launchpad: "LaunchPad",
+  robochamp: "RoboChamps",
+  roboquest: "RoboQuests JR",
+  freetrial: "Free Trial",
+  workshops: "Workshops",
+  daysummercamps: "Day & Summer Camps",
+  competitionteams: "Competition Teams",
+  competitionfundamentals: "Competition Fundamentals",
+}
+
+/** Human-readable v3_series.display_name from slug or raw label */
+function formatSeriesDisplayName(seriesName) {
+  const raw = String(seriesName || "").trim()
+  if (!raw) return raw
+  const key = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_")
+  if (SERIES_DISPLAY_NAMES[key]) return SERIES_DISPLAY_NAMES[key]
+  if (SERIES_DISPLAY_NAMES[raw.toLowerCase()]) return SERIES_DISPLAY_NAMES[raw.toLowerCase()]
+  // Title-case tokens split on _ or camelCase boundaries
+  const spaced = raw
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+  return spaced.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 const DAY_MAP = {
@@ -64,8 +119,6 @@ const DAY_MAP = {
   sat: "6",
 }
 
-const GRADE_OPTIONS = new Set(["K", ...Array.from({ length: 12 }, (_, i) => String(i + 1))])
-
 const ERROR_CODES = {
   UNKNOWN_LOCATION: "UNKNOWN_LOCATION",
   UNKNOWN_CATEGORY: "UNKNOWN_CATEGORY",
@@ -79,7 +132,9 @@ const ERROR_CODES = {
   PARSE_ERROR: "PARSE_ERROR",
   INTEGRITY: "INTEGRITY",
   UNKNOWN_OFFERING_TYPE: "UNKNOWN_OFFERING_TYPE",
-  TYPE_FILTERED: "TYPE_FILTERED",
+  SCHEMA_DRIFT: "SCHEMA_DRIFT",
+  NOT_FOUND: "NOT_FOUND",
+  TYPE_MISMATCH: "TYPE_MISMATCH",
 }
 
 function loadEnv() {
@@ -106,8 +161,8 @@ function parseArgs(argv) {
   const args = {
     dryRun: true,
     execute: false,
-    file: DEFAULT_UNIFIED_CSV,
-    typeFilter: "all",
+    file: null,
+    typeCode: null,
     publishReferencedOfferings: false,
     allowDraftOffering: false,
     allowFileDuplicates: false,
@@ -115,6 +170,7 @@ function parseArgs(argv) {
     replaceAll: false,
     insertOnly: false,
     audit: false,
+    manifest: null,
   }
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--execute") {
@@ -126,11 +182,9 @@ function parseArgs(argv) {
     } else if (argv[i] === "--file" && argv[i + 1]) {
       args.file = argv[++i]
     } else if (argv[i] === "--type" && argv[i + 1]) {
-      const t = argv[++i].toLowerCase()
-      if (!["all", "camp", "course"].includes(t)) {
-        throw new Error(`Invalid --type: ${t} (use all|camp|course)`)
-      }
-      args.typeFilter = t
+      args.typeCode = argv[++i].toLowerCase()
+    } else if (argv[i] === "--manifest" && argv[i + 1]) {
+      args.manifest = argv[++i]
     } else if (argv[i] === "--publish-referenced-offerings") {
       args.publishReferencedOfferings = true
     } else if (argv[i] === "--allow-draft-offering") {
@@ -149,6 +203,68 @@ function parseArgs(argv) {
   }
   if (args.replaceAll) args.insertOnly = true
   return args
+}
+
+function parseExportArgs(argv) {
+  const args = {
+    typeCode: null,
+    out: null,
+    status: null,
+    location: null,
+    writeTemplate: false,
+  }
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === "--type" && argv[i + 1]) {
+      args.typeCode = argv[++i].trim().toLowerCase()
+    } else if (argv[i] === "--out" && argv[i + 1]) {
+      args.out = argv[++i]
+    } else if (argv[i] === "--status" && argv[i + 1]) {
+      args.status = argv[++i].trim().toLowerCase()
+    } else if (argv[i] === "--location" && argv[i + 1]) {
+      args.location = argv[++i].trim().toLowerCase()
+    } else if (argv[i] === "--write-template") {
+      args.writeTemplate = true
+    }
+  }
+  if (!args.typeCode) {
+    throw new Error("--type is required (e.g. --type camp)")
+  }
+  if (!args.out) {
+    args.out = args.writeTemplate
+      ? templateInstanceCsvPath(args.typeCode)
+      : defaultInstanceCsvPath(args.typeCode)
+  }
+  return args
+}
+
+function defaultInstanceCsvPath(typeCode) {
+  return path.join(__dirname, "..", "output", `Blaze-Instances-${typeCode}.csv`)
+}
+
+function templateInstanceCsvPath(typeCode) {
+  return path.join(__dirname, "..", "templates", `instances-${typeCode}-template.csv`)
+}
+
+function defaultInstanceManifestPath(csvPath) {
+  const dir = path.dirname(csvPath)
+  const base = path.basename(csvPath, path.extname(csvPath))
+  return path.join(dir, `${base}-schema.json`)
+}
+
+function escapeCsv(val) {
+  const s = val == null ? "" : String(val)
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+function writeCsv(filePath, headers, rows) {
+  const lines = [headers.map(escapeCsv).join(",")]
+  for (const row of rows) {
+    lines.push(headers.map((h) => escapeCsv(row[h] ?? "")).join(","))
+  }
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf8")
 }
 
 function parseCsvLine(line) {
@@ -179,44 +295,7 @@ function parseCsv(filePath) {
 }
 
 function parseXlsx(filePath) {
-  const py = `
-import json, sys, zipfile, xml.etree.ElementTree as ET
-path = sys.argv[1]
-ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-def col_idx(ref):
-    col = "".join(ch for ch in ref if ch.isalpha())
-    n = 0
-    for ch in col:
-        n = n * 26 + (ord(ch) - 64)
-    return n - 1
-z = zipfile.ZipFile(path)
-ss = []
-root = ET.fromstring(z.read("xl/sharedStrings.xml"))
-for si in root.findall(".//m:si", ns):
-    ss.append("".join((t.text or "") for t in si.findall(".//m:t", ns)))
-sheet = ET.fromstring(z.read("xl/worksheets/sheet1.xml"))
-rows = []
-for row in sheet.findall(".//m:sheetData/m:row", ns):
-    cells = {}
-    for c in row.findall("m:c", ns):
-        ref = c.get("r", "")
-        t = c.get("t")
-        v = c.find("m:v", ns)
-        val = v.text if v is not None else ""
-        if t == "s" and val.isdigit():
-            val = ss[int(val)]
-        cells[col_idx(ref)] = val
-    if not cells:
-        continue
-    max_i = max(cells)
-    rows.append([cells.get(i, "") for i in range(max_i + 1)])
-print(json.dumps(rows))
-`
-  const out = execFileSync("python3", ["-c", py, filePath], {
-    encoding: "utf8",
-    maxBuffer: 20 * 1024 * 1024,
-  })
-  return JSON.parse(out)
+  return parseXlsxSpreadsheet(filePath)
 }
 
 function parseSpreadsheet(filePath) {
@@ -234,45 +313,26 @@ function normalizeHeader(h) {
   return HEADER_ALIASES[key] || h.trim()
 }
 
-function rowsToObjects(tableRows, { requireCategory = true } = {}) {
-  if (!tableRows.length) return []
-  const headers = tableRows[0].map(normalizeHeader)
-  const hasNewFormat = headers.includes("Activity") && headers.includes("Session Title")
-  const hasLegacyFormat =
-    headers.includes("Program Name") && headers.includes("Offering Title")
-  if (!hasNewFormat && !hasLegacyFormat) {
-    throw new Error(
-      "Missing required columns. Use: Location Code, Programs (category), Activity (program), Session Title, Start Date, End Date"
-    )
-  }
-  if (requireCategory && !headers.includes("Program")) {
-    throw new Error(
-      'Missing required column: Programs (category) — unified import requires category on every row'
-    )
-  }
-  const missingBase = ["Location Code", "Start Date", "End Date"].filter((h) => !headers.includes(h))
-  if (missingBase.length) {
-    throw new Error(`Missing required columns: ${missingBase.join(", ")}`)
-  }
-  return tableRows.slice(1).map((row, idx) => {
-    const obj = { _rowNum: idx + 2, _legacyHeaders: hasLegacyFormat && !hasNewFormat }
-    headers.forEach((h, i) => {
-      obj[h] = row[i] != null ? String(row[i]).trim() : ""
-    })
-    return obj
-  })
-}
-
 function getCategoryLabel(row) {
-  return row.Program || ""
+  return row.Program || row["Programs (category)"] || ""
 }
 
 function getActivityLabel(row) {
-  return row.Activity || row["Program Name"] || ""
+  return row.Activity || row["Activity (program)"] || row["Program Name"] || ""
 }
 
 function getSessionTitle(row) {
   return row["Session Title"] || row["Offering Title"] || ""
+}
+
+/** Web Location label → v2_campus (display_name or name). Legacy CSV header: Campus */
+function getLocationName(row) {
+  return row["Location Name"] || row.Campus || ""
+}
+
+function formatCampusLabelForCsv(campus) {
+  if (!campus) return ""
+  return campus.display_name || campus.name || ""
 }
 
 function rowHasAnyIdentity(row) {
@@ -290,7 +350,7 @@ function rowHasIdentity(row) {
 }
 
 function rowIsEmpty(row) {
-  return !rowHasAnyIdentity(row)
+  return !rowHasAnyIdentity(row) && !row.id
 }
 
 function normalizeActivityForCourse(label) {
@@ -401,280 +461,6 @@ function naturalKey(locationCode, categoryLabel, activityLabel, sessionTitle, st
   ].join("|")
 }
 
-function parseDaysOfWeek(val) {
-  const v = String(val ?? "").trim()
-  if (!v) return null
-  const parts = v.split(/[,;/|]+|\s+/).filter(Boolean)
-  const out = []
-  for (const p of parts) {
-    if (/^[0-6]$/.test(p)) {
-      out.push(p)
-      continue
-    }
-    const key = p.toLowerCase().replace(/\./g, "")
-    if (DAY_MAP[key]) out.push(DAY_MAP[key])
-    else throw new Error(`Unknown day in "Classes start on which days each week": ${p}`)
-  }
-  return out.length ? [...new Set(out)] : null
-}
-
-function expandGradeToken(token) {
-  const t = String(token).trim().toUpperCase()
-  if (t === "K") return ["K"]
-  const range = t.match(/^(\d+|K)\s*-\s*(\d+|K)$/i)
-  if (range) {
-    const start = range[1].toUpperCase() === "K" ? 0 : Number(range[1])
-    const end = range[2].toUpperCase() === "K" ? 0 : Number(range[2])
-    const lo = Math.min(start, end)
-    const hi = Math.max(start, end)
-    const grades = []
-    for (let g = lo; g <= hi; g++) grades.push(g === 0 ? "K" : String(g))
-    return grades
-  }
-  if (/^\d+$/.test(t)) return [String(Number(t))]
-  if (t === "K") return ["K"]
-  return []
-}
-
-function parseTargetGrades(val) {
-  const v = String(val ?? "").trim()
-  if (!v) return null
-  const out = []
-  for (const chunk of v.split(/[,;/|]+/)) {
-    for (const g of expandGradeToken(chunk.trim())) {
-      if (GRADE_OPTIONS.has(g)) out.push(g)
-    }
-  }
-  return out.length ? [...new Set(out)] : null
-}
-
-function inferAgeRangeFromTitle(title) {
-  const m =
-    String(title).match(/rising grades?\s+([\d\s,\-]+)/i) ||
-    String(title).match(/ages?\s+(\d+[\d\s,\-]*\d*)/i)
-  if (!m) return null
-  const nums = m[1].match(/\d+/g)?.map(Number)
-  if (!nums?.length) return null
-  const minG = Math.min(...nums)
-  const maxG = Math.max(...nums)
-  return { age_min: minG + 5, age_max: maxG + 6 }
-}
-
-function fitsAgeSchema(ageMin, ageMax) {
-  if (ageMin == null || ageMax == null) return false
-  if (ageMin < 6 || ageMin > 18) return false
-  if (ageMax < 6 || ageMax > 18) return false
-  if (ageMin > ageMax) return false
-  return true
-}
-
-function parseCourseSchedule(row) {
-  const dates = []
-  for (const field of ["Start Date", "End Date"]) {
-    const d = tryParseDate(row[field])
-    if (d) dates.push(d)
-  }
-
-  const startTimeRaw = row["Start Time"]
-  let startTime = null
-  if (looksLikeTime(startTimeRaw)) {
-    startTime = parseOptionalTime(startTimeRaw)
-  } else {
-    const d = tryParseDate(startTimeRaw)
-    if (d) dates.push(d)
-  }
-
-  let endTime = looksLikeTime(row["End Time"]) ? parseOptionalTime(row["End Time"]) : null
-
-  if (!dates.length) throw new Error("Start Date is required")
-  dates.sort()
-  const startDate = dates[0]
-  const endDate = dates.length >= 2 ? dates[dates.length - 1] : dates[0]
-  if (startDate > endDate) throw new Error("Start Date must be on or before End Date")
-
-  return { startDate, endDate, startTime, endTime }
-}
-
-function buildCampInstanceDataExt(row) {
-  const startDate = parseDate(row["Start Date"], "Start Date")
-  const endDate = parseDate(row["End Date"], "End Date")
-  if (startDate > endDate) throw new Error("Start Date must be on or before End Date")
-
-  const minAge = parseOptionalNumber(row["Min Age"])
-  const maxAge = parseOptionalNumber(row["Max Age"])
-  const maxStudents = parseOptionalNumber(row["Max Campers"])
-  const priceOverride = parseOptionalNumber(row["Price Override"])
-
-  const ext = {
-    schedule: {
-      start_date: startDate,
-      end_date: endDate,
-    },
-    capacity_price: {},
-  }
-
-  if (minAge != null || maxAge != null) {
-    ext.age_range = {}
-    if (minAge != null) ext.age_range.age_min = minAge
-    if (maxAge != null) ext.age_range.age_max = maxAge
-  }
-
-  if (maxStudents != null) ext.capacity_price.max_students = maxStudents
-  if (priceOverride != null) ext.capacity_price.price_override = priceOverride
-
-  const mealProvided = row["Meal Provided"]
-  const shirtProvided = row["Camp Shirt Provided"]
-  const afterCare = row["After Care Available"]
-  if (mealProvided || shirtProvided || afterCare) {
-    ext.camp_services = {
-      meal_provided: parseYesNo(mealProvided, false),
-      camp_shirt_provided: parseYesNo(shirtProvided, false),
-      after_care_available: parseYesNo(afterCare, false),
-    }
-  }
-
-  const notes = decodeHtmlEntities(row.Notes)
-  if (notes) {
-    ext.additional = { special_needs: notes }
-  }
-
-  return {
-    ext,
-    startDate,
-    endDate,
-    startTime: parseOptionalTime(row["Start Time"]),
-    endTime: parseOptionalTime(row["End Time"]),
-    maxStudents,
-    priceOverride,
-    notes: notes || null,
-  }
-}
-
-function buildCourseInstanceDataExt(row, sessionTitle) {
-  const { startDate, endDate, startTime, endTime } = parseCourseSchedule(row)
-
-  let ageMin = parseOptionalNumber(row["Min Age"])
-  let ageMax = parseOptionalNumber(row["Max Age"])
-  if (!fitsAgeSchema(ageMin, ageMax)) {
-    const inferred = inferAgeRangeFromTitle(sessionTitle)
-    if (inferred) {
-      ageMin = inferred.age_min
-      ageMax = inferred.age_max
-    }
-  }
-  if (!fitsAgeSchema(ageMin, ageMax)) {
-    throw new Error(
-      `Invalid Min Age / Max Age (${row["Min Age"]}, ${row["Max Age"]}); could not infer from session title`
-    )
-  }
-
-  const daysOfWeek = parseDaysOfWeek(row["Classes start on which days each week"])
-  const targetGrades = parseTargetGrades(row["Target Grade"])
-  const priceOverride = parseOptionalNumber(row["Price Override"])
-
-  const schedule = {
-    start_date: startDate,
-    end_date: endDate,
-  }
-  if (startTime) schedule.start_time = startTime
-  if (endTime) schedule.end_time = endTime
-  if (daysOfWeek) schedule.days_of_week = daysOfWeek
-
-  const ext = {
-    schedule,
-    age_range: {
-      age_min: ageMin,
-      age_max: ageMax,
-    },
-  }
-
-  if (priceOverride != null) {
-    ext.capacity_price = { price_override: priceOverride }
-  }
-
-  if (targetGrades) {
-    ext.audience = { target_grades: targetGrades }
-  }
-
-  const notes = decodeHtmlEntities(row.Notes)
-  if (notes) ext.notes = notes
-
-  return {
-    ext,
-    startDate,
-    endDate,
-    startTime,
-    endTime,
-    daysOfWeek,
-    ageMin,
-    ageMax,
-    priceOverride,
-    notes: notes || null,
-  }
-}
-
-function deriveCampRowFields(mergedExt, parsed) {
-  let finalStartDate = parsed.startDate
-  let finalEndDate = parsed.endDate
-  let finalStartTime = parsed.startTime
-  let finalEndTime = parsed.endTime
-  let finalMaxStudents = parsed.maxStudents
-  let finalPriceOverride = parsed.priceOverride
-
-  if (mergedExt.schedule && typeof mergedExt.schedule === "object") {
-    const s = mergedExt.schedule
-    if (s.start_date) finalStartDate = s.start_date
-    if (s.end_date) finalEndDate = s.end_date
-    if (s.start_time) finalStartTime = s.start_time
-    if (s.end_time) finalEndTime = s.end_time
-  }
-  if (mergedExt.capacity_price && typeof mergedExt.capacity_price === "object") {
-    const c = mergedExt.capacity_price
-    if (c.max_students != null) finalMaxStudents = c.max_students
-    if (c.price_override != null) finalPriceOverride = c.price_override
-  }
-
-  return {
-    finalStartDate,
-    finalEndDate,
-    finalStartTime,
-    finalEndTime,
-    finalMaxStudents,
-    finalPriceOverride,
-  }
-}
-
-function deriveCourseRowFields(mergedExt, parsed) {
-  let finalStartDate = parsed.startDate
-  let finalEndDate = parsed.endDate
-  let finalStartTime = parsed.startTime
-  let finalEndTime = parsed.endTime
-  let finalDaysOfWeek = parsed.daysOfWeek
-  let finalPriceOverride = parsed.priceOverride
-
-  if (mergedExt.schedule && typeof mergedExt.schedule === "object") {
-    const s = mergedExt.schedule
-    if (s.start_date) finalStartDate = s.start_date
-    if (s.end_date) finalEndDate = s.end_date
-    if (s.start_time) finalStartTime = s.start_time
-    if (s.end_time) finalEndTime = s.end_time
-    if (s.days_of_week) finalDaysOfWeek = s.days_of_week
-  }
-  if (mergedExt.capacity_price && typeof mergedExt.capacity_price === "object") {
-    const c = mergedExt.capacity_price
-    if (c.price_override != null) finalPriceOverride = c.price_override
-  }
-
-  return {
-    finalStartDate,
-    finalEndDate,
-    finalStartTime,
-    finalEndTime,
-    finalDaysOfWeek,
-    finalPriceOverride,
-  }
-}
-
 function validateInstanceSchema(instanceSchemaFields, mergedExt, opts = {}) {
   if (!instanceSchemaFields) return
   const relaxAgeBounds = opts.relaxAgeBounds === true
@@ -760,6 +546,8 @@ function getOfferingTypeCode(offering) {
 }
 
 async function preflight(supabase) {
+  const ct = tables()
+  const sel = instancePreflightSelects()
   const [
     { data: offeringTypes, error: typesErr },
     { data: franchises },
@@ -769,38 +557,13 @@ async function preflight(supabase) {
     { data: campuses },
     { data: instances },
   ] = await Promise.all([
-    supabase.from("v2_offering_type").select("id, code, is_active, instance_schema").in("code", ["camp", "course"]),
-    supabase.from("v2_franchise").select("id, code, name, is_active"),
-    supabase.from("v2_category").select("id, name, display_name, is_active, config_base"),
-    supabase
-      .from("v2_program")
-      .select(
-        `id, name, display_name, franchise_id, category_id, is_active,
-        category:v2_category(id, name, display_name, config_base),
-        franchise:v2_franchise(id, code)`
-      ),
-    supabase
-      .from("v2_offering")
-      .select(
-        `id, name, status, category_id, offering_type_id, type_config_data,
-        offering_type:v2_offering_type(id, code, instance_schema, portal_service_role)`
-      ),
-    supabase.from("v2_campus").select("id, name, display_name, franchise_id"),
-    supabase
-      .from("v2_instance")
-      .select(
-        `id, program_id, offering_id, campus_id, start_date, end_date, start_time, end_time,
-        max_students, price_override, current_students, instance_data_ext, status, notes,
-        is_active, featured, days_of_week, amilia_link,
-        program:v2_program(
-          franchise:v2_franchise(code),
-          display_name,
-          name,
-          category:v2_category(display_name, name)
-        ),
-        offering:v2_offering(name),
-        campus:v2_campus(name, display_name)`
-      ),
+    supabase.from(ct.offeringType).select(sel.offeringTypeFields),
+    supabase.from(ct.campus).select(sel.campusFields),
+    supabase.from(ct.stage).select(sel.stageFields),
+    supabase.from(ct.series).select(sel.seriesFields),
+    supabase.from(ct.offering).select(sel.offeringFields),
+    supabase.from(ct.location).select(sel.locationFields),
+    supabase.from(ct.session).select(sel.sessionFields),
   ])
 
   if (typesErr) throw new Error(`Failed to load offering types: ${typesErr.message}`)
@@ -811,7 +574,7 @@ async function preflight(supabase) {
     offeringTypesByCode.set(t.code, t)
   }
   if (!offeringTypesByCode.has("camp") || !offeringTypesByCode.has("course")) {
-    throw new Error("Camp and/or course offering types not found in v2_offering_type")
+    console.warn("[v2_instance] Camp and/or course offering types not found in preflight")
   }
 
   const categoriesByKey = new Map()
@@ -836,9 +599,11 @@ async function preflight(supabase) {
   const programsByFranchise = new Map()
   for (const p of programs || []) {
     if (p.is_active === false) continue
-    const list = programsByFranchise.get(p.franchise_id) || []
-    list.push(p)
-    programsByFranchise.set(p.franchise_id, list)
+    const norm = normalizeSeriesRow(p)
+    const campusKey = norm.franchise_id
+    const list = programsByFranchise.get(campusKey) || []
+    list.push(norm)
+    programsByFranchise.set(campusKey, list)
   }
 
   const offeringsByName = new Map()
@@ -850,20 +615,29 @@ async function preflight(supabase) {
 
   const campusesByFranchise = new Map()
   for (const c of campuses || []) {
-    const list = campusesByFranchise.get(c.franchise_id) || []
+    const parentId = c.franchise_id ?? c.campus_id
+    const list = campusesByFranchise.get(parentId) || []
     list.push(c)
-    campusesByFranchise.set(c.franchise_id, list)
+    campusesByFranchise.set(parentId, list)
   }
 
   const instanceByNaturalKey = new Map()
+  const instancesById = new Map()
   for (const inst of instances || []) {
+    instancesById.set(inst.id, inst)
     const prog = Array.isArray(inst.program) ? inst.program[0] : inst.program
     const off = Array.isArray(inst.offering) ? inst.offering[0] : inst.offering
-    const camp = inst.campus_id
-      ? Array.isArray(inst.campus)
-        ? inst.campus[0]
-        : inst.campus
-      : null
+    const camp = isCatalogV3()
+      ? inst.location_id
+        ? Array.isArray(inst.campus)
+          ? inst.campus[0]
+          : inst.campus
+        : null
+      : inst.campus_id
+        ? Array.isArray(inst.campus)
+          ? inst.campus[0]
+          : inst.campus
+        : null
     const loc = prog?.franchise?.code || ""
     const cat = Array.isArray(prog?.category) ? prog.category[0] : prog?.category
     const categoryLabel = cat?.display_name || cat?.name || ""
@@ -902,6 +676,7 @@ async function preflight(supabase) {
     offeringsByName,
     campusesByFranchise,
     instanceByNaturalKey,
+    instancesById,
     preflightCounts: {
       offering_types: offeringTypesByCode.size,
       franchises: franchiseByCode.size,
@@ -977,6 +752,12 @@ function findCampus(campuses, campusName) {
 function resolveOffering(offeringsByName, offeringTitle, categoryId) {
   const list = offeringsByName.get(normalizeKey(offeringTitle)) || []
   if (!list.length) return null
+  if (isCatalogV3()) {
+    if (list.length === 1) return list[0]
+    const err = new Error(`Multiple offerings named "${offeringTitle}"`)
+    err.errorCode = ERROR_CODES.OFFERING_AMBIGUOUS
+    throw err
+  }
   const match = list.filter((o) => o.category_id === categoryId)
   if (match.length === 1) return match[0]
   if (match.length > 1) {
@@ -1009,7 +790,7 @@ function classifyError(err) {
   if (msg.includes("Programs (category)") || msg.includes("Unknown Program")) return ERROR_CODES.UNKNOWN_CATEGORY
   if (msg.includes("Activity not found")) return ERROR_CODES.PROGRAM_NOT_FOUND
   if (msg.includes("Session Title not found")) return ERROR_CODES.OFFERING_NOT_FOUND
-  if (msg.includes("Campus not found")) return ERROR_CODES.CAMPUS_NOT_FOUND
+  if (msg.includes("Location Name not found") || msg.includes("Campus not found")) return ERROR_CODES.CAMPUS_NOT_FOUND
   if (msg.includes("category does not match")) return ERROR_CODES.INTEGRITY
   if (msg.includes("Invalid date") || msg.includes("Invalid Yes/No") || msg.includes("Invalid number")) {
     return ERROR_CODES.PARSE_ERROR
@@ -1036,7 +817,7 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
 
   const categoryLabelInput = getCategoryLabel(row)
   if (requireCategory && !categoryLabelInput) {
-    const err = new Error("Programs (category) is required for unified import")
+    const err = new Error("Programs (category) is required")
     err.errorCode = ERROR_CODES.UNKNOWN_CATEGORY
     throw err
   }
@@ -1073,6 +854,7 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
     program = findProgram(scoped, activityForLookup)
     if (
       !program &&
+      !isCatalogV3() &&
       scoped.length === 1 &&
       !/courses/i.test(activityForLookup) &&
       offeringTypeCodeEarly !== "course"
@@ -1159,9 +941,10 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
   }
 
   const campuses = ctx.campusesByFranchise.get(franchise.id) || []
-  const campus = findCampus(campuses, row.Campus)
-  if (row.Campus && !campus) {
-    const err = new Error(`Campus not found: "${row.Campus}" at ${locationCode}`)
+  const locationName = getLocationName(row)
+  const campus = findCampus(campuses, locationName)
+  if (locationName && !campus) {
+    const err = new Error(`Location Name not found: "${locationName}" at ${locationCode}`)
     err.errorCode = ERROR_CODES.CAMPUS_NOT_FOUND
     throw err
   }
@@ -1181,7 +964,7 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
     }
   }
 
-  if (offering.category_id !== program.category_id) {
+  if (!isCatalogV3() && offering.category_id !== program.category_id) {
     const err = new Error(
       `Offering category (${offering.category_id}) does not match program category (${program.category_id}) for "${sessionTitle}"`
     )
@@ -1193,25 +976,10 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
   const categoryConfigBase =
     category?.config_base && typeof category.config_base === "object" ? category.config_base : {}
 
-  let parsed
-  let derived
-  let mergedExt
-
-  if (offeringTypeCode === "camp") {
-    parsed = buildCampInstanceDataExt(row)
-    mergedExt = { ...categoryConfigBase, ...parsed.ext }
-    validateInstanceSchema(offeringType.instance_schema?.fields, mergedExt)
-    derived = deriveCampRowFields(mergedExt, parsed)
-  } else if (offeringTypeCode === "course") {
-    parsed = buildCourseInstanceDataExt(row, sessionTitle)
-    mergedExt = { ...categoryConfigBase, ...parsed.ext }
-    validateInstanceSchema(offeringType.instance_schema?.fields, mergedExt, { relaxAgeBounds: true })
-    derived = deriveCourseRowFields(mergedExt, parsed)
-  } else {
-    const err = new Error(`Unsupported offering type: ${offeringTypeCode}`)
-    err.errorCode = ERROR_CODES.UNKNOWN_OFFERING_TYPE
-    throw err
-  }
+  const schemaColumns = buildSchemaColumns(offeringType.instance_schema)
+  const mergedExt = buildInstanceExtFromSchemaRow(row, schemaColumns, categoryConfigBase, offeringType)
+  const parsed = { notes: decodeHtmlEntities(row.Notes) || mergedExt.notes || null }
+  const derived = deriveFlatColumnsFromExt(mergedExt, offeringTypeCode, parsed)
 
   const statusRaw = (row.Status || "scheduled").trim().toLowerCase()
   const validStatuses = ["scheduled", "ongoing", "completed", "cancelled"]
@@ -1222,7 +990,7 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
   const { isCourseType, portalServiceRole } = derivePortalFields(offering, offeringTypeCode)
   const amilia = decodeHtmlEntities(row["Amilia Link"])
 
-  const dbRow = {
+  const dbRow = sessionInsertFromBody({
     program_id: program.id,
     offering_id: offering.id,
     campus_id: campus?.id || null,
@@ -1241,28 +1009,43 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
     portal_service_role: portalServiceRole,
     amilia_link: amilia || null,
     current_students: 0,
-  }
+  })
 
-  if (offeringTypeCode === "camp") {
-    dbRow.max_students = derived.finalMaxStudents
-    if (derived.finalMaxStudents != null && derived.finalMaxStudents < 1) {
-      throw new Error("Max Campers must be at least 1 when set")
-    }
-  } else {
-    dbRow.max_students = null
-    dbRow.days_of_week = derived.finalDaysOfWeek
-  }
+  dbRow.max_students = derived.finalMaxStudents
+  dbRow.days_of_week = derived.finalDaysOfWeek
 
   const categoryLabel = category.display_name || category.name || categoryLabelInput
-  const { instance: existing, naturalKey: nk } = findExistingInstance(ctx, {
-    locationCode,
-    categoryLabel,
-    activityLabel,
-    sessionTitle,
-    startDate: derived.finalStartDate,
-    csvCampus: row.Campus,
-    resolvedCampus: campus,
-  })
+  let existing = null
+  let nk = null
+
+  if (row.id && ctx.instancesById) {
+    existing = ctx.instancesById.get(row.id) || null
+    if (!existing) {
+      const err = new Error(`Instance id not found: ${row.id}`)
+      err.errorCode = ERROR_CODES.NOT_FOUND
+      throw err
+    }
+    nk = naturalKey(
+      locationCode,
+      categoryLabel,
+      activityLabel,
+      sessionTitle,
+      derived.finalStartDate,
+      locationName
+    )
+  } else {
+    const found = findExistingInstance(ctx, {
+      locationCode,
+      categoryLabel,
+      activityLabel,
+      sessionTitle,
+      startDate: derived.finalStartDate,
+      csvCampus: locationName,
+      resolvedCampus: campus,
+    })
+    existing = found.instance
+    nk = found.naturalKey
+  }
 
   return {
     dbRow,
@@ -1271,6 +1054,7 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
     category,
     franchise,
     offeringTypeCode,
+    derived,
     naturalKey: nk,
     existing,
     activityResolved,
@@ -1279,7 +1063,7 @@ function resolveRow(row, ctx, { requireCategory = true } = {}) {
       category: categoryLabelInput,
       activity: rawActivity,
       sessionTitle,
-      campus: row.Campus,
+      campus: locationName,
       startDate: row["Start Date"],
     },
     resolved: {
@@ -1305,10 +1089,18 @@ function diffDbRow(before, after) {
     if (k === "current_students") continue
     const a = after?.[k]
     const b = before?.[k]
-    const aStr = JSON.stringify(a)
-    const bStr = JSON.stringify(b)
-    if (aStr !== bStr) {
-      changes[k] = { before: b, after: a }
+    if (k === "instance_data_ext") {
+      const aStr = stableStringify(normalizeConfigForCompare(b || {}))
+      const bStr = stableStringify(normalizeConfigForCompare(a || {}))
+      if (aStr !== bStr) changes[k] = { before: b, after: a }
+    } else if (k === "days_of_week") {
+      const aArr = JSON.stringify(b ?? null)
+      const bArr = JSON.stringify(a ?? null)
+      if (aArr !== bArr) changes[k] = { before: b, after: a }
+    } else {
+      const aStr = JSON.stringify(a)
+      const bStr = JSON.stringify(b)
+      if (aStr !== bStr) changes[k] = { before: b, after: a }
     }
   }
   return changes
@@ -1338,237 +1130,14 @@ function snapshotInstance(inst) {
   }
 }
 
-function scanFileDuplicates(rows, ctx, { allowFileDuplicates = false } = {}) {
-  const keyToRows = new Map()
-  const duplicateInFile = []
-
-  for (const row of rows) {
-    if (rowIsEmpty(row)) continue
-    if (!rowHasIdentity(row)) continue
-    try {
-      const resolved = resolveRow(row, ctx)
-      const nk = resolved.naturalKey
-      const list = keyToRows.get(nk) || []
-      list.push(row._rowNum)
-      keyToRows.set(nk, list)
-    } catch {
-      // resolution errors handled per-row later
-    }
-  }
-
-  for (const [nk, rowNums] of keyToRows) {
-    if (rowNums.length > 1) {
-      duplicateInFile.push({ natural_key: nk, rows: rowNums })
-    }
-  }
-
-  if (duplicateInFile.length && !allowFileDuplicates) {
-    return { blocked: true, duplicateInFile, winningRows: new Map() }
-  }
-
-  const winningRows = new Map()
-  if (allowFileDuplicates) {
-    for (const [nk, rowNums] of keyToRows) {
-      if (rowNums.length > 1) {
-        winningRows.set(nk, rowNums[rowNums.length - 1])
-      }
-    }
-  }
-
-  return { blocked: false, duplicateInFile, winningRows }
-}
-
 async function publishOffering(supabase, offeringId) {
-  const { error } = await supabase.from("v2_offering").update({ status: "published" }).eq("id", offeringId)
+  const { error } = await supabase.from(tables().offering).update({ status: "published" }).eq("id", offeringId)
   if (error) throw new Error(`Failed to publish offering ${offeringId}: ${error.message}`)
-}
-
-async function ensureSummerCoursesProgram(supabase, franchiseId, categoryId) {
-  const { data: existing } = await supabase
-    .from("v2_program")
-    .select("id")
-    .eq("franchise_id", franchiseId)
-    .eq("category_id", categoryId)
-    .eq("display_name", "2026 Summer Courses")
-    .maybeSingle()
-  if (existing) return existing.id
-
-  const { data: ref } = await supabase
-    .from("v2_program")
-    .select("start_date, end_date, poster_url")
-    .eq("franchise_id", franchiseId)
-    .eq("display_name", "2026 Summer Courses")
-    .maybeSingle()
-
-  const { data: campsRef } = await supabase
-    .from("v2_program")
-    .select("start_date, end_date, poster_url")
-    .eq("franchise_id", franchiseId)
-    .eq("category_id", categoryId)
-    .eq("display_name", "2026 Summer Camps")
-    .maybeSingle()
-
-  const { data, error } = await supabase
-    .from("v2_program")
-    .insert({
-      franchise_id: franchiseId,
-      category_id: categoryId,
-      name: "summer_2026_courses",
-      display_name: "2026 Summer Courses",
-      description: "2026 Summer Courses",
-      start_date: ref?.start_date || campsRef?.start_date || "2026-06-01",
-      end_date: ref?.end_date || campsRef?.end_date || "2026-08-31",
-      display_order: 0,
-      is_active: true,
-      featured: false,
-      poster_url: ref?.poster_url || campsRef?.poster_url || null,
-    })
-    .select("id")
-    .single()
-  if (error) throw new Error(`Failed to create 2026 Summer Courses program: ${error.message}`)
-  return data.id
-}
-
-async function ensureLearnSummerCoursesProgram(supabase, franchiseId) {
-  return ensureSummerCoursesProgram(supabase, franchiseId, "e8d59bb7-77f6-4eb0-97dd-e6422614b937")
-}
-
-async function ensureCompeteSummerCampsProgram(supabase, franchiseId) {
-  const { data: competeCat } = await supabase
-    .from("v2_category")
-    .select("id")
-    .eq("name", "compete")
-    .maybeSingle()
-  if (!competeCat) throw new Error("Compete category not found in v2_category")
-
-  const { data: existing } = await supabase
-    .from("v2_program")
-    .select("id")
-    .eq("franchise_id", franchiseId)
-    .eq("category_id", competeCat.id)
-    .eq("display_name", "2026 Summer Camps")
-    .maybeSingle()
-  if (existing) return existing.id
-
-  const { data: ref } = await supabase
-    .from("v2_program")
-    .select("start_date, end_date, poster_url")
-    .eq("category_id", competeCat.id)
-    .eq("display_name", "2026 Summer Camps")
-    .limit(1)
-    .maybeSingle()
-
-  const { data, error } = await supabase
-    .from("v2_program")
-    .insert({
-      franchise_id: franchiseId,
-      category_id: competeCat.id,
-      name: "summer_2026_camps_compete",
-      display_name: "2026 Summer Camps",
-      description: "2026 Summer Camps",
-      start_date: ref?.start_date || "2026-06-01",
-      end_date: ref?.end_date || "2026-08-31",
-      display_order: 0,
-      is_active: true,
-      featured: false,
-      poster_url: ref?.poster_url || null,
-    })
-    .select("id")
-    .single()
-  if (error) throw new Error(`Failed to create Compete 2026 Summer Camps: ${error.message}`)
-  return data.id
-}
-
-function collectSummerCoursesProgramNeeds(rows) {
-  const needs = new Map()
-  for (const row of rows) {
-    const activity = getActivityLabel(row)
-    if (!/courses/i.test(activity)) continue
-    const loc = normalizeKey(row["Location Code"])
-    const cat = normalizeKey(getCategoryLabel(row))
-    if (!loc || !cat) continue
-    needs.set(`${loc}|${cat}`, { locationCode: row["Location Code"], categoryLabel: getCategoryLabel(row) })
-  }
-  return needs
-}
-
-function collectCompeteSummerCampsProgramNeeds(rows) {
-  const needs = new Set()
-  for (const row of rows) {
-    const activity = getActivityLabel(row)
-    if (!/camps/i.test(activity)) continue
-    if (normalizeKey(getCategoryLabel(row)) !== "compete") continue
-    const loc = normalizeKey(row["Location Code"])
-    if (loc) needs.add(row["Location Code"])
-  }
-  return needs
-}
-
-async function ensureProgramsForRows(supabase, rows, ctx, { execute = false, log = console.log } = {}) {
-  let created = false
-
-  for (const locationCode of collectCompeteSummerCampsProgramNeeds(rows)) {
-    const franchise =
-      ctx.franchiseByCode.get(normalizeKey(locationCode)) ||
-      ctx.franchiseByName.get(normalizeKey(locationCode))
-    if (!franchise) continue
-
-    const { data: competeCat } = await supabase
-      .from("v2_category")
-      .select("id")
-      .eq("name", "compete")
-      .maybeSingle()
-    if (!competeCat) continue
-
-    const programs = ctx.programsByFranchise.get(franchise.id) || []
-    const exists = programs.some(
-      (p) => p.category_id === competeCat.id && normalizeKey(p.display_name) === normalizeKey("2026 Summer Camps")
-    )
-    if (exists) continue
-
-    if (!execute) {
-      log(
-        `Note: "${locationCode}" + Compete needs "2026 Summer Camps" program (auto-created on --execute)`
-      )
-      continue
-    }
-
-    const pid = await ensureCompeteSummerCampsProgram(supabase, franchise.id)
-    log(`Created Compete "2026 Summer Camps" at ${locationCode}: ${pid}`)
-    created = true
-  }
-
-  const courseNeeds = collectSummerCoursesProgramNeeds(rows)
-  for (const { locationCode, categoryLabel } of courseNeeds.values()) {
-    const franchise =
-      ctx.franchiseByCode.get(normalizeKey(locationCode)) ||
-      ctx.franchiseByName.get(normalizeKey(locationCode))
-    const category = ctx.categoriesByKey.get(normalizeKey(categoryLabel))
-    if (!franchise || !category) continue
-
-    const programs = ctx.programsByFranchise.get(franchise.id) || []
-    const exists = programs.some(
-      (p) => p.category_id === category.id && normalizeKey(p.display_name) === normalizeKey("2026 Summer Courses")
-    )
-    if (exists) continue
-
-    if (!execute) {
-      log(
-        `Note: "${locationCode}" + "${categoryLabel}" needs "2026 Summer Courses" program (auto-created on --execute)`
-      )
-      continue
-    }
-
-    const pid = await ensureSummerCoursesProgram(supabase, franchise.id, category.id)
-    log(`Created "2026 Summer Courses" at ${locationCode}/${categoryLabel}: ${pid}`)
-    created = true
-  }
-  return created
 }
 
 async function auditInstancesIntegrity(supabase) {
   const { data: instances, error } = await supabase
-    .from("v2_instance")
+    .from(tables().session)
     .select(
       `id, program_id, offering_id,
       program:v2_program(id, category_id, display_name, name,
@@ -1612,14 +1181,14 @@ async function auditInstancesIntegrity(supabase) {
 
 async function deleteAllInstances(supabase) {
   const { count, error: countErr } = await supabase
-    .from("v2_instance")
+    .from(tables().session)
     .select("id", { count: "exact", head: true })
   if (countErr) throw new Error(`Count instances failed: ${countErr.message}`)
 
   if (!count) return { deleted: 0 }
 
   const { error } = await supabase
-    .from("v2_instance")
+    .from(tables().session)
     .delete()
     .neq("id", "00000000-0000-0000-0000-000000000000")
   if (error) throw new Error(`Delete all instances failed: ${error.message}`)
@@ -1627,70 +1196,773 @@ async function deleteAllInstances(supabase) {
   return { deleted: count }
 }
 
-function writeReport(outDir, report) {
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-  const jsonPath = path.join(outDir, `import-instances-${stamp}.json`)
-  const logPath = path.join(outDir, `import-instances-${stamp}.log`)
-  fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2))
+function deriveFlatColumnsFromExt(mergedExt, offeringTypeCode, parsed = {}) {
+  const schedule = mergedExt.schedule && typeof mergedExt.schedule === "object" ? mergedExt.schedule : {}
+  const capacity =
+    mergedExt.capacity_price && typeof mergedExt.capacity_price === "object" ? mergedExt.capacity_price : {}
 
-  const logLines = [...(report._consoleLines || [])]
-  if (report.summary.failed > 0) {
-    logLines.push("", "=== Failures by error_code ===")
-    const byCode = {}
-    for (const r of report.results) {
-      if (r.action !== "FAILED" && r.action !== "DRAFT_BLOCKED") continue
-      const code = r.error_code || "FAILED"
-      if (!byCode[code]) byCode[code] = []
-      byCode[code].push(r)
-    }
-    for (const [code, items] of Object.entries(byCode)) {
-      logLines.push(`\n[${code}] (${items.length})`)
-      for (const item of items) {
-        logLines.push(`  row ${item.row}: ${item.error || item.error_code}`)
-        if (item.hint) logLines.push(`    hint: ${item.hint}`)
-      }
+  let finalStartDate = schedule.start_date || parsed.startDate
+  let finalEndDate = schedule.end_date || parsed.endDate
+  let finalStartTime = schedule.start_time || parsed.startTime || null
+  let finalEndTime = schedule.end_time || parsed.endTime || null
+  let finalDaysOfWeek = schedule.days_of_week || parsed.daysOfWeek || null
+  let finalMaxStudents =
+    capacity.max_students != null ? capacity.max_students : parsed.maxStudents != null ? parsed.maxStudents : null
+  let finalPriceOverride =
+    capacity.price_override != null
+      ? capacity.price_override
+      : parsed.priceOverride != null
+        ? parsed.priceOverride
+        : null
+
+  if (!finalStartDate || !finalEndDate) {
+    throw new Error("schedule.start_date and schedule.end_date are required in instance_data_ext")
+  }
+  if (finalStartDate > finalEndDate) {
+    throw new Error("schedule.start_date must be on or before schedule.end_date")
+  }
+
+  if (offeringTypeCode === "camp" && finalMaxStudents != null && finalMaxStudents < 1) {
+    throw new Error("capacity_price.max_students must be at least 1 when set")
+  }
+
+  const notes =
+    parsed.notes ||
+    mergedExt.notes ||
+    mergedExt.additional?.special_needs ||
+    null
+
+  return {
+    finalStartDate,
+    finalEndDate,
+    finalStartTime,
+    finalEndTime,
+    finalDaysOfWeek,
+    finalMaxStudents,
+    finalPriceOverride,
+    notes,
+  }
+}
+
+function buildInstanceExtFromSchemaRow(row, schemaColumns, categoryConfigBase, offeringType) {
+  const userExt = buildFromRow(row, schemaColumns)
+  const mergedExt = {
+    ...(categoryConfigBase && typeof categoryConfigBase === "object" ? categoryConfigBase : {}),
+    ...userExt,
+  }
+  validateInstanceSchema(offeringType.instance_schema?.fields, mergedExt, {
+    relaxAgeBounds: offeringType.code === "course",
+  })
+  return mergedExt
+}
+
+function buildInstanceManifest(offeringType, schemaColumns) {
+  return {
+    offering_type_code: offeringType.code,
+    offering_type_id: offeringType.id,
+    schema_updated_at: offeringType.updated_at || null,
+    schema_hash: computeSchemaHash(offeringType.instance_schema),
+    fixed_columns: INSTANCE_FIXED_COLUMNS,
+    columns: schemaColumns.map((c) => ({
+      header: c.header,
+      path: c.path,
+      type: c.type,
+      required: c.required,
+      label: c.label,
+    })),
+  }
+}
+
+function getInstanceSchemaHeaders(schemaColumns) {
+  return [...INSTANCE_FIXED_COLUMNS, ...schemaColumns.map((c) => c.header)]
+}
+
+const OPERATOR_FIXED_HEADERS = [
+  "id",
+  "compus_code",
+  "stage",
+  "series_id",
+  "offering_name",
+  "location_code",
+  "status",
+  "is_Active",
+  "Featured",
+  "Amilia Link",
+  "Notes",
+]
+
+function exportOperatorHeaders(schemaColumns) {
+  return [...OPERATOR_FIXED_HEADERS, ...schemaColumns.map((c) => c.header)]
+}
+
+function normalizeSchemaHeader(h) {
+  const raw = String(h || "")
+    .trim()
+    .replace(/\uFF08/g, "(")
+    .replace(/\uFF09/g, ")")
+    .replace(/\s+/g, " ")
+  const key = raw.toLowerCase()
+  return HEADER_ALIASES[key] || raw
+}
+
+function rowsToSchemaObjects(tableRows) {
+  if (!tableRows.length) return []
+  const headers = tableRows[0].map(normalizeSchemaHeader)
+  const missing = []
+  if (!headers.includes("Location Code")) missing.push("Location Code")
+  if (!headers.includes("Program") && !headers.includes("Programs (category)")) {
+    missing.push("Programs (category)")
+  }
+  if (!headers.includes("Activity") && !headers.includes("Activity (program)")) {
+    missing.push("Activity (program)")
+  }
+  if (!headers.includes("Session Title")) missing.push("Session Title")
+  if (missing.length) {
+    throw new Error(`Missing required columns: ${missing.join(", ")}`)
+  }
+  return tableRows.slice(1).map((row, idx) => {
+    const obj = { _rowNum: idx + 2 }
+    headers.forEach((h, i) => {
+      obj[h] = row[i] != null ? String(row[i]).trim() : ""
+    })
+    if (obj.Program && !obj["Programs (category)"]) obj["Programs (category)"] = obj.Program
+    if (obj["Programs (category)"] && !obj.Program) obj.Program = obj["Programs (category)"]
+    if (obj.Activity && !obj["Activity (program)"]) obj["Activity (program)"] = obj.Activity
+    if (obj["Location Name"] && !obj.Campus) obj.Campus = obj["Location Name"]
+    if (obj.Campus && !obj["Location Name"]) obj["Location Name"] = obj.Campus
+    return obj
+  })
+}
+
+function schemaRowIsEmpty(row) {
+  return !row.id && !row["Location Code"] && !row["Session Title"] && !row.offering_name
+}
+
+/** Create missing v3_series rows required by operator Excel (campus + stage + series name). */
+async function bootstrapMissingSeries(supabase, ctx, rows, { dryRun = true } = {}) {
+  if (!isCatalogV3()) return { created: 0, skipped: 0 }
+
+  const needed = new Map()
+  for (const row of rows) {
+    if (schemaRowIsEmpty(row)) continue
+    const campusCode = row["Location Code"]
+    const stageName = getCategoryLabel(row)
+    const seriesName = getActivityLabel(row)
+    if (!campusCode || !stageName || !seriesName) continue
+
+    let franchise = ctx.franchiseByCode.get(normalizeKey(campusCode))
+    if (!franchise) franchise = ctx.franchiseByName.get(normalizeKey(campusCode))
+    const category = ctx.categoriesByKey.get(normalizeKey(stageName))
+    if (!franchise || !category) continue
+
+    const key = `${franchise.id}|${category.id}|${normalizeKey(seriesName)}`
+    if (!needed.has(key)) {
+      needed.set(key, { franchise, category, seriesName, row })
     }
   }
-  fs.writeFileSync(logPath, logLines.join("\n") + "\n", "utf8")
 
-  return { jsonPath, logPath, stamp }
+  let created = 0
+  let skipped = 0
+
+  for (const { franchise, category, seriesName, row } of needed.values()) {
+    const scoped = (ctx.programsByFranchise.get(franchise.id) || []).filter((p) => {
+      const norm = normalizeSeriesRow(p)
+      return norm.category_id === category.id && normalizeKey(norm.name) === normalizeKey(seriesName)
+    })
+    if (scoped.length) {
+      skipped++
+      continue
+    }
+
+    const startDate = row["schedule|start_date"] || row["Start Date"] || "2026-06-01"
+    const endDate = row["schedule|end_date"] || row["End Date"] || "2026-08-31"
+    const seriesKey = String(seriesName).trim().toLowerCase().replace(/[^a-z0-9_]/g, "_")
+    const insertRow = {
+      campus_id: franchise.id,
+      stage_id: category.id,
+      name: seriesKey,
+      display_name: formatSeriesDisplayName(seriesName),
+      start_date: startDate,
+      end_date: endDate,
+      is_active: true,
+    }
+
+    if (dryRun) {
+      const pending = normalizeSeriesRow({
+        id: `dry-run:${franchise.id}:${category.id}:${seriesKey}`,
+        ...insertRow,
+        category,
+        franchise: { id: franchise.id, code: franchise.code },
+      })
+      const list = ctx.programsByFranchise.get(franchise.id) || []
+      list.push(pending)
+      ctx.programsByFranchise.set(franchise.id, list)
+      created++
+      continue
+    }
+
+    const { data, error } = await supabase
+      .from(tables().series)
+      .insert(insertRow)
+      .select("id, name, display_name, campus_id, stage_id, is_active")
+      .single()
+
+    if (error) {
+      throw new Error(
+        `Failed to create series "${seriesName}" for ${franchise.code}/${category.name}: ${error.message}`
+      )
+    }
+
+    const norm = normalizeSeriesRow({
+      ...data,
+      category,
+      franchise: { id: franchise.id, code: franchise.code },
+    })
+    const list = ctx.programsByFranchise.get(franchise.id) || []
+    list.push(norm)
+    ctx.programsByFranchise.set(franchise.id, list)
+    created++
+    console.log(`[v3_series] Created ${seriesKey} (${franchise.code} / ${category.name})`)
+  }
+
+  return { created, skipped }
+}
+
+function loadManifest(manifestPath) {
+  if (!manifestPath || !fs.existsSync(manifestPath)) return null
+  return JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+}
+
+function detectSchemaDrift(fileManifest, dbManifest) {
+  const warnings = []
+  if (!fileManifest) return warnings
+  if (fileManifest.schema_hash && dbManifest.schema_hash && fileManifest.schema_hash !== dbManifest.schema_hash) {
+    warnings.push({
+      code: ERROR_CODES.SCHEMA_DRIFT,
+      message: `Schema hash mismatch: file=${fileManifest.schema_hash} db=${dbManifest.schema_hash}`,
+    })
+  }
+  const fileHeaders = new Set([
+    ...(fileManifest.fixed_columns || []),
+    ...(fileManifest.columns || []).map((c) => c.header),
+  ])
+  const dbHeaders = new Set([
+    ...(dbManifest.fixed_columns || []),
+    ...(dbManifest.columns || []).map((c) => c.header),
+  ])
+  const missingInFile = [...dbHeaders].filter((h) => !fileHeaders.has(h))
+  if (missingInFile.length) {
+    warnings.push({
+      code: ERROR_CODES.SCHEMA_DRIFT,
+      message: `Missing columns in file (will import as empty): ${missingInFile.join(", ")}`,
+    })
+  }
+  return warnings
+}
+
+function unwrapJoin(val) {
+  return Array.isArray(val) ? val[0] : val
+}
+
+function enrichInstanceExtForExport(instance) {
+  const ext =
+    instance.instance_data_ext && typeof instance.instance_data_ext === "object"
+      ? JSON.parse(JSON.stringify(instance.instance_data_ext))
+      : {}
+  if (!ext.schedule || typeof ext.schedule !== "object") ext.schedule = {}
+  const s = ext.schedule
+  if (!s.start_date && instance.start_date) s.start_date = instance.start_date
+  if (!s.end_date && instance.end_date) s.end_date = instance.end_date
+  if (!s.start_time && instance.start_time) s.start_time = instance.start_time
+  if (!s.end_time && instance.end_time) s.end_time = instance.end_time
+  if (!s.days_of_week && instance.days_of_week) s.days_of_week = instance.days_of_week
+  if (!ext.capacity_price || typeof ext.capacity_price !== "object") ext.capacity_price = {}
+  const c = ext.capacity_price
+  if (c.max_students == null && instance.max_students != null) c.max_students = instance.max_students
+  if (c.price_override == null && instance.price_override != null) c.price_override = instance.price_override
+  return ext
+}
+
+function instanceToCsvRow(instance, schemaColumns) {
+  const prog = unwrapJoin(instance.program)
+  const off = unwrapJoin(instance.offering)
+  const campus = isCatalogV3()
+    ? instance.location_id
+      ? unwrapJoin(instance.campus)
+      : null
+    : instance.campus_id
+      ? unwrapJoin(instance.campus)
+      : null
+  const franchise = unwrapJoin(prog?.franchise)
+  const category = unwrapJoin(prog?.category)
+  const ext = enrichInstanceExtForExport(instance)
+  const dynamic = flattenToRow(ext, schemaColumns)
+  return {
+    id: instance.id || "",
+    "Location Code": franchise?.code || "",
+    "Programs (category)": category?.display_name || category?.name || "",
+    "Activity (program)": prog?.display_name || prog?.name || "",
+    "Session Title": off?.name || "",
+    "Location Name": formatCampusLabelForCsv(campus),
+    Status: instance.status || "scheduled",
+    "Is Active": instance.is_active === false ? "No" : "Yes",
+    Featured: instance.featured ? "Yes" : "No",
+    "Amilia Link": instance.amilia_link || "",
+    Notes: instance.notes || "",
+    ...dynamic,
+  }
+}
+
+const REV_DAY_MAP = {
+  0: "Sun",
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+}
+
+function formatDateForCsv(isoDate) {
+  if (!isoDate) return ""
+  const parts = String(isoDate).slice(0, 10).split("-")
+  if (parts.length !== 3) return isoDate
+  return `${Number(parts[1])}/${Number(parts[2])}/${parts[0]}`
+}
+
+function formatTimeForCsv(time) {
+  if (!time) return ""
+  const s = String(time)
+  return s.length >= 5 ? s.slice(0, 5) : s
+}
+
+function formatDaysForCsv(days) {
+  if (!days || !days.length) return ""
+  return days.map((d) => REV_DAY_MAP[String(d)] || String(d)).join("|")
+}
+
+async function loadActiveOfferingTypes(supabase) {
+  const { data, error } = await supabase
+    .from(tables().offeringType)
+    .select("id, code, name, is_active, instance_schema, updated_at, display_order")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true })
+  if (error) throw new Error(`Failed to load offering types: ${error.message}`)
+  return data || []
+}
+
+async function countInstancesForType(supabase, offeringTypeId) {
+  const { data: offerings, error: offErr } = await supabase
+    .from(tables().offering)
+    .select("id")
+    .eq("offering_type_id", offeringTypeId)
+  if (offErr) throw new Error(`Failed to count offerings: ${offErr.message}`)
+  const offeringIds = (offerings || []).map((o) => o.id)
+  if (!offeringIds.length) return 0
+  const { count, error } = await supabase
+    .from(tables().session)
+    .select("id", { count: "exact", head: true })
+    .in("offering_id", offeringIds)
+  if (error) throw new Error(`Failed to count instances: ${error.message}`)
+  return count || 0
+}
+
+async function preflightForType(supabase, typeCode) {
+  const typeFields = isCatalogV3()
+    ? "id, code, name, is_active, instance_schema, updated_at"
+    : "id, code, name, is_active, instance_schema, portal_service_role, updated_at"
+  const { data: offeringType, error: typeErr } = await supabase
+    .from(tables().offeringType)
+    .select(typeFields)
+    .eq("code", typeCode)
+    .maybeSingle()
+
+  if (typeErr || !offeringType) {
+    throw new Error(`Offering type "${typeCode}" not found: ${typeErr?.message || "no row"}`)
+  }
+  if (!offeringType.is_active) {
+    throw new Error(`Offering type "${typeCode}" exists but is not active`)
+  }
+
+  const baseCtx = await preflight(supabase)
+  const schemaColumns = buildSchemaColumns(offeringType.instance_schema)
+  const manifest = buildInstanceManifest(offeringType, schemaColumns)
+
+  const { data: typeOfferings } = await supabase
+    .from(tables().offering)
+    .select("id")
+    .eq("offering_type_id", offeringType.id)
+  const offeringIds = new Set((typeOfferings || []).map((o) => o.id))
+
+  const instancesForType = []
+  for (const inst of baseCtx.instancesById.values()) {
+    if (offeringIds.has(inst.offering_id)) instancesForType.push(inst)
+  }
+
+  const instancesByIdForType = new Map()
+  const instanceByNaturalKeyForType = new Map()
+  for (const inst of instancesForType) {
+    instancesByIdForType.set(inst.id, inst)
+    const prog = unwrapJoin(inst.program)
+    const off = unwrapJoin(inst.offering)
+    const camp = isCatalogV3()
+      ? inst.location_id
+        ? unwrapJoin(inst.campus)
+        : null
+      : inst.campus_id
+        ? unwrapJoin(inst.campus)
+        : null
+    const franchise = unwrapJoin(prog?.franchise)
+    const loc = franchise?.code || ""
+    const cat = unwrapJoin(prog?.category)
+    const categoryLabel = cat?.display_name || cat?.name || ""
+    const activityLabel = prog?.display_name || prog?.name || ""
+    const campusLabel = camp ? camp.display_name || camp.name || "" : ""
+    const nk = naturalKey(loc, categoryLabel, activityLabel, off?.name || "", inst.start_date, campusLabel)
+    instanceByNaturalKeyForType.set(nk, inst)
+  }
+
+  return {
+    ...baseCtx,
+    offeringType,
+    schemaColumns,
+    manifest,
+    instancesById: instancesByIdForType,
+    instanceByNaturalKey: instanceByNaturalKeyForType,
+    offeringIdsForType: offeringIds,
+  }
+}
+
+function buildSchemaDbRowFromResolved(resolved, row) {
+  const { dbRow, offeringTypeCode, derived } = resolved
+  const notesCol = decodeHtmlEntities(row.Notes)
+  if (notesCol) dbRow.notes = notesCol
+  else if (derived.notes) dbRow.notes = derived.notes
+  return dbRow
+}
+
+async function processSchemaImportRow(supabase, ctx, row, opts) {
+  const resolved = resolveRow(row, ctx, { requireCategory: true })
+  const { offering, offeringTypeCode, existing, naturalKey: nk } = resolved
+
+  if (offeringTypeCode !== ctx.offeringType.code) {
+    throw new Error(
+      `Offering type mismatch: row resolves to "${offeringTypeCode}" but file is for "${ctx.offeringType.code}"`
+    )
+  }
+
+  if (offering.status !== "published" && !opts.allowDraftOffering) {
+    if (opts.publishReferencedOfferings && !opts.dryRun) {
+      await publishOffering(supabase, offering.id)
+      offering.status = "published"
+    } else if (!opts.allowDraftOffering) {
+      return { action: "DRAFT_BLOCKED", reason: "offering not published", naturalKey: nk }
+    }
+  }
+
+  const dbRow = buildSchemaDbRowFromResolved(resolved, row)
+
+  if (existing && opts.insertOnly) {
+    return { action: "SKIPPED", reason: "insert-only mode", id: existing.id, naturalKey: nk }
+  }
+
+  if (existing) {
+    const updatePayload = buildUpdatePayload(dbRow)
+    const dbBefore = snapshotInstance(existing)
+    const changes = diffDbRow(dbBefore, updatePayload)
+    if (Object.keys(changes).length === 0) {
+      return { action: "UNCHANGED", id: existing.id, naturalKey: nk }
+    }
+    if (opts.dryRun) {
+      return { action: "UPDATE", id: existing.id, naturalKey: nk, dbRow: updatePayload, changes }
+    }
+    const { error } = await supabase.from(tables().session).update(updatePayload).eq("id", existing.id)
+    if (error) throw new Error(`Update failed: ${error.message}`)
+    Object.assign(existing, updatePayload)
+    ctx.instanceByNaturalKey.set(nk, existing)
+    ctx.instancesById.set(existing.id, existing)
+    return { action: "UPDATE", id: existing.id, naturalKey: nk, changes }
+  }
+
+  if (opts.dryRun) {
+    return { action: "INSERT", naturalKey: nk, dbRow }
+  }
+  const { data, error } = await supabase.from(tables().session).insert(dbRow).select("id").single()
+  if (error) throw new Error(`Insert failed: ${error.message}`)
+  const inserted = { id: data.id, ...dbRow }
+  ctx.instanceByNaturalKey.set(nk, inserted)
+  ctx.instancesById.set(data.id, inserted)
+  return { action: "INSERT", id: data.id, naturalKey: nk }
+}
+
+function scanSchemaFileDuplicates(rows, ctx) {
+  const keyToRows = new Map()
+  const duplicateInFile = []
+  for (const row of rows) {
+    if (schemaRowIsEmpty(row)) continue
+    try {
+      const resolved = resolveRow(row, ctx, { requireCategory: true })
+      const keys = []
+      if (row.id) keys.push(`id:${row.id}`)
+      keys.push(resolved.naturalKey)
+      for (const key of keys) {
+        const list = keyToRows.get(key) || []
+        list.push(row._rowNum)
+        keyToRows.set(key, list)
+      }
+    } catch {
+      // per-row later
+    }
+  }
+  for (const [key, rowNums] of keyToRows) {
+    const unique = [...new Set(rowNums)]
+    if (unique.length > 1) duplicateInFile.push({ key, rows: unique })
+  }
+  return duplicateInFile
+}
+
+function buildInstanceExampleRow(schemaColumns, typeCode) {
+  const row = {
+    id: "",
+    "Location Code": "bellevue",
+    "Programs (category)": "learn",
+    "Activity (program)": "2026 Summer Camps",
+    "Session Title": `CSV Import Test Instance (${typeCode})`,
+    "Location Name": "Bellevue, WA",
+    Status: "scheduled",
+    "Is Active": "Yes",
+    Featured: "No",
+    "Amilia Link": "",
+    Notes: "",
+  }
+  for (const col of schemaColumns) {
+    if (row[col.header] !== undefined) continue
+    if (col.type === "boolean") row[col.header] = "No"
+    else if (col.type === "number") row[col.header] = ""
+    else if (col.path.includes("start_date")) row[col.header] = "2026-07-06"
+    else if (col.path.includes("end_date")) row[col.header] = "2026-07-10"
+    else row[col.header] = ""
+  }
+  return row
+}
+
+async function loadSessionsForExport(supabase, ctx, options = {}) {
+  const status = options.status || null
+  const locationFilter = options.location ? normalizeKey(options.location) : null
+  const offeringIds = [...ctx.offeringIdsForType]
+  if (!offeringIds.length) return []
+
+  const sel = instancePreflightSelects()
+  let query = supabase
+    .from(tables().session)
+    .select(sel.sessionFields)
+    .in("offering_id", offeringIds)
+    .order("start_date", { ascending: true })
+
+  if (status) query = query.eq("status", status)
+
+  const { data: instances, error } = await query
+  if (error) throw new Error(`Failed to load instances: ${error.message}`)
+
+  return (instances || []).filter((inst) => {
+    if (!locationFilter) return true
+    const prog = unwrapJoin(inst.program)
+    const franchise = unwrapJoin(prog?.franchise)
+    return normalizeKey(franchise?.code) === locationFilter
+  })
+}
+
+async function exportInstancesForType(supabase, typeCode, options = {}) {
+  const writeTemplate = options.writeTemplate === true
+  const status = options.status || null
+  const locationFilter = options.location ? normalizeKey(options.location) : null
+  const out =
+    options.out ||
+    (writeTemplate ? templateInstanceCsvPath(typeCode) : defaultInstanceCsvPath(typeCode))
+
+  const ctx = await preflightForType(supabase, typeCode)
+  const headers = getInstanceSchemaHeaders(ctx.schemaColumns)
+  const manifestPath = defaultInstanceManifestPath(out)
+
+  let csvRows = []
+  if (writeTemplate) {
+    csvRows = [buildInstanceExampleRow(ctx.schemaColumns, typeCode)]
+  } else {
+    const instances = await loadSessionsForExport(supabase, ctx, {
+      status,
+      location: locationFilter,
+    })
+    csvRows = instances.map((inst) => instanceToCsvRow(inst, ctx.schemaColumns))
+  }
+
+  writeCsv(out, headers, csvRows)
+  fs.writeFileSync(manifestPath, JSON.stringify(ctx.manifest, null, 2) + "\n", "utf8")
+
+  return {
+    csvPath: out,
+    manifestPath,
+    rowCount: csvRows.length,
+    schemaColumnCount: ctx.schemaColumns.length,
+    schemaHash: ctx.manifest.schema_hash,
+    ctx,
+  }
+}
+
+async function dryRunSchemaImportFromFile(supabase, typeCode, filePath) {
+  const ctx = await preflightForType(supabase, typeCode)
+  const manifestPath = defaultInstanceManifestPath(filePath)
+  const fileManifest = loadManifest(manifestPath)
+  const driftWarnings = detectSchemaDrift(fileManifest, ctx.manifest)
+
+  const tableRows = parseSpreadsheet(filePath)
+  const allRows = rowsToSchemaObjects(tableRows).filter((r) => !schemaRowIsEmpty(r))
+
+  const fileDups = scanSchemaFileDuplicates(allRows, ctx)
+  if (fileDups.length) {
+    throw new Error(
+      `Duplicate rows in file: ${fileDups.map((d) => d.key).join(", ")}`
+    )
+  }
+
+  const summary = { insert: 0, update: 0, unchanged: 0, skipped: 0, failed: 0, draft_blocked: 0 }
+  const results = []
+  const opts = {
+    dryRun: true,
+    insertOnly: false,
+    allowDraftOffering: true,
+    publishReferencedOfferings: false,
+  }
+
+  for (const row of allRows) {
+    try {
+      const result = await processSchemaImportRow(supabase, ctx, row, opts)
+      const action = result.action
+      if (action === "INSERT") summary.insert++
+      else if (action === "UPDATE") summary.update++
+      else if (action === "UNCHANGED") summary.unchanged++
+      else if (action === "SKIPPED") summary.skipped++
+      else if (action === "DRAFT_BLOCKED") summary.draft_blocked++
+      results.push({
+        row: row._rowNum,
+        sessionTitle: row["Session Title"],
+        action,
+        error: null,
+      })
+    } catch (err) {
+      summary.failed++
+      results.push({
+        row: row._rowNum,
+        sessionTitle: row["Session Title"] || "(no title)",
+        action: "FAILED",
+        error: err.message,
+      })
+    }
+  }
+
+  return { summary, results, driftWarnings, rowCount: allRows.length, ctx }
+}
+
+function resolveInstanceVerifyStatus(summary, instanceCount) {
+  if (instanceCount === 0) return "skipped_no_data"
+  if (summary.failed > 0) return "fail"
+  if (summary.update > 0) return "warn"
+  return "pass"
+}
+
+function buildInstanceInventoryMarkdownRows(entries) {
+  const lines = [
+    "| code | name | instances | schema columns | verify | template |",
+    "|------|------|-----------|----------------|--------|----------|",
+  ]
+  for (const e of entries) {
+    lines.push(
+      `| ${e.code} | ${e.name} | ${e.instance_count} | ${e.schema_column_count} | ${e.verify_status} | \`${e.template_path}\` |`
+    )
+  }
+  return lines.join("\n")
+}
+
+function patchInstanceTypesDoc(docPath, tableMarkdown) {
+  const start = "<!-- INSTANCE_TYPES_START -->"
+  const end = "<!-- INSTANCE_TYPES_END -->"
+  let content = fs.readFileSync(docPath, "utf8")
+  if (!content.includes(start) || !content.includes(end)) {
+    throw new Error(`Missing ${start} / ${end} markers in ${docPath}`)
+  }
+  const replacement = `${start}
+<!-- 由 node scripts/bootstrap-instance-csv.js 自动生成，请勿手改 -->
+
+${tableMarkdown}
+
+<!-- schema_hash 与列数以当前 DB 为准；换环境后重新运行 bootstrap -->
+
+${end}`
+  content = content.replace(new RegExp(`${start}[\\s\\S]*?${end}`), replacement)
+  fs.writeFileSync(docPath, content, "utf8")
+}
+
+function writeSchemaReport(outDir, typeCode, report) {
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+  const jsonPath = path.join(outDir, `import-instances-${typeCode}-${stamp}.json`)
+  fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2))
+  return jsonPath
 }
 
 module.exports = {
-  DEFAULT_UNIFIED_CSV,
+  INSTANCE_FIXED_COLUMNS,
   HEADER_ALIASES,
   ERROR_CODES,
   loadEnv,
   parseArgs,
+  parseExportArgs,
+  defaultInstanceCsvPath,
+  templateInstanceCsvPath,
+  defaultInstanceManifestPath,
   parseSpreadsheet,
-  rowsToObjects,
+  rowsToSchemaObjects,
+  schemaRowIsEmpty,
   getCategoryLabel,
   getActivityLabel,
   getSessionTitle,
+  getLocationName,
   rowHasIdentity,
   rowIsEmpty,
   rowHasAnyIdentity,
   normalizeActivityForCourse,
   naturalKey,
   preflight,
+  preflightForType,
   resolveRow,
-  buildCampInstanceDataExt,
-  buildCourseInstanceDataExt,
+  deriveFlatColumnsFromExt,
+  buildInstanceExtFromSchemaRow,
   findExistingInstance,
   buildUpdatePayload,
   diffDbRow,
   snapshotInstance,
-  scanFileDuplicates,
+  scanSchemaFileDuplicates,
   publishOffering,
-  ensureLearnSummerCoursesProgram,
-  ensureCompeteSummerCampsProgram,
-  ensureProgramsForRows,
-  ensureSummerCoursesProgram,
-  collectSummerCoursesProgramNeeds,
-  collectCompeteSummerCampsProgramNeeds,
   classifyError,
-  writeReport,
+  writeSchemaReport,
   auditInstancesIntegrity,
   deleteAllInstances,
+  bootstrapMissingSeries,
+  loadSessionsForExport,
+  exportInstancesForType,
+  processSchemaImportRow,
+  dryRunSchemaImportFromFile,
+  instanceToCsvRow,
+  loadManifest,
+  detectSchemaDrift,
+  loadActiveOfferingTypes,
+  countInstancesForType,
+  buildInstanceManifest,
+  getInstanceSchemaHeaders,
+  exportOperatorHeaders,
+  OPERATOR_FIXED_HEADERS,
+  buildInstanceExampleRow,
+  resolveInstanceVerifyStatus,
+  buildInstanceInventoryMarkdownRows,
+  patchInstanceTypesDoc,
+  writeCsv,
 }

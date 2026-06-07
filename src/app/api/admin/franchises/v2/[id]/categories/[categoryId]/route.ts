@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables, catalogCols, normalizeCampusStageMapRow } from "@/lib/catalog-db"
 
 // 更新单个订阅关系
 export async function PUT(
@@ -23,13 +24,13 @@ export async function PUT(
     if (display_order !== undefined) updateData.display_order = display_order
 
     const { data, error } = await supabaseAdmin
-      .from("v2_franchise_category_map")
+      .from(catalogTables.campusStageMap)
       .update(updateData)
-      .eq("franchise_id", franchiseId)
-      .eq("category_id", categoryId)
+      .eq(catalogCols.campusStageMap.campusId, franchiseId)
+      .eq(catalogCols.campusStageMap.stageId, categoryId)
       .select(`
         *,
-        category:v2_category(*)
+        category:${catalogTables.stage}(*)
       `)
       .single()
 
@@ -48,7 +49,10 @@ export async function PUT(
       )
     }
 
-    return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(
+      normalizeCampusStageMapRow(data),
+      { status: 200 }
+    )
   } catch (error: unknown) {
     console.error("Error updating subscription:", error)
     return NextResponse.json(
@@ -88,10 +92,10 @@ export async function DELETE(
 
     // 检查是否有 program 使用此 category
     const { data: programs, error: programError } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .select("id")
-      .eq("franchise_id", franchiseId)
-      .eq("category_id", categoryId)
+      .eq(catalogCols.series.campusId, franchiseId)
+      .eq(catalogCols.series.stageId, categoryId)
       .limit(1)
 
     if (programError) {
@@ -111,10 +115,10 @@ export async function DELETE(
 
     // 删除订阅关系
     const { error } = await supabaseAdmin
-      .from("v2_franchise_category_map")
+      .from(catalogTables.campusStageMap)
       .delete()
-      .eq("franchise_id", franchiseId)
-      .eq("category_id", categoryId)
+      .eq(catalogCols.campusStageMap.campusId, franchiseId)
+      .eq(catalogCols.campusStageMap.stageId, categoryId)
 
     if (error) {
       console.error("Error deleting subscription:", error)

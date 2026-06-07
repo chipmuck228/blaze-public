@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogCols, catalogSelect, catalogTables, normalizeSeriesRow } from "@/lib/catalog-db"
 
 // 获取单个 program
 export async function GET(
@@ -16,24 +17,8 @@ export async function GET(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_program")
-      .select(`
-        *,
-        category:v2_category(
-          id,
-          name,
-          display_name,
-          description,
-          poster_url,
-          is_active
-        ),
-        franchise:v2_franchise(
-          id,
-          code,
-          name,
-          is_active
-        )
-      `)
+      .from(catalogTables.series)
+      .select(catalogSelect.seriesWithRelations())
       .eq("id", id)
       .single()
 
@@ -51,7 +36,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(normalizeSeriesRow(data), { status: 200 })
   } catch (error: unknown) {
     console.error("Error fetching program:", error)
     return NextResponse.json(
@@ -103,8 +88,10 @@ export async function PUT(
 
     // 检查 program 是否存在
     const { data: existing, error: existingError } = await supabaseAdmin
-      .from("v2_program")
-      .select("id, franchise_id, category_id, name, display_order, is_active, featured, poster_url")
+      .from(catalogTables.series)
+      .select(
+        `id, ${catalogCols.series.campusId}, ${catalogCols.series.stageId}, name, display_order, is_active, featured, poster_url`
+      )
       .eq("id", id)
       .single()
 
@@ -128,26 +115,10 @@ export async function PUT(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .update(updateData)
       .eq("id", id)
-      .select(`
-        *,
-        category:v2_category(
-          id,
-          name,
-          display_name,
-          description,
-          poster_url,
-          is_active
-        ),
-        franchise:v2_franchise(
-          id,
-          code,
-          name,
-          is_active
-        )
-      `)
+      .select(catalogSelect.seriesWithRelations())
       .single()
 
     if (error) {
@@ -158,7 +129,7 @@ export async function PUT(
       )
     }
 
-    return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(normalizeSeriesRow(data), { status: 200 })
   } catch (error: unknown) {
     console.error("Error updating program:", error)
     return NextResponse.json(
@@ -182,7 +153,7 @@ export async function DELETE(
 
     // 检查 program 是否存在
     const { data: existing, error: existingError } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .select("id")
       .eq("id", id)
       .single()
@@ -196,9 +167,9 @@ export async function DELETE(
 
     // 检查是否有关联的 instances
     const { data: instances, error: instancesError } = await supabaseAdmin
-      .from("v2_instance")
+      .from(catalogTables.session)
       .select("id")
-      .eq("program_id", id)
+      .eq(catalogCols.session.seriesId, id)
       .limit(1)
 
     if (instancesError) {
@@ -218,7 +189,7 @@ export async function DELETE(
 
     // 删除 program
     const { error } = await supabaseAdmin
-      .from("v2_program")
+      .from(catalogTables.series)
       .delete()
       .eq("id", id)
 

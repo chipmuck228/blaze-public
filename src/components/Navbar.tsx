@@ -11,23 +11,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Menu, LogOut, User, ShoppingCart, Search, MapPin, Rocket, ChevronDown, X, BookOpen, GraduationCap, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Trophy, Sparkles, Briefcase, HelpCircle, ExternalLink, type LucideIcon } from "lucide-react";
+import { Menu, LogOut, User, ShoppingCart, Search, MapPin, ChevronDown, X, FileText, Clock, CreditCard, Users, Bell, LayoutDashboard, Briefcase, HelpCircle, ExternalLink, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url";
 import { PUBLIC_USER_AUTH_ENABLED } from "@/lib/public-user-auth";
-import type { StringKeyRecord } from "@/lib/typed-error"
+import { appendCampusToNavLink } from "@/lib/stage-journey-links";
 
   // Navbar 统一深蓝色（与白底搭配）
   const NAV_TEXT = "text-[#1e3a5f]";
@@ -63,95 +56,89 @@ interface RouteProps {
     display_name: string;
     description?: string | null;
     poster_url?: string | null;
+    link?: string | null;
   }
 
-  /** 无 location 时，journey 阶段 category name → 静态页路径 */
-  const JOURNEY_CATEGORY_PATHS: Record<string, string> = {
-    explore: '/journey/explore',
-    learn: '/journey/learn',
-    compete: '/journey/compete',
-  };
+  const isExternalNavLink = (link: string) =>
+    link.startsWith('http://') || link.startsWith('https://');
 
-  const getCategorySlug = (categoryName: string) =>
-    (categoryName || '').replace(/_/g, '-');
-
-  const getCategoryHref = (
-    category: Category,
-    locationCode: string | null,
-    pathname: string | null
-  ) => {
-    if (locationCode) {
-      const params = new URLSearchParams();
-      params.set("location", locationCode.toLowerCase());
-      if (category.name) params.set("program", category.name);
-      return `/programs?${params.toString()}`;
-    }
-    if (pathname === "/programs") {
-      const params = new URLSearchParams();
-      params.set("category", category.id);
-      return `/programs?${params.toString()}`;
-    }
-    const journeyPath = JOURNEY_CATEGORY_PATHS[(category.name || '').toLowerCase()];
-    if (journeyPath) return journeyPath;
-    return `/category/${encodeURIComponent(getCategorySlug(category.name))}`;
-  };
-
-  const isCategoryLinkActive = (
-    category: Category,
-    locationCode: string | null,
-    pathname: string | null
-  ) => {
+  const isCategoryNavActive = (link: string, pathname: string | null) => {
     if (!pathname) return false;
-    if (pathname === "/programs" && typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const catParam = params.get("category");
-      const programParam = params.get("program");
-      if (programParam) {
-        return programParam.toLowerCase() === (category.name || "").toLowerCase();
-      }
-      return catParam === category.id;
+    const trimmed = link.trim();
+    if (isExternalNavLink(trimmed)) return false;
+
+    const [linkPath, linkQuery = ''] = trimmed.split('?');
+    if (pathname !== linkPath && !pathname.startsWith(`${linkPath}/`)) {
+      return false;
     }
-    if (!locationCode) {
-      const journeyPath = JOURNEY_CATEGORY_PATHS[(category.name || '').toLowerCase()];
-      if (journeyPath) return pathname === journeyPath || pathname.startsWith(`${journeyPath}/`);
+    if (!linkQuery) {
+      return pathname === linkPath || pathname.startsWith(`${linkPath}/`);
     }
-    const categorySlug = getCategorySlug(category.name);
-    const currentSlug = pathname.startsWith('/category/')
-      ? pathname.replace(/^\/category\//, '').split('/')[0]
-      : null;
-    return currentSlug !== null && currentSlug === categorySlug;
+    if (typeof window === 'undefined') {
+      return pathname === linkPath;
+    }
+    const expected = new URLSearchParams(linkQuery);
+    const current = new URLSearchParams(window.location.search);
+    for (const [key, value] of expected.entries()) {
+      if (current.get(key) !== value) return false;
+    }
+    return pathname === linkPath;
   };
 
-  // 根据 v2_category 的 name 字段返回对应的图标
-  const getCategoryIcon = (categoryName: string) => {
-    const normalizedName = categoryName.toLowerCase().trim()
-    
-    switch (normalizedName) {
-      case 'beginner_robotics':
-        return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
-      case 'intermediate_robotics':
-        return <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
-      case 'advanced_robotics':
-        return <Rocket className="h-4 w-4 mt-0.5 flex-shrink-0" />
-      case 'competition_robotics':
-        return <Trophy className="h-4 w-4 mt-0.5 flex-shrink-0" />
-      case 'innovation_lab':
-        return <Sparkles className="h-4 w-4 mt-0.5 flex-shrink-0" />
-      default:
-        // 向后兼容：如果 name 包含某些关键词，使用相应的图标
-        if (normalizedName.includes('beginner') || normalizedName.includes('初级')) {
-          return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        } else if (normalizedName.includes('intermediate') || normalizedName.includes('中级')) {
-          return <GraduationCap className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        } else if (normalizedName.includes('advanced') || normalizedName.includes('高级')) {
-          return <Rocket className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        } else if (normalizedName.includes('competition') || normalizedName.includes('竞赛')) {
-          return <Trophy className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        } else if (normalizedName.includes('innovation') || normalizedName.includes('创新')) {
-          return <Sparkles className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        }
-        return <BookOpen className="h-4 w-4 mt-0.5 flex-shrink-0" /> // default
+  function CategoryNavItem({
+    category,
+    pathname,
+    className,
+    onNavigate,
+    campusCode,
+  }: {
+    category: Category;
+    pathname: string | null;
+    className: string;
+    onNavigate?: () => void;
+    campusCode?: string | null;
+  }) {
+    const rawLink = category.link?.trim();
+    const label = category.display_name || category.name;
+
+    if (!rawLink) {
+      return (
+        <span
+          className={`${className} text-slate-400 cursor-not-allowed select-none`}
+          aria-disabled="true"
+        >
+          {label}
+        </span>
+      );
     }
+
+    const link = appendCampusToNavLink(rawLink, campusCode ?? null);
+    const active = isCategoryNavActive(link, pathname);
+    const activeClass = active ? NAV_ACTIVE : NAV_TEXT;
+
+    if (isExternalNavLink(link)) {
+      return (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${className} ${activeClass} ${NAV_HOVER}`}
+          onClick={onNavigate}
+        >
+          {label}
+        </a>
+      );
+    }
+
+    return (
+      <Link
+        href={link}
+        className={`${className} ${NAV_HOVER} ${activeClass}`}
+        onClick={onNavigate}
+      >
+        {label}
+      </Link>
+    );
   }
 
   /** Campuses dropdown: franchise poster, MapPin fallback */
@@ -185,7 +172,6 @@ interface RouteProps {
   export const Navbar = () => {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [isLocationsOpen, setIsLocationsOpen] = useState<boolean>(false);
-    const [isProgramsOpen, setIsProgramsOpen] = useState<boolean>(false);
     const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
     const [cartCount, setCartCount] = useState<number>(0);
     const [waitlistCount, setWaitlistCount] = useState<number>(0);
@@ -227,6 +213,13 @@ interface RouteProps {
         const params = new URLSearchParams(window.location.search);
         const franchise = params.get('franchise') || params.get('location');
         setFranchiseFromUrl(franchise ? franchise.toLowerCase() : null);
+        return;
+      }
+      // 3. /journey/* — campus context via ?location=
+      if (pathname?.startsWith('/journey/')) {
+        const params = new URLSearchParams(window.location.search);
+        const location = params.get('location') || params.get('franchise');
+        setFranchiseFromUrl(location ? location.toLowerCase() : null);
         return;
       }
       setFranchiseFromUrl(null);
@@ -568,7 +561,7 @@ interface RouteProps {
             </div>
 
             {/* Desktop Nav */}
-            <div className="hidden md:flex items-center space-x-8">
+            <div className="hidden md:flex items-center space-x-6">
               {/* Locations Dropdown */}
               <div className="relative group h-full flex items-center">
                 <button 
@@ -650,69 +643,20 @@ interface RouteProps {
                 </div>
               </div>
 
-              {/* Programs Dropdown */}
-              <div className="relative group h-full flex items-center">
-                <button 
-                  className={`flex items-center space-x-1 text-sm font-semibold transition-colors ${NAV_HOVER} ${pathname === '/programs' ? NAV_ACTIVE : NAV_TEXT}`}
-                >
-                  <span>Programs</span>
-                  <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
-                </button>
-                
-                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-[min(380px,calc(100vw-2rem))] sm:w-[400px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform z-50">
-                  <div className={`${DROPDOWN_BG} rounded-xl overflow-hidden`}>
-                    <div className="max-h-[min(400px,60vh)] overflow-y-auto">
-                      {isLoadingCategories ? (
-                        <div className="flex items-center justify-center py-8">
-                          <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
-                        </div>
-                      ) : categories.length === 0 ? (
-                        <div className="text-center py-8 text-sm text-slate-500">
-                          No categories available
-                        </div>
-                      ) : (
-                        <div className="py-2">
-                          {categories.map((category) => {
-                            const href = getCategoryHref(category, currentLocationCode, pathname);
-                            const isCategoryActive = isCategoryLinkActive(category, currentLocationCode, pathname);
-
-                            return (
-                              <Link
-                                key={category.id}
-                                href={href}
-                                className={`flex gap-3 px-3 py-2.5 text-sm transition-colors border-b border-slate-100 last:border-0 ${isCategoryActive ? DROPDOWN_ITEM_ACTIVE : DROPDOWN_ITEM}`}
-                              >
-                                <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-slate-100">
-                                  {category.poster_url ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={category.poster_url}
-                                      alt=""
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-500">
-                                      {getCategoryIcon(category.name)}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium">{category.display_name || category.name}</div>
-                                  {category.description && (
-                                    <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">
-                                      {category.description}
-                                    </div>
-                                  )}
-                                </div>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* Programs — flat category links */}
+              {isLoadingCategories ? (
+                <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" aria-hidden />
+              ) : (
+                categories.map((category) => (
+                  <CategoryNavItem
+                    key={category.id}
+                    category={category}
+                    pathname={pathname}
+                    campusCode={currentLocationCode}
+                    className="text-sm font-semibold transition-colors whitespace-nowrap"
+                  />
+                ))
+              )}
 
               {/* About Dropdown */}
               <div className="relative group h-full flex items-center">
@@ -875,69 +819,23 @@ interface RouteProps {
                 </div>
               </div>
 
-              {/* Mobile Programs Accordion */}
-              <div>
-                <button
-                  onClick={() => setIsProgramsOpen(!isProgramsOpen)}
-                  className={`flex items-center justify-between w-full px-3 py-4 text-base font-medium rounded-md ${NAV_TEXT} ${NAV_HOVER} hover:bg-slate-100`}
-                >
-                  <span>Programs</span>
-                  <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isProgramsOpen ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`overflow-hidden transition-all duration-200 ${isProgramsOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="pl-4 space-y-1 bg-slate-50 rounded-lg mt-1 mb-2 py-2">
-                    {isLoadingCategories ? (
-                      <div className="flex items-center justify-center py-4">
-                        <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    ) : categories.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-slate-500">
-                        No categories available
-                      </div>
-                    ) : (
-                      categories.map((category) => {
-                        const href = getCategoryHref(category, currentLocationCode, pathname);
-                        const isCategoryActive = isCategoryLinkActive(category, currentLocationCode, pathname);
-
-                        return (
-                          <Link
-                            key={category.id}
-                            href={href}
-                            onClick={() => {
-                              setIsOpen(false);
-                              setIsProgramsOpen(false);
-                            }}
-                            className={`flex gap-3 px-3 py-2.5 text-sm font-medium rounded-md ${isCategoryActive ? NAV_ACTIVE : `${NAV_TEXT} ${NAV_HOVER}`}`}
-                          >
-                            <div className="flex-shrink-0 w-11 h-11 rounded-lg overflow-hidden bg-slate-700">
-                              {category.poster_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={category.poster_url}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-slate-500">
-                                  {getCategoryIcon(category.name)}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div>{category.display_name || category.name}</div>
-                              {category.description && (
-                                <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
-                                  {category.description}
-                                </div>
-                              )}
-                            </div>
-                          </Link>
-                        );
-                      })
-                    )}
-                  </div>
+              {/* Mobile Programs — flat category links */}
+              {isLoadingCategories ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="h-4 w-4 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" aria-hidden />
                 </div>
-              </div>
+              ) : (
+                categories.map((category) => (
+                  <CategoryNavItem
+                    key={category.id}
+                    category={category}
+                    pathname={pathname}
+                    campusCode={currentLocationCode}
+                    className="block px-3 py-4 text-base font-medium rounded-md hover:bg-slate-100"
+                    onNavigate={() => setIsOpen(false)}
+                  />
+                ))
+              )}
 
               {/* Mobile About Accordion */}
               <div>

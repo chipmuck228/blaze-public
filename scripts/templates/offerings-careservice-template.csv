@@ -1,0 +1,2 @@
+id,slug,Title,Offering Type,Program (tag),Status,Description for admin,Image Link,content|eligibility_notes,pricing|currency,pricing|base_price,portal_config|is_course_type,portal_config|show_care_service,portal_config|show_meal_service,admin_settings|portal_service_role
+,,Example Offering,careservice,Explore,draft,,,,(required Currency),1,No,No,No,

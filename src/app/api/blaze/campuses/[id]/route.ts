@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server"
-import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import {
+  catalogTables,
+  catalogCols,
+  adminLocationListSelect,
+  normalizeLocationRow,
+  locationWriteFromBody,
+} from "@/lib/catalog-db"
 
-// 获取单个 campus
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -16,28 +22,23 @@ export async function GET(
     }
 
     const { data, error } = await supabaseAdmin
-      .from("v2_campus")
-      .select(`
-        *,
-        franchise:v2_franchise(
-          id,
-          code,
-          name
-        )
-      `)
+      .from(catalogTables.location)
+      .select(adminLocationListSelect())
       .eq("id", id)
       .single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return NextResponse.json({ error: "Campus not found" }, { status: 404 })
       }
       throw new Error(getErrorMessage(error))
     }
 
-    return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(normalizeLocationRow(data), {
+      status: 200,
+    })
   } catch (error: unknown) {
-    console.error("Error fetching campus:", error)
+    console.error("[v3_location] Error fetching campus:", error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to fetch campus" },
       { status: 500 }
@@ -45,7 +46,6 @@ export async function GET(
   }
 }
 
-// 更新 campus
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -58,96 +58,58 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { 
-      franchise_id,
-      name, 
-      display_name,
-      address, 
-      city, 
-      state, 
-      zip_code,
-      country,
-      phone, 
-      email, 
-      latitude,
-      longitude,
-      is_active
-    } = body
+    const { franchise_id, display_name } = body
 
-    if (!name) {
+    if (!display_name) {
       return NextResponse.json(
-        { error: "Missing required field: name" },
+        { error: "Missing required field: display_name" },
         { status: 400 }
       )
     }
 
     if (franchise_id) {
-      // 验证 franchise_id 存在于 v2_franchise 表中
       const { data: franchise, error: franchiseError } = await supabaseAdmin
-        .from("v2_franchise")
+        .from(catalogTables.campus)
         .select("id")
         .eq("id", franchise_id)
         .single()
 
       if (franchiseError || !franchise) {
         return NextResponse.json(
-          { error: "Invalid franchise_id. Franchise must exist in v2_franchise table." },
+          { error: "Invalid franchise_id. Campus must exist in catalog." },
           { status: 400 }
         )
       }
     }
 
-    const updateData: StringKeyRecord = {
-      name,
-      display_name: display_name || name,
-      address: address || null,
-      city: city || null,
-      state: state || null,
-      zip_code: zip_code || null,
-      country: country || 'US',
-      phone: phone || null,
-      email: email || null,
-      latitude: latitude || null,
-      longitude: longitude || null,
+    const updateData = {
+      ...locationWriteFromBody(body, { isUpdate: true }),
       updated_at: new Date().toISOString(),
     }
 
-    if (franchise_id !== undefined) {
-      updateData.franchise_id = franchise_id
-    }
-
-    if (is_active !== undefined) {
-      updateData.is_active = is_active
-    }
-
     const { data, error } = await supabaseAdmin
-      .from("v2_campus")
+      .from(catalogTables.location)
       .update(updateData)
       .eq("id", id)
-      .select(`
-        *,
-        franchise:v2_franchise(
-          id,
-          code,
-          name
-        )
-      `)
+      .select(adminLocationListSelect())
       .single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return NextResponse.json({ error: "Campus not found" }, { status: 404 })
       }
-      console.error("Error updating campus:", error)
+      console.error("[v3_location] Error updating campus:", error)
       return NextResponse.json(
         { error: getErrorMessage(error) || "Failed to update campus" },
         { status: 500 }
       )
     }
 
-    return NextResponse.json(data, { status: 200 })
+    return NextResponse.json(normalizeLocationRow(data), {
+      status: 200,
+    })
   } catch (error: unknown) {
-    console.error("Error updating campus:", error)
+    console.error("[v3_location] Error updating campus:", error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to update campus" },
       { status: 500 }
@@ -155,7 +117,6 @@ export async function PUT(
   }
 }
 
-// 删除 campus
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -167,15 +128,14 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 检查是否有实例使用此 campus
     const { data: instances, error: instancesError } = await supabaseAdmin
-      .from("v2_instance")
+      .from(catalogTables.session)
       .select("id")
-      .eq("campus_id", id)
+      .eq(catalogCols.session.locationId, id)
       .limit(1)
 
     if (instancesError) {
-      console.error("Error checking instances:", instancesError)
+      console.error("[v3_session] Error checking sessions:", instancesError)
     }
 
     if (instances && instances.length > 0) {
@@ -186,15 +146,15 @@ export async function DELETE(
     }
 
     const { error } = await supabaseAdmin
-      .from("v2_campus")
+      .from(catalogTables.location)
       .delete()
       .eq("id", id)
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return NextResponse.json({ error: "Campus not found" }, { status: 404 })
       }
-      console.error("Error deleting campus:", error)
+      console.error("[v3_location] Error deleting campus:", error)
       return NextResponse.json(
         { error: getErrorMessage(error) || "Failed to delete campus" },
         { status: 500 }
@@ -203,7 +163,7 @@ export async function DELETE(
 
     return NextResponse.json({ message: "Campus deleted successfully" }, { status: 200 })
   } catch (error: unknown) {
-    console.error("Error deleting campus:", error)
+    console.error("[v3_location] Error deleting campus:", error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to delete campus" },
       { status: 500 }

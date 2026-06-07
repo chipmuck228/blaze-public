@@ -1,0 +1,109 @@
+{
+  "offering_type_code": "camp",
+  "offering_type_id": "617e3414-c357-4df4-ab9e-fb5317126d6a",
+  "schema_updated_at": "2026-05-27T04:09:28.426525+00:00",
+  "schema_hash": "596f7fdc59f0e9bc",
+  "fixed_columns": [
+    "id",
+    "slug",
+    "Title",
+    "Offering Type",
+    "Program (tag)",
+    "Status",
+    "Description for admin",
+    "Image Link"
+  ],
+  "columns": [
+    {
+      "header": "content|description",
+      "path": "content.description",
+      "type": "text",
+      "required": true,
+      "label": "Description"
+    },
+    {
+      "header": "content|prerequisites",
+      "path": "content.prerequisites",
+      "type": "text",
+      "required": false,
+      "label": "Requirements"
+    },
+    {
+      "header": "content|target_audience",
+      "path": "content.target_audience",
+      "type": "text",
+      "required": false,
+      "label": "Target Audience"
+    },
+    {
+      "header": "content|learning_outcomes",
+      "path": "content.learning_outcomes",
+      "type": "text",
+      "required": false,
+      "label": "Outcomes"
+    },
+    {
+      "header": "pricing|currency",
+      "path": "pricing.currency",
+      "type": "text",
+      "required": true,
+      "label": "Currency"
+    },
+    {
+      "header": "pricing|base_price",
+      "path": "pricing.base_price",
+      "type": "number",
+      "required": true,
+      "label": "Base Price"
+    },
+    {
+      "header": "capacity_meal|meal_option",
+      "path": "capacity_meal.meal_option",
+      "type": "select",
+      "required": true,
+      "label": "Meal Option"
+    },
+    {
+      "header": "capacity_meal|base_capacity",
+      "path": "capacity_meal.base_capacity",
+      "type": "number",
+      "required": true,
+      "label": "Default Capacity"
+    },
+    {
+      "header": "portal_config|is_course_type",
+      "path": "portal_config.is_course_type",
+      "type": "boolean",
+      "required": false,
+      "label": "Treat as course on portal"
+    },
+    {
+      "header": "portal_config|show_care_service",
+      "path": "portal_config.show_care_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Show Care Service on session page"
+    },
+    {
+      "header": "portal_config|show_meal_service",
+      "path": "portal_config.show_meal_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Show Meal Service on session page"
+    },
+    {
+      "header": "program_lists|activities",
+      "path": "program_lists.activities",
+      "type": "array",
+      "required": false,
+      "label": "Activities"
+    },
+    {
+      "header": "program_lists|equipment_list",
+      "path": "program_lists.equipment_list",
+      "type": "array",
+      "required": false,
+      "label": "Equipment List"
+    }
+  ]
+}

@@ -25,11 +25,14 @@ import {
   CloudCog,
   Map,
   Sparkles,
+  BarChart3,
   Settings,
   ArrowRight,
   CheckCircle2,
   FileSpreadsheet,
   AlertTriangle,
+  Database,
+  ClipboardList,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -47,6 +50,8 @@ const operationIcons = {
   configuration: ListOrdered,
   example: MapPin,
   templates: BookOpen,
+  "data-ops": Database,
+  "data-reference": ClipboardList,
   "data-import": FileSpreadsheet,
   notes: CheckCircle2,
 } as const
@@ -55,6 +60,7 @@ const deploymentIcons = {
   "deployment-vercel": CloudCog,
   "deployment-google-map": Map,
   "deployment-google-gemini": Sparkles,
+  "deployment-traffic-analytics": BarChart3,
 } as const
 
 export default function AdminGuidePage() {
@@ -348,11 +354,278 @@ export default function AdminGuidePage() {
                 </AccordionContent>
               </AccordionItem>
 
+              <AccordionItem value="data-ops" id="data-ops" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                <AccordionTrigger className="hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <Database className="h-4 w-4" />
+                    {navTitle(operationItems[4])}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-8 text-sm">
+                    <div>
+                      <p className="font-medium">{t.dataOpsDesc}</p>
+                      <div className="mt-3 space-y-2 text-muted-foreground">
+                        {t.dataOpsIntro.map((p) => (
+                          <p key={p}>{p}</p>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {t.dataOpsPhases.map((phase) => (
+                        <div key={phase.title} className="rounded-lg border p-4 bg-muted/20">
+                          <h3 className="font-semibold">{phase.title}</h3>
+                          <p className="text-muted-foreground mt-1">{phase.summary}</p>
+                          <ul className="list-disc list-inside mt-2 space-y-1 text-muted-foreground">
+                            {phase.items.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataOpsMappingTitle}</h3>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-xs md:text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-2 font-medium">Admin</th>
+                              <th className="text-left p-2 font-medium hidden sm:table-cell">DB</th>
+                              <th className="text-left p-2 font-medium">{lang === "zh" ? "官网" : "Website"}</th>
+                              <th className="text-left p-2 font-medium">CSV</th>
+                              <th className="text-left p-2 font-medium hidden md:table-cell">
+                                {lang === "zh" ? "维护方式" : "How"}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {t.dataOpsMappingRows.map((row) => (
+                              <tr key={row.admin} className="border-b last:border-0">
+                                <td className="p-2 align-top font-medium">{row.admin}</td>
+                                <td className="p-2 align-top font-mono text-xs hidden sm:table-cell">{row.db}</td>
+                                <td className="p-2 align-top text-muted-foreground">{row.web}</td>
+                                <td className="p-2 align-top text-muted-foreground">{row.csv}</td>
+                                <td className="p-2 align-top text-muted-foreground hidden md:table-cell">{row.how}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <div className="rounded-lg border p-4 space-y-3">
+                        <h3 className="font-semibold">{t.dataOpsOfferingTitle}</h3>
+                        {t.dataOpsOfferingBody.map((p) => (
+                          <p key={p} className="text-muted-foreground">
+                            {p}
+                          </p>
+                        ))}
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                          {t.dataOpsOfferingSteps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ol>
+                        <ul className="list-disc list-inside space-y-1 text-muted-foreground border-t pt-3">
+                          {t.dataOpsOfferingCols.map((col) => (
+                            <li key={col}>{col}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="rounded-lg border p-4 space-y-3">
+                        <h3 className="font-semibold">{t.dataOpsInstanceTitle}</h3>
+                        {t.dataOpsInstanceBody.map((p) => (
+                          <p key={p} className="text-muted-foreground">
+                            {p}
+                          </p>
+                        ))}
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                          {t.dataOpsInstanceSteps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ol>
+                        <ul className="list-disc list-inside space-y-1 text-muted-foreground border-t pt-3">
+                          {t.dataOpsInstanceCols.map((col) => (
+                            <li key={col}>{col}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-3">{t.dataOpsTermSopTitle}</h3>
+                      <div className="space-y-3">
+                        {t.dataOpsTermSop.map((item, index) => (
+                          <div key={item.step} className="flex gap-3 rounded-lg border p-4 bg-muted/20">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold">
+                              {index + 1}
+                            </div>
+                            <div>
+                              <p className="font-medium">{item.step}</p>
+                              <p className="text-muted-foreground mt-1">{item.detail}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataOpsOpsTitle}</h3>
+                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                        {t.dataOpsOpsItems.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataOpsTroubleTitle}</h3>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">{lang === "zh" ? "现象" : "Issue"}</th>
+                              <th className="text-left p-3 font-medium">{lang === "zh" ? "处理" : "Fix"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {t.dataOpsTroubleRows.map((row) => (
+                              <tr key={row.issue} className="border-b last:border-0">
+                                <td className="p-3 align-top font-medium">{row.issue}</td>
+                                <td className="p-3 align-top text-muted-foreground">{row.fix}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <p className="text-muted-foreground text-xs">{t.dataOpsDocRefs}</p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="data-reference" id="data-reference" className="scroll-mt-24 border rounded-lg px-4 mb-2">
+                <AccordionTrigger className="hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4" />
+                    {navTitle(operationItems[5])}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-8 text-sm">
+                    <div>
+                      <p className="font-medium">{t.dataRefDesc}</p>
+                      <ul className="list-disc list-inside mt-3 space-y-1 text-muted-foreground">
+                        {t.dataRefPrereqs.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataRefScriptsTitle}</h3>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-xs md:text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-2 font-medium">{lang === "zh" ? "脚本" : "Script"}</th>
+                              <th className="text-left p-2 font-medium">{lang === "zh" ? "作用" : "Purpose"}</th>
+                              <th className="text-left p-2 font-medium hidden lg:table-cell">
+                                {lang === "zh" ? "何时使用" : "When"}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {t.dataRefScripts.map((row) => (
+                              <tr key={row.script} className="border-b last:border-0">
+                                <td className="p-2 align-top font-mono text-xs whitespace-nowrap">{row.script}</td>
+                                <td className="p-2 align-top text-muted-foreground">{row.purpose}</td>
+                                <td className="p-2 align-top text-muted-foreground hidden lg:table-cell">{row.when}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataRefFilesTitle}</h3>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-xs md:text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-2 font-medium">{lang === "zh" ? "路径" : "Path"}</th>
+                              <th className="text-left p-2 font-medium">{lang === "zh" ? "用途" : "Role"}</th>
+                              <th className="text-left p-2 font-medium hidden md:table-cell">
+                                {lang === "zh" ? "示例" : "Example"}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {t.dataRefFiles.map((row) => (
+                              <tr key={row.path} className="border-b last:border-0">
+                                <td className="p-2 align-top font-mono text-xs">{row.path}</td>
+                                <td className="p-2 align-top text-muted-foreground">{row.role}</td>
+                                <td className="p-2 align-top font-mono text-xs text-muted-foreground hidden md:table-cell">
+                                  {row.example}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataRefModeTitle}</h3>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="text-left p-3 font-medium">{lang === "zh" ? "场景" : "Scenario"}</th>
+                              <th className="text-left p-3 font-medium">{lang === "zh" ? "工作流" : "Workflow"}</th>
+                              <th className="text-left p-3 font-medium hidden lg:table-cell">
+                                {lang === "zh" ? "涉及文件" : "Files"}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {t.dataRefModes.map((row) => (
+                              <tr key={row.scenario} className="border-b last:border-0">
+                                <td className="p-3 align-top">{row.scenario}</td>
+                                <td className="p-3 align-top font-medium">{row.workflow}</td>
+                                <td className="p-3 align-top font-mono text-xs text-muted-foreground hidden lg:table-cell">
+                                  {row.files}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">{t.dataRefOrderTitle}</h3>
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        {t.dataRefOrderSteps.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
               <AccordionItem value="data-import" id="data-import" className="scroll-mt-24 border rounded-lg px-4 mb-2">
                 <AccordionTrigger className="hover:no-underline">
                   <span className="flex items-center gap-2">
                     <FileSpreadsheet className="h-4 w-4" />
-                    {navTitle(operationItems[4])}
+                    {navTitle(operationItems[6])}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent>
@@ -443,7 +716,7 @@ export default function AdminGuidePage() {
                 <AccordionTrigger className="hover:no-underline">
                   <span className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4" />
-                    {navTitle(operationItems[5])}
+                    {navTitle(operationItems[7])}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent>
@@ -534,6 +807,52 @@ export default function AdminGuidePage() {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent>{renderSteps(deploymentContent.gemini[lang].steps)}</AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                value="deployment-traffic-analytics"
+                id="deployment-traffic-analytics"
+                className="scroll-mt-24 border rounded-lg px-4 mb-2"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    {navTitle(deploymentItems[3])}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-6">
+                    <p className="text-sm text-muted-foreground">{deploymentContent.traffic[lang].intro}</p>
+                    {renderSteps(deploymentContent.traffic[lang].steps)}
+                    <div className="overflow-x-auto rounded-md border text-sm">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="text-left p-3 font-medium">
+                              {lang === "zh" ? "变量" : "Variable"}
+                            </th>
+                            <th className="text-left p-3 font-medium">
+                              {lang === "zh" ? "说明" : "Description"}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-muted-foreground">
+                          {deploymentContent.traffic[lang].envTable.map((row) => (
+                            <tr key={row.key} className="border-b last:border-0">
+                              <td className="p-3 font-mono text-xs whitespace-pre-wrap">{row.key}</td>
+                              <td className="p-3">{row.desc}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                      {deploymentContent.traffic[lang].notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </AccordionContent>
               </AccordionItem>
             </Accordion>
           </CardContent>

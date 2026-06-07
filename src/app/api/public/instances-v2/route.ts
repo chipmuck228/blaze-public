@@ -2,6 +2,14 @@ import { NextResponse } from "next/server"
 import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { supabaseAdmin } from "@/lib/supabase"
 import { normalizeRemoteImageUrl } from "@/lib/normalize-image-url"
+import {
+  catalogCols,
+  catalogFrom,
+  catalogSelect,
+  catalogTables,
+  isMissingSessionPortalColumnError,
+  resolveCatalogCategoryFromRow,
+} from "@/lib/catalog-db"
 
 type InstanceV2Row = Record<string, unknown>
 
@@ -25,6 +33,25 @@ function asNumber(value: unknown, fallback = 0): number {
   return fallback
 }
 
+function resolvePortalServiceRole(row: InstanceV2Row): string | null {
+  const direct = row.portal_service_role
+  if (typeof direct === "string" && direct.trim()) return direct.trim()
+  const offering = asRecord(Array.isArray(row.offering) ? row.offering[0] : row.offering)
+  const typeConfig = asRecord(offering?.type_config_data)
+  const raw = typeConfig?.portal_service_role
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null
+}
+
+function resolveIsCourseType(row: InstanceV2Row, offeringTypeCode: string | null): boolean {
+  if (typeof row.is_course_type === "boolean") return row.is_course_type
+  const offering = asRecord(Array.isArray(row.offering) ? row.offering[0] : row.offering)
+  const typeConfig = asRecord(offering?.type_config_data)
+  const portalConfig = asRecord(typeConfig?.portal_config)
+  if (typeof portalConfig?.is_course_type === "boolean") return portalConfig.is_course_type
+  if (offeringTypeCode === "course") return portalConfig?.is_course_type !== false
+  return !!portalConfig?.is_course_type
+}
+
 /**
  * GET /api/public/instances-v2?category=xxx&location=yyy&offering_type=camp|course|all&portal_service_role=meal_service|care_service
  * Returns enrollable instances from v2_instance only (instance_v2 已废弃，不再使用).
@@ -46,103 +73,50 @@ export async function GET(request: Request) {
         ? portalServiceRoleParam
         : null
 
-    console.log("[v2_instance] Request params:", { categoryId, locationCode, offeringTypeParam, portalServiceRole })
+    console.log(`[${catalogTables.session}] Request params:`, { categoryId, locationCode, offeringTypeParam, portalServiceRole })
 
     let franchiseId: string | null = null
     if (locationCode) {
-      const { data: f, error: fErr } = await supabaseAdmin
-        .from("v2_franchise")
+      const { data: f, error: fErr } = await catalogFrom("campus")
         .select("id")
         .eq("code", locationCode.toLowerCase())
         .eq("is_active", true)
         .maybeSingle()
       franchiseId = f?.id ?? null
-      console.log("[v2_instance] Franchise lookup by code:", { locationCode, franchiseId, error: fErr?.message })
+      console.log(`[${catalogTables.session}] Franchise lookup by code:`, { locationCode, franchiseId, error: fErr?.message })
     }
 
     // v2_instance: select both table columns (start_date, end_date, etc.) and instance_data_ext; prefer table columns when present
     // C-end programs page: only show course-type instances (is_course_type = true)
-    let query = supabaseAdmin
-      .from("v2_instance")
-      .select(
-        `
-        id,
-        program_id,
-        offering_id,
-        campus_id,
-        status,
-        price_override,
-        current_students,
-        start_date,
-        end_date,
-        start_time,
-        end_time,
-        max_students,
-        is_course_type,
-        days_of_week,
-        portal_service_role,
-        instance_data_ext,
-        program:v2_program!inner(
-          id,
-          name,
-          display_name,
-          description,
-          category_id,
-          franchise_id,
-          category:v2_category(
-            id,
-            name,
-            display_name
-          ),
-          franchise:v2_franchise(
-            id,
-            code,
-            name
-          )
-        ),
-        offering:v2_offering!inner(
-          id,
-          name,
-          slug,
-          description,
-          base_price,
-          poster_url,
-          status,
-          category_id,
-          category:v2_category(
-            id,
-            name,
-            display_name
-          ),
-          offering_type:v2_offering_type(
-            id,
-            code,
-            name
-          )
-        ),
-        campus:v2_campus(
-          id,
-          name,
-          display_name,
-          address,
-          city,
-          state
-        )
-      `
-      )
+    let query = catalogFrom("session")
+      .select(catalogSelect.publicInstancesCatalog({ includePortalFields: true }))
       .eq("is_active", true)
       .in("status", ["scheduled", "ongoing"])
 
     if (franchiseId) {
-      query = query.eq("program.franchise_id", franchiseId)
+      query = query.eq(`program.${catalogCols.series.campusId}`, franchiseId)
     }
     if (portalServiceRole) {
       query = query.eq("portal_service_role", portalServiceRole)
     }
 
-    const { data: rows, error } = await query
+    let { data: rows, error } = await query
 
-    console.log("[v2_instance] Supabase response:", {
+    if (error && isMissingSessionPortalColumnError(error)) {
+      console.warn(
+        `[${catalogTables.session}] is_course_type/portal_service_role missing — run v3/17_v3_session_portal_columns.sql in Supabase SQL Editor`
+      )
+      let fallbackQuery = catalogFrom("session")
+        .select(catalogSelect.publicInstancesCatalog({ includePortalFields: false }))
+        .eq("is_active", true)
+        .in("status", ["scheduled", "ongoing"])
+      if (franchiseId) {
+        fallbackQuery = fallbackQuery.eq(`program.${catalogCols.series.campusId}`, franchiseId)
+      }
+      ;({ data: rows, error } = await fallbackQuery)
+    }
+
+    console.log(`[${catalogTables.session}] Supabase response:`, {
       rowsCount: rows?.length ?? 0,
       error: error ? { message: getErrorMessage(error), code: error.code, details: error.details } : null,
       firstRow: rows?.[0]
@@ -156,7 +130,7 @@ export async function GET(request: Request) {
     })
 
     if (error) {
-      console.error("[v2_instance] Error:", error)
+      console.error(`[${catalogTables.session}] Error:`, error)
       return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 })
     }
 
@@ -170,22 +144,21 @@ export async function GET(request: Request) {
     }
 
     // C-end: portal_service_role filter for detail-page Meal/Care blocks; otherwise catalog by offering_type param
-    let list: InstanceV2Row[] = (rows || []) as InstanceV2Row[]
+    let list: InstanceV2Row[] = (rows || []) as unknown as InstanceV2Row[]
     if (portalServiceRole) {
-      list = list.filter((row) => row?.portal_service_role === portalServiceRole)
+      list = list.filter((row) => resolvePortalServiceRole(row) === portalServiceRole)
     } else if (offeringTypeParam === "all") {
-      list = list.filter((row) => !row?.portal_service_role)
+      list = list.filter((row) => !resolvePortalServiceRole(row))
     } else if (offeringTypeParam) {
       list = list.filter((row) => getOfferingTypeCode(row) === offeringTypeParam)
     } else {
-      list = list.filter((row) => row?.is_course_type === true)
+      list = list.filter((row) => resolveIsCourseType(row, getOfferingTypeCode(row)))
     }
     if (categoryId) {
       list = list.filter((row) => {
+        const program = asRecord(Array.isArray(row.program) ? row.program[0] : row.program)
         const offering = asRecord(Array.isArray(row.offering) ? row.offering[0] : row.offering)
-        const cat = asRecord(
-          Array.isArray(offering?.category) ? offering.category[0] : offering?.category
-        )
+        const cat = resolveCatalogCategoryFromRow(program, offering)
         return cat?.id === categoryId
       })
     }
@@ -213,8 +186,8 @@ export async function GET(request: Request) {
     })
 
     if (list.length === 0) {
-      const { count: instanceCount } = await supabaseAdmin.from("v2_instance").select("*", { count: "exact", head: true })
-      console.log("[v2_instance] No rows returned. Diagnostic (v2_instance only): total count=", instanceCount, "filter: categoryId=", categoryId, "franchiseId=", franchiseId, "portal_service_role=", portalServiceRole)
+      const { count: instanceCount } = await supabaseAdmin.from(catalogTables.session).select("*", { count: "exact", head: true })
+      console.log(`[${catalogTables.session}] No rows returned. Diagnostic (v2_instance only): total count=`, instanceCount, "filter: categoryId=", categoryId, "franchiseId=", franchiseId, "portal_service_role=", portalServiceRole)
     }
 
     const franchiseMap = new Map<
@@ -245,10 +218,8 @@ export async function GET(request: Request) {
       const fr = asRecord(program.franchise)
       if (!fr?.id || typeof fr.id !== "string") continue
       if (!offering || offering.status !== "published") continue
-      const offeringCategory = asRecord(
-        Array.isArray(offering.category) ? offering.category[0] : offering.category
-      )
-      if (!offeringCategory?.id || typeof offeringCategory.id !== "string") continue
+      const catalogCategory = resolveCatalogCategoryFromRow(program, offering)
+      if (!catalogCategory?.id || typeof catalogCategory.id !== "string") continue
       const franchiseKey = fr.id as string
       if (!franchiseMap.has(franchiseKey)) {
         franchiseMap.set(franchiseKey, {
@@ -261,7 +232,7 @@ export async function GET(request: Request) {
       const franchiseData = franchiseMap.get(franchiseKey)!
       // Same v2_program can appear under multiple C-end Programs when offerings differ by category
       const programId = String(program.id ?? "")
-      const programKey = `${programId}:${offeringCategory.id}`
+      const programKey = `${programId}:${catalogCategory.id}`
       if (!franchiseData.programs.has(programKey)) {
         franchiseData.programs.set(programKey, {
           id: programId,
@@ -270,9 +241,9 @@ export async function GET(request: Request) {
           description:
             typeof program.description === "string" ? program.description : undefined,
           category: {
-            id: offeringCategory.id as string,
-            name: String(offeringCategory.name ?? ""),
-            display_name: String(offeringCategory.display_name ?? offeringCategory.name ?? ""),
+            id: catalogCategory.id as string,
+            name: String(catalogCategory.name ?? ""),
+            display_name: String(catalogCategory.display_name ?? catalogCategory.name ?? ""),
           },
           instances: [],
         })
@@ -384,7 +355,7 @@ export async function GET(request: Request) {
       }))
       .filter((f) => f.programs.length > 0)
 
-    console.log("[v2_instance] Result:", {
+    console.log(`[${catalogTables.session}] Result:`, {
       franchiseMapSize: franchiseMap.size,
       franchisesCount: franchises.length,
       programsPerFranchise: franchises.map((f) => ({ code: f.code, programs: f.programs.length, instances: f.programs.reduce((s, p) => s + p.instances.length, 0) })),
@@ -392,7 +363,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ franchises }, { status: 200 })
   } catch (err: unknown) {
-    console.error("[v2_instance] Error:", err)
+    console.error(`[${catalogTables.session}] Error:`, err)
     return NextResponse.json(
       { error: err instanceof Error ? getErrorMessage(err) : "Failed to fetch instances" },
       { status: 500 }

@@ -1,0 +1,116 @@
+{
+  "offering_type_code": "course",
+  "offering_type_id": "25ad93d1-688f-43a6-b436-572e48e80e1a",
+  "schema_updated_at": "2026-05-28T16:33:16.194279+00:00",
+  "schema_hash": "1b330e1804295c97",
+  "fixed_columns": [
+    "id",
+    "slug",
+    "Title",
+    "Offering Type",
+    "Program (tag)",
+    "Status",
+    "Description for admin",
+    "Image Link"
+  ],
+  "columns": [
+    {
+      "header": "content|description",
+      "path": "content.description",
+      "type": "text",
+      "required": true,
+      "label": "Description"
+    },
+    {
+      "header": "content|prerequisites",
+      "path": "content.prerequisites",
+      "type": "text",
+      "required": false,
+      "label": "Prerequisites"
+    },
+    {
+      "header": "content|target_audience",
+      "path": "content.target_audience",
+      "type": "text",
+      "required": false,
+      "label": "Target Audience"
+    },
+    {
+      "header": "content|learning_outcomes",
+      "path": "content.learning_outcomes",
+      "type": "text",
+      "required": false,
+      "label": "What Will You Get"
+    },
+    {
+      "header": "content|curriculum_outline",
+      "path": "content.curriculum_outline",
+      "type": "text",
+      "required": false,
+      "label": "Index"
+    },
+    {
+      "header": "options|materials_included",
+      "path": "options.materials_included",
+      "type": "boolean",
+      "required": false,
+      "label": "Materials"
+    },
+    {
+      "header": "options|certificate_available",
+      "path": "options.certificate_available",
+      "type": "boolean",
+      "required": false,
+      "label": "Certificate"
+    },
+    {
+      "header": "pricing|currency",
+      "path": "pricing.currency",
+      "type": "text",
+      "required": true,
+      "label": "Currency"
+    },
+    {
+      "header": "pricing|base_price",
+      "path": "pricing.base_price",
+      "type": "number",
+      "required": true,
+      "label": "Base Price"
+    },
+    {
+      "header": "portal_config|is_course_type",
+      "path": "portal_config.is_course_type",
+      "type": "boolean",
+      "required": false,
+      "label": "Course-class"
+    },
+    {
+      "header": "portal_config|show_care_service",
+      "path": "portal_config.show_care_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show [Care Service] on Instance Detail Page"
+    },
+    {
+      "header": "portal_config|show_meal_service",
+      "path": "portal_config.show_meal_service",
+      "type": "boolean",
+      "required": false,
+      "label": "Refer/Show [Meal Service] on Instance Detail Page"
+    },
+    {
+      "header": "capacity_sessions|base_capacity",
+      "path": "capacity_sessions.base_capacity",
+      "type": "number",
+      "required": true,
+      "label": "Base Capacity"
+    },
+    {
+      "header": "capacity_sessions|base_sessions_count",
+      "path": "capacity_sessions.base_sessions_count",
+      "type": "number",
+      "required": true,
+      "label": "Base Occurrences"
+    }
+  ]
+}

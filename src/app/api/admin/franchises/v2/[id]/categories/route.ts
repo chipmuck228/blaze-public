@@ -1,11 +1,45 @@
 import { NextResponse } from "next/server"
-import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
+import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import {
+  campusStageMapConflictKey,
+  campusStageMapWriteRow,
+  catalogTables,
+  catalogCols,
+  normalizeCampusStageMapRow,
+} from "@/lib/catalog-db"
+
+const mapCampusFk = () => catalogCols.campusStageMap.campusId
+const mapStageFk = () => catalogCols.campusStageMap.stageId
+
+function mapSelectFields(): string {
+  return `
+    id,
+    ${mapCampusFk()},
+    ${mapStageFk()},
+    is_visible,
+    display_order,
+    created_at,
+    updated_at,
+    category:${catalogTables.stage}(
+      id,
+      name,
+      display_name,
+      description,
+      poster_url,
+      config_base,
+      display_order,
+      is_active,
+      created_at,
+      updated_at
+    )
+  `
+}
 
 // 获取 franchise 订阅的所有 categories（包含订阅信息）
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -15,44 +49,24 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 获取 franchise 订阅的所有 categories，包含订阅信息
     const { data, error } = await supabaseAdmin
-      .from("v2_franchise_category_map")
-      .select(`
-        id,
-        franchise_id,
-        category_id,
-        is_visible,
-        display_order,
-        created_at,
-        updated_at,
-        category:v2_category(
-          id,
-          name,
-          display_name,
-          description,
-          poster_url,
-          config_base,
-          display_order,
-          is_active,
-          created_at,
-          updated_at
-        )
-      `)
-      .eq("franchise_id", franchiseId)
+      .from(catalogTables.campusStageMap)
+      .select(mapSelectFields())
+      .eq(mapCampusFk(), franchiseId)
       .order("display_order", { ascending: true })
 
     if (error) {
-      console.error("Error fetching franchise categories:", error)
+      console.error(`[${catalogTables.campusStageMap}] Error fetching franchise categories:`, error)
       return NextResponse.json(
         { error: getErrorMessage(error) || "Failed to fetch franchise categories" },
         { status: 500 }
       )
     }
 
-    return NextResponse.json(data || [], { status: 200 })
+    const rows = (data || []).map((row) => normalizeCampusStageMapRow(row))
+    return NextResponse.json(rows, { status: 200 })
   } catch (error: unknown) {
-    console.error("Error fetching franchise categories:", error)
+    console.error(`[${catalogTables.campusStageMap}] Error fetching franchise categories:`, error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to fetch franchise categories" },
       { status: 500 }
@@ -82,40 +96,31 @@ export async function POST(
       )
     }
 
-    // 检查 franchise 是否存在
     const { data: franchise, error: franchiseError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("id")
       .eq("id", franchiseId)
       .single()
 
     if (franchiseError || !franchise) {
-      return NextResponse.json(
-        { error: "Franchise not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Franchise not found" }, { status: 404 })
     }
 
-    // 检查 category 是否存在
     const { data: category, error: categoryError } = await supabaseAdmin
-      .from("v2_category")
+      .from(catalogTables.stage)
       .select("id")
       .eq("id", category_id)
       .single()
 
     if (categoryError || !category) {
-      return NextResponse.json(
-        { error: "Category not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Category not found" }, { status: 404 })
     }
 
-    // 检查是否已经订阅
     const { data: existing, error: existingError } = await supabaseAdmin
-      .from("v2_franchise_category_map")
+      .from(catalogTables.campusStageMap)
       .select("id")
-      .eq("franchise_id", franchiseId)
-      .eq("category_id", category_id)
+      .eq(mapCampusFk(), franchiseId)
+      .eq(mapStageFk(), category_id)
       .single()
 
     if (existing && !existingError) {
@@ -125,40 +130,41 @@ export async function POST(
       )
     }
 
-    // 创建订阅关系
     const { data, error } = await supabaseAdmin
-      .from("v2_franchise_category_map")
-      .insert({
-        franchise_id: franchiseId,
-        category_id,
-        is_visible: is_visible !== undefined ? is_visible : true,
-        display_order: display_order || 0,
-      })
+      .from(catalogTables.campusStageMap)
+      .insert(
+        campusStageMapWriteRow(franchiseId, category_id, {
+          is_visible,
+          display_order,
+        })
+      )
       .select(`
         *,
-        category:v2_category(*)
+        category:${catalogTables.stage}(*)
       `)
       .single()
 
     if (error) {
-      console.error("Error creating subscription:", error)
-      
+      console.error(`[${catalogTables.campusStageMap}] Error creating subscription:`, error)
+
       if (error.code === "23505") {
         return NextResponse.json(
           { error: "Franchise already subscribed to this category" },
           { status: 400 }
         )
       }
-      
+
       return NextResponse.json(
         { error: getErrorMessage(error) || "Failed to create subscription" },
         { status: 500 }
       )
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(normalizeCampusStageMapRow(data), {
+      status: 201,
+    })
   } catch (error: unknown) {
-    console.error("Error creating subscription:", error)
+    console.error(`[${catalogTables.campusStageMap}] Error creating subscription:`, error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to create subscription" },
       { status: 500 }
@@ -179,7 +185,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { subscriptions } = body // Array of { category_id, is_visible, display_order }
+    const { subscriptions } = body
 
     if (!Array.isArray(subscriptions)) {
       return NextResponse.json(
@@ -188,24 +194,17 @@ export async function PUT(
       )
     }
 
-    // 使用事务更新所有订阅
     const updates = subscriptions.map(async (sub: Record<string, unknown>) => {
       const { category_id, is_visible, display_order } = sub
-      
-      if (!category_id) {
+
+      if (!category_id || typeof category_id !== "string") {
         throw new Error("Missing category_id in subscription")
       }
 
-      // 使用 upsert 更新或创建订阅
       const { data, error } = await supabaseAdmin
-        .from("v2_franchise_category_map")
-        .upsert({
-          franchise_id: franchiseId,
-          category_id,
-          is_visible: is_visible !== undefined ? is_visible : true,
-          display_order: display_order || 0,
-        }, {
-          onConflict: "franchise_id,category_id"
+        .from(catalogTables.campusStageMap)
+        .upsert(campusStageMapWriteRow(franchiseId, category_id, { is_visible: is_visible as boolean | undefined, display_order: display_order as number | undefined }), {
+          onConflict: campusStageMapConflictKey(),
         })
         .select()
         .single()
@@ -214,14 +213,14 @@ export async function PUT(
         throw error
       }
 
-      return data
+      return normalizeCampusStageMapRow(data)
     })
 
     const results = await Promise.all(updates)
 
     return NextResponse.json({ subscriptions: results }, { status: 200 })
   } catch (error: unknown) {
-    console.error("Error updating subscriptions:", error)
+    console.error(`[${catalogTables.campusStageMap}] Error updating subscriptions:`, error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to update subscriptions" },
       { status: 500 }

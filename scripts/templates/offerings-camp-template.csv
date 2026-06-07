@@ -1,0 +1,2 @@
+id,slug,Title,Offering Type,Program (tag),Status,Description for admin,Image Link,content|description,content|prerequisites,content|target_audience,content|learning_outcomes,pricing|currency,pricing|base_price,capacity_meal|meal_option,capacity_meal|base_capacity,portal_config|is_course_type,portal_config|show_care_service,portal_config|show_meal_service,program_lists|activities,program_lists|equipment_list
+,,Example Offering,camp,Explore,draft,,,(required Description),,,,(required Currency),1,standard,1,No,No,No,,

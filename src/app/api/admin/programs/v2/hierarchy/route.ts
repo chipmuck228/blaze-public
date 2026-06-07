@@ -3,6 +3,12 @@ import {getErrorMessage, type StringKeyRecord} from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
 import { unwrapRelation } from "@/lib/supabase-relation"
+import {
+  catalogCols,
+  catalogTables,
+  normalizeSessionRow,
+  sessionLocationEmbed,
+} from "@/lib/catalog-db"
 
 // 获取 programs 的层级结构（Franchise -> Category -> Program -> Instance）
 export async function GET(request: Request) {
@@ -18,7 +24,7 @@ export async function GET(request: Request) {
 
     // 1. 获取所有 franchises
     let franchisesQuery = supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("id, code, name, is_active")
       .order("name", { ascending: true })
 
@@ -44,13 +50,14 @@ export async function GET(request: Request) {
     const hierarchy = await Promise.all(
       franchises.map(async (franchise) => {
         // 获取 franchise 订阅的 categories
+        const mapStageFk = catalogCols.campusStageMap.stageId
         const { data: categoryMaps, error: categoryMapsError } = await supabaseAdmin
-          .from("v2_franchise_category_map")
+          .from(catalogTables.campusStageMap)
           .select(`
-            category_id,
+            ${mapStageFk},
             is_visible,
             display_order,
-            category:v2_category(
+            category:${catalogTables.stage}(
               id,
               name,
               display_name,
@@ -59,7 +66,7 @@ export async function GET(request: Request) {
               is_active
             )
           `)
-          .eq("franchise_id", franchise.id)
+          .eq(catalogCols.campusStageMap.campusId, franchise.id)
           .order("display_order", { ascending: true })
 
         if (categoryMapsError) {
@@ -84,7 +91,7 @@ export async function GET(request: Request) {
           categories.map(async (category) => {
             // 获取该 category 下的 programs
             const { data: programs, error: programsError } = await supabaseAdmin
-              .from("v2_program")
+              .from(catalogTables.series)
               .select(`
                 id,
                 name,
@@ -99,8 +106,8 @@ export async function GET(request: Request) {
                 created_at,
                 updated_at
               `)
-              .eq("franchise_id", franchise.id)
-              .eq("category_id", category.id)
+              .eq(catalogCols.series.campusId, franchise.id)
+              .eq(catalogCols.series.stageId, category.id)
               .order("display_order", { ascending: true })
               .order("start_date", { ascending: false })
 
@@ -115,13 +122,15 @@ export async function GET(request: Request) {
             // 为每个 program 获取 instances
             const programsWithInstances = await Promise.all(
               (programs || []).map(async (program) => {
+                const seriesIdCol = catalogCols.session.seriesId
+                const locationIdCol = catalogCols.session.locationId
                 const { data: instances, error: instancesError } = await supabaseAdmin
-                  .from("v2_instance")
+                  .from(catalogTables.session)
                   .select(`
                     id,
-                    program_id,
+                    ${seriesIdCol},
                     offering_id,
-                    campus_id,
+                    ${locationIdCol},
                     price_override,
                     start_date,
                     end_date,
@@ -134,26 +143,22 @@ export async function GET(request: Request) {
                     instance_data_ext,
                     status,
                     is_active,
-                    offering:v2_offering(
+                    offering:${catalogTables.offering}(
                       id,
                       name,
                       slug,
                       description,
                       base_price,
                       currency,
-                      offering_type:v2_offering_type(
+                      offering_type:${catalogTables.offeringType}(
                         code,
                         name,
                         instance_schema
                       )
                     ),
-                    campus:v2_campus(
-                      id,
-                      name,
-                      display_name
-                    )
+                    ${sessionLocationEmbed("id, name, display_name")}
                   `)
-                  .eq("program_id", program.id)
+                  .eq(catalogCols.session.seriesId, program.id)
                   .order("start_date", { ascending: true })
 
                 if (instancesError) {
@@ -166,7 +171,7 @@ export async function GET(request: Request) {
 
                 return {
                   ...program,
-                  instances: instances || [],
+                  instances: (instances || []).map((row) => normalizeSessionRow(row)),
                 }
               })
             )

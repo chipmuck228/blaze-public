@@ -20,7 +20,7 @@ Always use `@/` → `src/`. Key directories:
 - `src/lib/` — db, stripe, permissions, email, traffic
 - `src/hooks/`, `src/contexts/`
 - `v2/` — V2 database DDL scripts (schema source of truth)
-- `scripts/` — migrations and manual integration tests (no Jest/Vitest)
+- `scripts/` — migrations, catalog CSV import (`design/offering-csv-import.md`, `design/instance-csv-import.md`), manual integration tests (no Jest/Vitest)
 - `_archive/` — isolated legacy code pending deletion (see `LEGACY_MANIFEST.md`)
 
 ## Global Rules

@@ -1,0 +1,143 @@
+---
+description: Traffic analytics — collection, attribution, admin APIs, and channel rules
+globs:
+  - src/**/traffic/**
+  - src/lib/traffic-*.ts
+  - src/lib/gsc-client.ts
+  - src/lib/traffic-gsc-sync.ts
+  - src/components/TrafficTracker.tsx
+  - src/components/admin/traffic/**
+alwaysApply: false
+---
+
+# Traffic Analytics
+
+Operational web analytics for Blaze public site. **Not** part of the Web product hierarchy (Campus → Session). See `product-hierarchy.mdc` for catalog terms.
+
+## Scope
+
+- **Collect** on public C-end pages via [`TrafficTracker`](src/components/TrafficTracker.tsx) in root layout.
+- **Do not** treat traffic tables as enrollment, payment, or franchise source of truth.
+- **Admin-only** read APIs under `/api/admin/traffic/*` (`role === 'admin'`).
+- **Public** write APIs: `POST /api/public/traffic/track`, `POST /api/public/traffic/track-exit` (field validation only; no auth).
+
+Skip tracking on `/admin/*`, `/coach/*`, `/teacher-portal/*`, `/api/*` paths in the tracker.
+
+## Data model (Supabase)
+
+| Table | Purpose |
+|-------|---------|
+| `traffic_sessions` | Cookie `session_id`, first/last visit, `pageview_count`, `is_bounce` |
+| `traffic_visits` | One row per visit; `referrer`, `source_type`, device/browser/OS, `ip_address`, optional `country_code`, `region`, `city` (edge geo at track time) |
+| `traffic_pageviews` | One row per page load |
+| `traffic_gsc_queries` | GSC `searchanalytics.query` rows (synced by cron); not joinable to visits for keyword attribution |
+
+### Terms
+
+- **Session**: browser cookie `traffic_session_id` (30-day max-age).
+- **Visit**: first page load after new session or 30+ minutes since last activity in session.
+- **Pageview**: every tracked route change (1s debounce).
+- **Bounce**: session with only one pageview; updated on `track-exit` via `sendBeacon`.
+
+## Attribution (single source of truth)
+
+All classification logic lives in [`src/lib/traffic-utils.ts`](src/lib/traffic-utils.ts).
+
+1. **Client** sends `referrer`, optional `page_url` (for future UTM), and provisional `source_type`.
+2. **Server** recomputes attribution from `referrer` + request host in [`track/route.ts`](src/app/api/public/traffic/track/route.ts); persisted values win over client.
+
+### `source_type` (stored on `traffic_visits`)
+
+| Value | Meaning |
+|-------|---------|
+| `direct` | No external referrer, or same-site referrer |
+| `google` | Google search |
+| `bing` | Bing |
+| `duckduckgo` | DuckDuckGo |
+| `yahoo` | Yahoo search |
+| `baidu` | Baidu |
+| `social` | Known social network referrer |
+| `other` | Other external referrers |
+
+Adding a value requires updating: `traffic-utils.ts`, `formatSourceName` in sources API, admin charts/CSV export, and this table.
+
+### Channel (reporting layer, derived — not a DB column in Phase A)
+
+| Channel | Includes `source_type` |
+|---------|------------------------|
+| `direct` | `direct` |
+| `organic_search` | `google`, `bing`, `duckduckgo`, `yahoo`, `baidu` |
+| `social` | `social` (+ platform from `referrer_domain`) |
+| `other_referral` | `other` |
+
+### Platform labels
+
+Derived from `referrer_domain` for search/social breakdown APIs (e.g. `Google`, `Facebook`, `Instagram`).
+
+## UTM convention (marketing)
+
+Campaign links should use standard UTM params: `utm_source`, `utm_medium`, `utm_campaign`.
+
+- `utm_medium=cpc|paid|ppc` → paid search (Phase B: store `channel=paid_search`).
+- Referrer often missing for Google organic and in-app social browsers; **do not** equate referrer stats with Search Console clicks.
+
+## Privacy
+
+- May store IP and User-Agent for aggregation only.
+- **Never** store names, emails, or auth tokens in traffic tables.
+- Admin UI shows aggregates only.
+
+## API surface (current)
+
+| Endpoint | Role |
+|----------|------|
+| `POST /api/public/traffic/track` | Ingest visit + pageview |
+| `POST /api/public/traffic/track-exit` | Bounce update |
+| `GET /api/admin/traffic/summary` | KPI + MoM |
+| `GET /api/admin/traffic/visits-chart` | Daily trend |
+| `GET /api/admin/traffic/sources` | By `source_type` |
+| `GET /api/admin/traffic/channels` | Channel + search/social breakdown |
+| `GET /api/admin/traffic/referrer-domains` | Top referrer hostnames |
+| `GET /api/admin/traffic/devices` | Device mix |
+| `GET /api/admin/traffic/browsers` | Browser mix |
+| `GET /api/admin/traffic/operating-systems` | OS mix |
+| `GET /api/admin/traffic/stream` | SSE live KPI |
+| `GET /api/admin/traffic/geography` | Visits by country (from `country_code`) |
+| `GET /api/admin/traffic/keywords` | GSC queries aggregated (requires sync) |
+| `GET /api/cron/traffic-gsc-sync` | Pull GSC into `traffic_gsc_queries` (`CRON_SECRET`) |
+
+Date range: shared [`getDateRangeFromParams`](src/lib/traffic-api-utils.ts) (`last_7_days` | `last_30_days` | `last_90_days` | custom).
+
+### Geography
+
+- Resolved in [`src/lib/traffic-geo.ts`](src/lib/traffic-geo.ts) from `x-vercel-ip-*` or `cf-ipcountry` / `cf-region` on `POST track`.
+- DDL: [`v2/13_traffic_visits_geo.sql`](v2/13_traffic_visits_geo.sql). Local dev often has null geo until production edge.
+
+### Search Console (keywords)
+
+- Env: `GSC_SITE_URL`, `GSC_SERVICE_ACCOUNT_JSON` (JSON or base64); service account must be a user on the GSC property.
+- Client: [`src/lib/gsc-client.ts`](src/lib/gsc-client.ts); sync: [`src/lib/traffic-gsc-sync.ts`](src/lib/traffic-gsc-sync.ts).
+- DDL: [`v2/14_traffic_gsc_queries.sql`](v2/14_traffic_gsc_queries.sql).
+- Data lags ~2–3 days; **do not** compare GSC clicks to `traffic_visits` referrer counts.
+
+## Admin UI
+
+- [`/admin/traffic`](src/app/admin/traffic/page.tsx): Traffic | Traffic Sources | Search Keywords (GSC) | Geography.
+- Dashboard snapshot: [`/admin`](src/app/admin/page.tsx) → last 30 days summary.
+
+## Prohibited
+
+- Joining `v2_franchise` / `v2_campus` into traffic fact tables for C-end catalog semantics.
+- Duplicating classification rules outside `traffic-utils.ts`.
+- Using traffic data as billing or enrollment proof.
+
+## Roadmap
+
+- **Done**: Geography columns + GSC sync + Keywords / Geography admin tabs.
+- **Phase B** (optional): Persist `channel`, `source_platform`, `utm_*` on `traffic_visits` instead of deriving only at ingest/report time.
+
+## Limitations (document in UI copy)
+
+- Many social apps omit `Referer`; social traffic is under-counted without UTM links.
+- Google organic search often appears as `direct` when referrer is stripped.
+- Search **keywords** require GSC, not first-party referrer.

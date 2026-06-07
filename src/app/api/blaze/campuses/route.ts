@@ -2,9 +2,15 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import {
+  catalogTables,
+  catalogCols,
+  adminLocationListSelect,
+  normalizeLocationRow,
+  locationWriteFromBody,
+} from "@/lib/catalog-db"
 
-// 获取所有 campuses（支持按 franchiseId 筛选）
-// 使用 v2_campus 表，关联 v2_franchise
+// 获取所有 locations（Admin 称 campus；Web 称 Location）
 export async function GET(request: Request) {
   try {
     const session = await auth()
@@ -17,25 +23,16 @@ export async function GET(request: Request) {
     const activeOnly = searchParams.get("activeOnly") === "true"
 
     let query = supabaseAdmin
-      .from("v2_campus")
-      .select(`
-        *,
-        franchise:v2_franchise(
-          id,
-          code,
-          name
-        )
-      `)
+      .from(catalogTables.location)
+      .select(adminLocationListSelect())
       .order("name", { ascending: true })
 
-    // 如果指定了 activeOnly=true，只返回 active 的 campuses
     if (activeOnly) {
       query = query.eq("is_active", true)
     }
 
-    // 如果提供了 franchise_id，只返回属于该 franchise 的 campuses
     if (franchiseId) {
-      query = query.eq("franchise_id", franchiseId)
+      query = query.eq(catalogCols.location.campusId, franchiseId)
     }
 
     const { data, error } = await query
@@ -44,9 +41,12 @@ export async function GET(request: Request) {
       throw new Error(`Failed to fetch campuses: ${getErrorMessage(error)}`)
     }
 
-    return NextResponse.json(data || [], { status: 200 })
+    const rows = (data || []).map((row) =>
+      normalizeLocationRow(row)
+    )
+    return NextResponse.json(rows, { status: 200 })
   } catch (error: unknown) {
-    console.error("Error fetching campuses:", error)
+    console.error("[v3_location] Error fetching campuses:", error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to fetch campuses" },
       { status: 500 }
@@ -54,8 +54,6 @@ export async function GET(request: Request) {
   }
 }
 
-// 创建新 campus
-// 使用 v2_campus 表，franchise_id 必须引用 v2_franchise
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -64,21 +62,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { 
-      franchise_id,
-      name, 
-      display_name,
-      address, 
-      city, 
-      state, 
-      zip_code,
-      country,
-      phone, 
-      email, 
-      latitude,
-      longitude,
-      is_active
-    } = body
+    const { franchise_id, name, display_name } = body
 
     if (!name) {
       return NextResponse.json(
@@ -101,58 +85,40 @@ export async function POST(request: Request) {
       )
     }
 
-    // 验证 franchise_id 存在于 v2_franchise 表中
     const { data: franchise, error: franchiseError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("id")
       .eq("id", franchise_id)
       .single()
 
     if (franchiseError || !franchise) {
       return NextResponse.json(
-        { error: "Invalid franchise_id. Franchise must exist in v2_franchise table." },
+        { error: "Invalid franchise_id. Campus must exist in catalog." },
         { status: 400 }
       )
     }
 
+    const insertRow = locationWriteFromBody(body)
+
     const { data, error } = await supabaseAdmin
-      .from("v2_campus")
-      .insert({
-        franchise_id,
-        name,
-        display_name: display_name || name,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zip_code: zip_code || null,
-        country: country || 'US',
-        phone: phone || null,
-        email: email || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
-        is_active: is_active !== undefined ? is_active : true,
-      })
-      .select(`
-        *,
-        franchise:v2_franchise(
-          id,
-          code,
-          name
-        )
-      `)
+      .from(catalogTables.location)
+      .insert(insertRow)
+      .select(adminLocationListSelect())
       .single()
 
     if (error) {
-      console.error("Error creating campus:", error)
+      console.error("[v3_location] Error creating campus:", error)
       return NextResponse.json(
         { error: getErrorMessage(error) || "Failed to create campus" },
         { status: 500 }
       )
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(normalizeLocationRow(data), {
+      status: 201,
+    })
   } catch (error: unknown) {
-    console.error("Error creating campus:", error)
+    console.error("[v3_location] Error creating campus:", error)
     return NextResponse.json(
       { error: getErrorMessage(error) || "Failed to create campus" },
       { status: 500 }

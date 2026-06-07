@@ -1,0 +1,91 @@
+{
+  "offering_type_code": "careservice",
+  "offering_type_id": "3f73e9c2-b70c-4db5-884b-285bb6b49337",
+  "schema_updated_at": "2026-05-28T16:22:11.089672+00:00",
+  "schema_hash": "1022d5349056a86b",
+  "fixed_columns": [
+    "id",
+    "Location Code",
+    "Programs (category)",
+    "Activity (program)",
+    "Session Title",
+    "Location Name",
+    "Status",
+    "Is Active",
+    "Featured",
+    "Amilia Link",
+    "Notes"
+  ],
+  "columns": [
+    {
+      "header": "schedule|end_date",
+      "path": "schedule.end_date",
+      "type": "date",
+      "required": false,
+      "label": "End Date"
+    },
+    {
+      "header": "schedule|end_time",
+      "path": "schedule.end_time",
+      "type": "time",
+      "required": true,
+      "label": "End Time"
+    },
+    {
+      "header": "schedule|start_date",
+      "path": "schedule.start_date",
+      "type": "date",
+      "required": false,
+      "label": "Start Date"
+    },
+    {
+      "header": "schedule|start_time",
+      "path": "schedule.start_time",
+      "type": "time",
+      "required": true,
+      "label": "Start Time"
+    },
+    {
+      "header": "schedule|days_of_week",
+      "path": "schedule.days_of_week",
+      "type": "multiselect",
+      "required": true,
+      "label": "Days of Week Offered"
+    },
+    {
+      "header": "service_info|notes",
+      "path": "service_info.notes",
+      "type": "text",
+      "required": false,
+      "label": "Notes"
+    },
+    {
+      "header": "service_info|duration_hours",
+      "path": "service_info.duration_hours",
+      "type": "number",
+      "required": false,
+      "label": "Duration (hours)"
+    },
+    {
+      "header": "service_info|location_notes",
+      "path": "service_info.location_notes",
+      "type": "text",
+      "required": false,
+      "label": "Location / Room Notes"
+    },
+    {
+      "header": "capacity_price|max_students",
+      "path": "capacity_price.max_students",
+      "type": "number",
+      "required": true,
+      "label": "Maximum Care Capacity"
+    },
+    {
+      "header": "capacity_price|price_override",
+      "path": "capacity_price.price_override",
+      "type": "number",
+      "required": false,
+      "label": "Price Override"
+    }
+  ]
+}

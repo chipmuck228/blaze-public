@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getErrorMessage } from "@/lib/typed-error"
 import { auth } from "@/auth"
 import { supabaseAdmin } from "@/lib/supabase"
+import { catalogTables } from "@/lib/catalog-db"
 
 // 获取所有 franchises (使用 v2 表)
 export async function GET(request: Request) {
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const includeInactive = searchParams.get("includeInactive") === "true"
 
     let query = supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("*")
       .order("name", { ascending: true })
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
 
     // 检查 code 是否已存在
     const { data: existingCode } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .select("id")
       .eq("code", code)
       .single()
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
     // 如果提供了 domain，检查是否已存在
     if (domain) {
       const { data: existingDomain } = await supabaseAdmin
-        .from("v2_franchise")
+        .from(catalogTables.campus)
         .select("id")
         .eq("domain", domain)
         .single()
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
 
     // 创建 franchise
     const { data: franchise, error: createError } = await supabaseAdmin
-      .from("v2_franchise")
+      .from(catalogTables.campus)
       .insert({
         code,
         name,
